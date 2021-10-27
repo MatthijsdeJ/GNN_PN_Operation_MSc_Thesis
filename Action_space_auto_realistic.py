@@ -239,7 +239,7 @@ def create_action_space(env,substation_ids=list(range(14))):
     DN_actions_indices = []
     temp_index = 0
     for sub_id in substation_ids: # to loop through all substations
-        print("SUBSTATION NUMBER: %d" % sub_id)
+        #print("SUBSTATION NUMBER: %d" % sub_id)
         sub_elem=[] 
         sub_nb_elem=nb_elements[sub_id] 
         #sub_nb_elem is the number of elements conncted to this particular substation
@@ -273,7 +273,7 @@ def create_action_space(env,substation_ids=list(range(14))):
             for j in range(r,sub_nb_elem+1):  
                 # choosing (0,sub_nb_elem+1) will result 
                 # in alpha term but choosing (r,sub_nb_elem+1) results in alpha/2
-                print('Choosing '+ str(j)+ ' out of '+str(sub_nb_elem)) 
+                #print('Choosing '+ str(j)+ ' out of '+str(sub_nb_elem)) 
                 #bionomial coefficiants
                 if(j==sub_nb_elem-1): # removing beta/2 term
                     # if it was entire "alpha" we would have to remove both 
@@ -297,7 +297,7 @@ def create_action_space(env,substation_ids=list(range(14))):
             for j in range(r,sub_nb_elem+1): 
                 # choosing (0,sub_nb_elem+1) will result 
                 # in alpha term but choosing (r,sub_nb_elem+1) results in alpha/2
-                print('Choosing '+ str(j)+ ' out of '+str(sub_nb_elem))
+                #print('Choosing '+ str(j)+ ' out of '+str(sub_nb_elem))
                 if(j==sub_nb_elem-1): # removing beta/2 term
                     continue
                 combs=list(it.combinations(sub_elem, j))
@@ -360,6 +360,19 @@ def create_action_space(env,substation_ids=list(range(14))):
         DN_actions_indices.append(temp_index)
     return all_actions, DN_actions_indices
 
+def get_env_actions():
+    env = grid2op.make("rte_case14_realistic") #making the environment
+    num_of_subs=env.n_sub # number of substations in this grid
+    #substation_ids=range(num_of_subs) #default input for create_action_space function
+    nb_elements=list(env.sub_info)  #array of number of elements connected to each 
+                                  #substation
+    action_space=env.action_space #defining action space
+    keys=list(env.get_obj_connect_to(None,0).keys()) #keys returns the names used 
+    #for all element types: e.g: 'gen_id','load_id'
+    all_actions,DN_actions=create_action_space(env) #default subset is all 14 substations
+    return all_actions, DN_actions
+  
+    
 
 if __name__ == '__main__':
   env = grid2op.make("rte_case14_realistic") #making the environment
