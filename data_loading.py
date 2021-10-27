@@ -224,7 +224,7 @@ def preprocess_observation(obs: np.array, obs_space: grid2op.Observation.Observa
 
     connectivity_edges = util.connectivity_matrix(obs_space.sub_info, topo_vect, X_line[:,1], 
                                               obs_space.line_or_pos_topo_vect, obs_space.line_ex_pos_topo_vect, 
-                                              obs_space.dim_topo).T
+                                              obs_space.dim_topo)
     
     return X_gen, X_load, X_or, X_ex, topo_vect, connectivity_edges
 
