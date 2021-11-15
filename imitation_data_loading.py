@@ -204,10 +204,10 @@ def preprocess_observation(obs: np.array, obs_space: grid2op.Observation.Observa
         P,Q,V
     X_or : np.array
         The line origin features. Columns represent the features:
-        P, Q, V, A, line rho, line status, line timestep since overflow
+        P, Q, V, A, line rho
     X_ex : np.array
         The line extremity features. Columns represent the features:
-        P, Q, V, A, line rho, line status, line timestep since overflow
+        P, Q, V, A, line rho
     topo_vect : np.array
         The topology vector indicating the connections of objects to busbars.
         Each index represents one object; a 0 value indicates no connection,
@@ -219,8 +219,8 @@ def preprocess_observation(obs: np.array, obs_space: grid2op.Observation.Observa
     
     X_gen, X_load, X_or, X_ex, X_line, topo_vect = parse_observation(obs, obs_space.n_gen, 
                                                                      obs_space.n_load, obs_space.n_line)
-    X_or = np.concatenate((X_or,X_line),axis=1) #Include the line features with the line origin
-    X_ex = np.concatenate((X_ex,X_line),axis=1) #Include the line features with the line extremity
+    X_or = np.concatenate((X_or,X_line[:,0]),axis=1) #Include the line features with the line origin
+    X_ex = np.concatenate((X_ex,X_line[:,0]),axis=1) #Include the line features with the line extremity
 
     connectivity_edges = util.connectivity_matrix(obs_space.sub_info, topo_vect, X_line[:,1], 
                                               obs_space.line_or_pos_topo_vect, obs_space.line_ex_pos_topo_vect, 
