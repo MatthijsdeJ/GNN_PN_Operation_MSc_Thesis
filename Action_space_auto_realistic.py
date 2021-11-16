@@ -57,6 +57,7 @@ is not considered here.
 import grid2op
 import numpy as np
 import itertools as it
+from Typing import Tuple, List
 
 def create_dictionary(combs,sub_elem): 
     """ To create action in the form of dictionary for this particular 
@@ -360,7 +361,19 @@ def create_action_space(env,substation_ids=list(range(14))):
         DN_actions_indices.append(temp_index)
     return all_actions, DN_actions_indices
 
-def get_env_actions():
+def get_env_actions() -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
+    '''
+    For the rte_case14_realistic environment, find the 'set' busbar actions that are
+    legal.
+
+    Returns
+    -------
+    all_actions : List[grid2op.Action.TopologyAction]
+        The list of legal actions.
+    DN_actions : List[int]
+        The indices of the all_actions list where the actions are do-nothing
+        actions.
+    '''
     env = grid2op.make("rte_case14_realistic") #making the environment
     num_of_subs=env.n_sub # number of substations in this grid
     #substation_ids=range(num_of_subs) #default input for create_action_space function
@@ -372,6 +385,20 @@ def get_env_actions():
     all_actions,DN_actions=create_action_space(env) #default subset is all 14 substations
     return all_actions, DN_actions
   
+def generate_action_space(action_space_file: str):
+    '''
+    Saves array representations of the legal do-something 'set' busbar actions 
+    of the rte_case14_realistic environment to a npy file.
+
+    Parameters
+    ----------
+    action_space_file : str 
+        The npy file to save as.
+    '''
+    all_actions, DN_indices = get_env_actions()
+    DS_actions = [a for i,a in enumerate(all_actions) if i not in DN_indices]
+    DS_set_actions = np.array([a._set_topo_vect for a in DS_actions])
+    np.save(action_space_file,DS_set_actions)
     
 
 if __name__ == '__main__':
