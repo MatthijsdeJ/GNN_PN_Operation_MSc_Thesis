@@ -102,7 +102,7 @@ class Tutor(BaseAgent):
             return self.action_space(), -2
 
         # not secure, do a greedy search
-        min_rho = observation.rho.max()
+        min_rho = observation.simulate(self.action_space())[0].rho.max()
 
         print('%s: overload! line-%d has a max. rho of %.2f' % (str(observation.get_time_stamp()), observation.rho.argmax(), observation.rho.max()))
         action_chosen = None
@@ -119,5 +119,5 @@ class Tutor(BaseAgent):
                 action_chosen = a
                 return_idx = idx
     
-        print('Action %d results in a max. rho of %.2f, search duration is %.2fs' % (return_idx, min_rho, time.time() - tick))
+        print('Action %d results in a forecasted max. rho of %.2f, search duration is %.2fs' % (return_idx, min_rho, time.time() - tick))
         return action_chosen if action_chosen else self.action_space(), return_idx
