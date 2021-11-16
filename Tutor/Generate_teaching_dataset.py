@@ -14,11 +14,12 @@ from Tutor import Tutor
 
 
 if __name__ == '__main__':
+    # environment definition
+    DATA_PATH = '../data/rte_case14_realistic'
+    SCENARIO_PATH = '../data/rte_case14_realistic/chronics'
+    SAVE_PATH = '../training_data'
+    ACTION_SPACE_DIRECTORY = '../action_space'
     # hyper-parameters
-    DATA_PATH = '../training_data_track1'  # for demo only, use your own dataset
-    SCENARIO_PATH = '../training_data_track1/chronics'
-    SAVE_PATH = '../JuniorStudent/TrainingData'
-    ACTION_SPACE_DIRECTORY = '../ActionSpace'
     NUM_CHRONICS = 100
     SAVE_INTERVAL = 10
 
@@ -26,10 +27,18 @@ if __name__ == '__main__':
         # if lightsim2grid is available, use it.
         from lightsim2grid import LightSimBackend
         backend = LightSimBackend()
-        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH, backend=backend)
+        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH, backend=backend, test=True)
     except:
-        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH)
-    env.chronics_handler.shuffle(shuffler=lambda x: x[np.random.choice(len(x), size=len(x), replace=False)])
+        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH, test=True)
+        
+    print(env.chronics_handler.get_id()) # get folder where current scenario is located
+    print("Number of available scenarios " + str(len(env.chronics_handler.subpaths)))
+    
+    env.seed(0)  # for reproducible experiments
+
+    # thermal limits of Medha’s case
+    thermal_limits = [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
+    env.set_thermal_limit(thermal_limits)
 
     tutor = Tutor(env.action_space, ACTION_SPACE_DIRECTORY)
     # first col for label, remaining 1266 cols for feature (observation.to_vect())
