@@ -1,4 +1,9 @@
 """
+ADAPTED FROM:
+https://github.com/AsprinChina/L2RPN_NIPS_2020_a_PPO_Solution/blob/master/Tutor/Tutor.py
+
+Protected by Mozilla Public License Version 2.0.
+
 In this file, we feed Tutor with numerous scenarios, and obtain a teaching
 dataset in form of (feature: observation, label: action chosen).
 The dataset is used for imitation learning of Junior Student afterward.
@@ -11,16 +16,18 @@ import time
 import grid2op
 import numpy as np
 from Tutor import Tutor
+import ipdb
 
 
 if __name__ == '__main__':
     # hyper-parameters
-    DATA_PATH = '../training_data_track1'  # for demo only, use your own dataset
-    SCENARIO_PATH = '../training_data_track1/chronics'
-    SAVE_PATH = '../JuniorStudent/TrainingData'
-    ACTION_SPACE_DIRECTORY = '../ActionSpace'
-    NUM_CHRONICS = 100
+    DATA_PATH = '../Data/rte_case14_realistic'  # for demo only, use your own dataset
+    SCENARIO_PATH = '../Data/rte_case14_realistic/chronics'
+    SAVE_PATH = '../Data/tutor_generated_data'
+    ACTION_SPACE_FILE = '../Data/as.npy'
+    NUM_CHRONICS = 1
     SAVE_INTERVAL = 10
+    OBS_VECT_SIZE = 437
 
     try:
         # if lightsim2grid is available, use it.
@@ -28,12 +35,12 @@ if __name__ == '__main__':
         backend = LightSimBackend()
         env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH, backend=backend)
     except:
-        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH)
+        env = grid2op.make(dataset=DATA_PATH)#, chronics_path=SCENARIO_PATH)
     env.chronics_handler.shuffle(shuffler=lambda x: x[np.random.choice(len(x), size=len(x), replace=False)])
 
-    tutor = Tutor(env.action_space, ACTION_SPACE_DIRECTORY)
-    # first col for label, remaining 1266 cols for feature (observation.to_vect())
-    records = np.zeros((1, 1267), dtype=np.float32)
+    tutor = Tutor(env.action_space, ACTION_SPACE_FILE)
+    # first col for label, remaining OBS_VECT_SIZE cols for feature (observation.to_vect())
+    records = np.zeros((1, 1+OBS_VECT_SIZE), dtype=np.float32)
     for num in range(NUM_CHRONICS):
         env.reset()
         print('current chronic: %s' % env.chronics_handler.get_name())
@@ -44,6 +51,7 @@ if __name__ == '__main__':
                 # save a record
                 records = np.concatenate((records, np.concatenate(([idx], obs.to_vect())).astype(np.float32)[None, :]), axis=0)
             obs, _, done, _ = env.step(action)
+
             step += 1
         print('game over at step-%d\n\n\n' % step)
 
@@ -52,3 +60,8 @@ if __name__ == '__main__':
             filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
             np.save(filepath, records)
             print('# records are saved! #')
+          
+        filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
+        np.save(filepath, records)
+        print('# DONE; records are saved! #')
+    
