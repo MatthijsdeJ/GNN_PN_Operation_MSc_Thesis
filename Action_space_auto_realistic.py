@@ -57,7 +57,7 @@ is not considered here.
 import grid2op
 import numpy as np
 import itertools as it
-from Typing import Tuple, List
+from typing import Tuple, List
 
 def create_dictionary(combs,sub_elem): 
     """ To create action in the form of dictionary for this particular 
