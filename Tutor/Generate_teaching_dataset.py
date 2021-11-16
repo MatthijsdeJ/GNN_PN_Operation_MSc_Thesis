@@ -24,7 +24,7 @@ if __name__ == '__main__':
     DATA_PATH = '../Data/rte_case14_realistic'  # for demo only, use your own dataset
     SCENARIO_PATH = '../Data/rte_case14_realistic/chronics'
     SAVE_PATH = '../Data/tutor_generated_data'
-    ACTION_SPACE_FILE = '../Data/as.npy'
+    ACTION_SPACE_FILE = '../Data/action_space.npy'
     NUM_CHRONICS = 1
     SAVE_INTERVAL = 10
     OBS_VECT_SIZE = 437
@@ -47,12 +47,13 @@ if __name__ == '__main__':
         done, step, obs = False, 0, env.get_obs()
         while not done:
             action, idx = tutor.act(obs)
-            if idx != -1:
+            if idx != -2:
                 # save a record
                 records = np.concatenate((records, np.concatenate(([idx], obs.to_vect())).astype(np.float32)[None, :]), axis=0)
             obs, _, done, _ = env.step(action)
 
             step += 1
+            
         print('game over at step-%d\n\n\n' % step)
 
         # save current records

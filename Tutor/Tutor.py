@@ -20,7 +20,7 @@ from grid2op.Agent import BaseAgent
 from typing import Tuple
 import ipdb
 
-LINE_OVERFLOW_THRESHOLD = 0.97
+DO_NOTHING_CAPACITY_THRESHOLD = 0.97
 
 class Tutor(BaseAgent):
     def __init__(self, action_space, action_space_filepath):
@@ -89,14 +89,17 @@ class Tutor(BaseAgent):
         -------
         Tuple(grid2op.Action.TopologyAction,int)
             The selected set action and the index of the selected action.
-            In case that no set action is selected, the selected action is do-nothing
+            In case that the max. line capacity is below DO_NOTHING_CAPACITY_THRESHOLD,
+            no action is selected, and the the index is -2.
+            In case that the max. line capacity is above DO_NOTHING_CAPACITY_THRESHOLD,
+            but no set action is selected, the selected action is do-nothing
             and the index is -1.
         '''
         tick = time.time()
 
-        if observation.rho.max() < LINE_OVERFLOW_THRESHOLD:
+        if observation.rho.max() < DO_NOTHING_CAPACITY_THRESHOLD:
             # secure, return "do nothing" in bus switches.
-            return self.action_space(), -1
+            return self.action_space(), -2
 
         # not secure, do a greedy search
         min_rho = observation.rho.max()
