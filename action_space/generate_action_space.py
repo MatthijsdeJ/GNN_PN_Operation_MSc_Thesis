@@ -58,6 +58,7 @@ import grid2op
 import numpy as np
 import itertools as it
 from typing import Tuple, List
+import ipdb
 
 def create_dictionary(combs,sub_elem): 
     """ To create action in the form of dictionary for this particular 
@@ -237,9 +238,9 @@ def create_action_space(env,substation_ids=list(range(14))):
     action_space=env.action_space #defining action space
     keys=list(env.get_obj_connect_to(None,0).keys()) #keys returns the names used
     all_actions=[]
-    DN_actions_indices = []
     temp_index = 0
     for sub_id in substation_ids: # to loop through all substations
+        sub_actions = []
         #print("SUBSTATION NUMBER: %d" % sub_id)
         sub_elem=[] 
         sub_nb_elem=nb_elements[sub_id] 
@@ -260,7 +261,7 @@ def create_action_space(env,substation_ids=list(range(14))):
                 elif np.size(v)==1:
                     sub_elem.append(str(k)+str(v[0])) 
         # By the end of the above loop, sub_elem will be complete
-        # Below, we now start to fill the all_actions list
+        # Below, we now start to fill the sub_actions list
         # there are two cases:
         # 1. if the number of elements connected is odd
         # 2. if it is even
@@ -292,7 +293,7 @@ def create_action_space(env,substation_ids=list(range(14))):
                 # this is the loop to create the action for a particular 
                 # combination
                         single_action=create_dictionary(each,sub_elem)
-                        all_actions.append(single_action)
+                        sub_actions.append(single_action)
         else: # if it is an even number
             r=int(sub_nb_elem/2)  # To choose half of total space
             for j in range(r,sub_nb_elem+1): 
@@ -312,7 +313,7 @@ def create_action_space(env,substation_ids=list(range(14))):
                     combs=combs[0:int(len(combs)/2)]
                     for each in combs:
                         single_action=create_dictionary(each,sub_elem)
-                        all_actions.append(single_action)
+                        sub_actions.append(single_action)
                 elif(j==int(sub_nb_elem/2) and sub_id==2): #gamma term hardcoding
                     combs=combs[0:int(len(combs)/2)]
                     # these substrings are hard coded to exclude the 
@@ -324,7 +325,7 @@ def create_action_space(env,substation_ids=list(range(14))):
                             combs.remove(elem)
                     for each in combs:
                         single_action=create_dictionary(each,sub_elem)
-                        all_actions.append(single_action)
+                        sub_actions.append(single_action)
                     
                 elif(j==4) and (sub_id==1): # for gamma term hardcoding
                     # these substrings are hard coded to exclude the 
@@ -336,7 +337,7 @@ def create_action_space(env,substation_ids=list(range(14))):
                             combs.remove(elem)
                     for each in combs:
                         single_action=create_dictionary(each,sub_elem)
-                        all_actions.append(single_action)
+                        sub_actions.append(single_action)
                     
                 elif(j==4) and (sub_id==5): #gamma term hardcoding
                     # these substrings are hard coded to exclude the 
@@ -348,18 +349,20 @@ def create_action_space(env,substation_ids=list(range(14))):
                             combs.remove(elem)
                     for each in combs:
                         single_action=create_dictionary(each,sub_elem)
-                        all_actions.append(single_action)
+                        sub_actions.append(single_action)
                     
                 else:
                     # this case is for all other cases not described above
                     combs=list(it.combinations(sub_elem, j))
                     for each in combs:
                         single_action=create_dictionary(each,sub_elem)
-                        all_actions.append(single_action)
-                    
-        temp_index = return_DN_actions_indices(all_actions);
-        DN_actions_indices.append(temp_index)
-    return all_actions, DN_actions_indices
+                        sub_actions.append(single_action)
+        
+        #Added by Matthijs on 17/11/2021 to remove do-nothing actions
+        if len(sub_actions) > 1:
+            all_actions.extend(sub_actions)
+
+    return all_actions
 
 def get_env_actions() -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
     '''
@@ -375,15 +378,8 @@ def get_env_actions() -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
         actions.
     '''
     env = grid2op.make("rte_case14_realistic") #making the environment
-    num_of_subs=env.n_sub # number of substations in this grid
-    #substation_ids=range(num_of_subs) #default input for create_action_space function
-    nb_elements=list(env.sub_info)  #array of number of elements connected to each 
-                                  #substation
-    action_space=env.action_space #defining action space
-    keys=list(env.get_obj_connect_to(None,0).keys()) #keys returns the names used 
-    #for all element types: e.g: 'gen_id','load_id'
-    all_actions,DN_actions=create_action_space(env) #default subset is all 14 substations
-    return all_actions, DN_actions
+    actions=create_action_space(env) #default subset is all 14 substations
+    return actions
   
 def generate_action_space(action_space_file: str):
     '''
@@ -395,10 +391,8 @@ def generate_action_space(action_space_file: str):
     action_space_file : str 
         The npy file to save as.
     '''
-    all_actions, DN_indices = get_env_actions()
-    DS_actions = [a for i,a in enumerate(all_actions) if i not in DN_indices]
-    DS_set_actions = np.array([a._set_topo_vect for a in DS_actions])
-    np.save(action_space_file,DS_set_actions)
+    set_actions = np.array([a._set_topo_vect for a in get_env_actions()])
+    np.save(action_space_file,set_actions)
     
 
 if __name__ == '__main__':
@@ -410,4 +404,4 @@ if __name__ == '__main__':
   action_space=env.action_space #defining action space
   keys=list(env.get_obj_connect_to(None,0).keys()) #keys returns the names used 
   #for all element types: e.g: 'gen_id','load_id'
-  all_actions,DN_actions=create_action_space(env) #default subset is all 14 substations
+  actions=create_action_space(env) #default subset is all 14 substations
