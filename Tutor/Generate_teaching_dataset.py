@@ -17,7 +17,6 @@ import grid2op
 import numpy as np
 from Tutor import Tutor
 import datetime as dt
-import ipdb
 
 # =============================================================================
 # An alternative way to return to the reference topology is to simply take
@@ -95,8 +94,26 @@ def save_records(SAVE_PATH: str, records: np.array):
     '''
     filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
     np.save(filepath, records)
-    print('# DONE; records are saved! #')
+    print('# records are saved! #')
     
+
+def empty_records(OBS_VECT_SIZE: int):
+    '''
+    Generate a numpy array for storing records of actions and observations.
+
+    Parameters
+    ----------
+    OBS_VECT_SIZE : int
+        The size of the observation vector.
+
+    Returns
+    -------
+    np.array
+        The records numpy array.
+
+    '''
+    # first col for label, remaining OBS_VECT_SIZE cols for environment features
+    return np.zeros((0, 1+OBS_VECT_SIZE), dtype=np.float32)
     
 if __name__ == '__main__':
     
@@ -114,20 +131,23 @@ if __name__ == '__main__':
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
     tutor = Tutor(env.action_space, ACTION_SPACE_FILE)
-    # first col for label, remaining OBS_VECT_SIZE cols for environment features
-    records = np.zeros((1, 1+OBS_VECT_SIZE), dtype=np.float32)
+    records = empty_records(OBS_VECT_SIZE)
+    
     for num in range(NUM_CHRONICS):
         
         env.reset()
         print('current chronic: %s' % env.chronics_handler.get_name())
         done, step, obs = False, 0, env.get_obs()
         reference_topo_vect = obs.topo_vect.copy()
+        day_records = empty_records(OBS_VECT_SIZE)
         
         while not done:
             step += 1
-            #reset topology at midnight
+            #reset topology at midnight, store days' records, reset days' records
             if obs.get_time_stamp().time()==dt.time(23,55):
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
+                records = np.concatenate((records, day_records), axis=0)
+                day_records = empty_records(OBS_VECT_SIZE)
                 continue
                 
             #if not midnight, find a normal action
@@ -136,17 +156,24 @@ if __name__ == '__main__':
             #don't store the action if the max. capacity is below the threshdold
             if idx != -2:
                 # save a record
-                records = np.concatenate((records, np.concatenate(([idx], obs.to_vect())).astype(np.float32)[None, :]), axis=0)
+                day_records = np.concatenate((day_records, np.concatenate(([idx], 
+                                                obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
-            obs, _, done, _ = env.step(action)
-             
-        print('game over at step-%d\n\n\n' % step)
+            obs, _, done, info = env.step(action)
+         
+        # print whether game was completed succesfully, save days' records if so
+        if obs.rho.max()>=1:
+            print('game over (failure) at step-%d\n\n\n' % step)
+        else:
+            print('game over (win) at step-%d\n\n\n' % step)
+            records = np.concatenate((records, day_records), axis=0)
 
-        # periodically  current records
+        # periodically save current records, reset records to avoid duplicates
         if (num + 1) % SAVE_CHRONIC_INTERVAL  == 0:
                 save_records(SAVE_PATH, records)
-                records = np.zeros((1, 1+OBS_VECT_SIZE), dtype=np.float32)
+                records = empty_records(OBS_VECT_SIZE)
         
+    #save records when finished
     save_records(SAVE_PATH, records)
           
 
