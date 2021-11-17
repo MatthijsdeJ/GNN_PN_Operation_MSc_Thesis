@@ -147,6 +147,9 @@ if __name__ == '__main__':
             if obs.get_time_stamp().time()==dt.time(23,55):
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
                 records = np.concatenate((records, day_records), axis=0)
+                print(day_records)
+                print(step)
+                print(done)
                 day_records = empty_records(OBS_VECT_SIZE)
                 continue
                 
@@ -162,11 +165,11 @@ if __name__ == '__main__':
             obs, _, done, _ = env.step(action)
          
         # print whether game was completed succesfully, save days' records if so
-        if obs.rho.max()>=1:
-            print('game over (failure) at step-%d\n\n\n' % step)
-        else:
+        if step == env.chronics_handler.max_timestep():
             print('game over (win) at step-%d\n\n\n' % step)
-            records = np.concatenate((records, day_records), axis=0)
+        else:
+            print('game over (failure) at step-%d\n\n\n' % step)
+            
 
         # periodically save current records, reset records to avoid duplicates
         if (num + 1) % SAVE_CHRONIC_INTERVAL  == 0:
