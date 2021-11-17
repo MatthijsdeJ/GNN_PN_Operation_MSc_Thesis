@@ -44,19 +44,26 @@ import ipdb
 #     return obs, done
 # =============================================================================
 
-    
-if __name__ == '__main__':
-    
-    # environment definition
-    DATA_PATH = '../Data/rte_case14_realistic'  # for demo only, use your own dataset
-    SCENARIO_PATH = '../Data/rte_case14_realistic/chronics'
-    SAVE_PATH = '../Data/tutor_generated_data'
-    ACTION_SPACE_FILE = '../action_space/action_space.npy'
-    # hyper-parameters
-    NUM_CHRONICS = 1
-    SAVE_INTERVAL = 10
-    OBS_VECT_SIZE = 437
+def prepare_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
+                grid2op.Environment.Environment:
+    '''
+    Prepares the Grid2Op environment.
 
+    Parameters
+    ----------
+    data_path : str
+        String representing the path of the environment definition.
+    scenario_path : str
+        String representing the path of the scenario/chronic files.
+    seed : int, optional
+        Seed for generating random numers. The default is 0.
+
+    Returns
+    -------
+    env : TYPE
+        The Grid2Op environment.
+
+    '''
     try:
         # if lightsim2grid is available, use it.
         from lightsim2grid import LightSimBackend
@@ -67,17 +74,47 @@ if __name__ == '__main__':
         env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH,
                            gamerules_class = grid2op.Rules.AlwaysLegal, test=True)
         
-    print(env.chronics_handler.get_id()) # get folder where current scenario is located
-    print("Number of available scenarios " + str(len(env.chronics_handler.subpaths)))
-    
-    env.seed(0)  # for reproducible experiments
+    env.seed(seed)  # for reproducible experiments
 
     # thermal limits of Medha’s case
     thermal_limits = [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
     env.set_thermal_limit(thermal_limits)
+    return env
+    
+    
+def save_records(SAVE_PATH: str, records: np.array):
+    '''
+    Saves records to disk and prints a message that they are saved. 
 
+    Parameters
+    ----------
+    SAVE_PATH : str
+        String representation of the folder to save the records in.
+    records : np.array
+        The records.
+    '''
+    filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
+    np.save(filepath, records)
+    print('# DONE; records are saved! #')
+    
+    
+if __name__ == '__main__':
+    
+    # environment definition
+    DATA_PATH = '../Data/rte_case14_realistic'  # for demo only, use your own dataset
+    SCENARIO_PATH = '../Data/rte_case14_realistic/chronics'
+    SAVE_PATH = '../Data/tutor_generated_data'
+    ACTION_SPACE_FILE = '../action_space/action_space.npy'
+    # hyper-parameters
+    NUM_CHRONICS = 1
+    SAVE_CHRONIC_INTERVAL = 10
+    OBS_VECT_SIZE = 437
+
+    env = prepare_env(DATA_PATH, SCENARIO_PATH)
+    print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
+    
     tutor = Tutor(env.action_space, ACTION_SPACE_FILE)
-    # first col for label, remaining OBS_VECT_SIZE cols for feature (observation.to_vect())
+    # first col for label, remaining OBS_VECT_SIZE cols for environment features
     records = np.zeros((1, 1+OBS_VECT_SIZE), dtype=np.float32)
     for num in range(NUM_CHRONICS):
         
@@ -87,29 +124,30 @@ if __name__ == '__main__':
         reference_topo_vect = obs.topo_vect.copy()
         
         while not done:
+            step += 1
             #reset topology at midnight
             if obs.get_time_stamp().time()==dt.time(23,55):
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
                 continue
                 
-            #if not midnight, take normal actione
+            #if not midnight, find a normal action
             action, idx = tutor.act(obs)
+            
             #don't store the action if the max. capacity is below the threshdold
             if idx != -2:
                 # save a record
                 records = np.concatenate((records, np.concatenate(([idx], obs.to_vect())).astype(np.float32)[None, :]), axis=0)
+                
             obs, _, done, _ = env.step(action)
-            step += 1
-            
+             
         print('game over at step-%d\n\n\n' % step)
 
-        # save current records
-        if (num + 1) % SAVE_INTERVAL == 0:
-            filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
-            np.save(filepath, records)
-            print('# records are saved! #')
+        # periodically  current records
+        if (num + 1) % SAVE_CHRONIC_INTERVAL  == 0:
+                save_records(SAVE_PATH, records)
+                records = np.zeros((1, 1+OBS_VECT_SIZE), dtype=np.float32)
+        
+    save_records(SAVE_PATH, records)
           
-        filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
-        np.save(filepath, records)
-        print('# DONE; records are saved! #')
+
     
