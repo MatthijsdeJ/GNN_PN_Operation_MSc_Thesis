@@ -43,7 +43,7 @@ import datetime as dt
 #     return obs, done
 # =============================================================================
 
-def prepare_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
+def init_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
                 grid2op.Environment.Environment:
     '''
     Prepares the Grid2Op environment.
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     SAVE_CHRONIC_INTERVAL = 10
     OBS_VECT_SIZE = 437
 
-    env = prepare_env(DATA_PATH, SCENARIO_PATH)
+    env = init_env(DATA_PATH, SCENARIO_PATH)
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
     tutor = Tutor(env.action_space, ACTION_SPACE_FILE)
@@ -135,9 +135,9 @@ if __name__ == '__main__':
     
     for num in range(NUM_CHRONICS):
         
-        env.reset()
+        obs = env.reset()
         print('current chronic: %s' % env.chronics_handler.get_name())
-        done, step, obs = False, 0, env.get_obs()
+        done, step = False, 0
         reference_topo_vect = obs.topo_vect.copy()
         day_records = empty_records(OBS_VECT_SIZE)
         
@@ -159,7 +159,7 @@ if __name__ == '__main__':
                 day_records = np.concatenate((day_records, np.concatenate(([idx], 
                                                 obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
-            obs, _, done, info = env.step(action)
+            obs, _, done, _ = env.step(action)
          
         # print whether game was completed succesfully, save days' records if so
         if obs.rho.max()>=1:
