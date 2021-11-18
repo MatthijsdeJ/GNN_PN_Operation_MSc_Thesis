@@ -20,8 +20,6 @@ from grid2op.Agent import BaseAgent
 from typing import Tuple
 import util
 
-DO_NOTHING_CAPACITY_THRESHOLD = 0.97
-
 class Tutor(BaseAgent):
     def __init__(self, action_space, action_space_filepath):
         BaseAgent.__init__(self, action_space=action_space)
