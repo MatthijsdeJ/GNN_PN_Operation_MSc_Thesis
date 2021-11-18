@@ -58,7 +58,8 @@ import grid2op
 import numpy as np
 import itertools as it
 from typing import Tuple, List
-import ipdb
+import util
+import argparse
 
 def create_dictionary(combs,sub_elem): 
     """ To create action in the form of dictionary for this particular 
@@ -218,7 +219,7 @@ def return_DN_actions_indices(all_actions):
   return (len(all_actions) - 1)
   
 
-def create_action_space(env,substation_ids=list(range(14))):
+def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
     """ This function will produce a list of all actions possible for the 
     substations identified in substation_ids.
     - substations_id is a list of the ids of the substations that are in scope.
@@ -228,13 +229,20 @@ def create_action_space(env,substation_ids=list(range(14))):
     - all_actions is a list that will contain a list of all actions for all 
     substations in substation_ids. 
     - also returns a list of indices of the all_actions list which are 
-    do-nothing actions. """
+    do-nothing actions. 
     
+   Parameters
+    ----------
+    removed_line : int, optional
+        The index of a line form the environment to be removed/excluded. 
+        The default is -1, i.e no line.
+    """
     nb_elements=list(env.sub_info)  #array of number of elements connected to each 
                                      #substation 
+                                     
     global keys
     global action_space
-                              
+
     action_space=env.action_space #defining action space
     keys=list(env.get_obj_connect_to(None,0).keys()) #keys returns the names used
     all_actions=[]
@@ -253,6 +261,14 @@ def create_action_space(env,substation_ids=list(range(14))):
                 # "nb_elements" which we don't want 
                 # because we only want to list the names of the elements itself
                     continue
+                
+                #Added by Matthijs on nov 18 2021:
+                #Remove the line if it is to be removed
+                if k in ('lines_or_id','lines_ex_id'):
+                    if removed_line in v:
+                        v =  np.delete(v, np.where(v == removed_line))
+                        sub_nb_elem-=1
+                
                 if np.size(v)>1: #number of elements with key k connected to sub_id
                     for j in range(np.size(v)):
                         str1 = k + str(v[j])
@@ -266,6 +282,11 @@ def create_action_space(env,substation_ids=list(range(14))):
         # 1. if the number of elements connected is odd
         # 2. if it is even
       
+        #Due to line removal, object can now be connected by only a single line (i.e. removal of line 18).
+        #This is illegal, i.e. in this case no actions are possible, and we return an empty array.
+        if len(sub_elem)==1:
+            return []
+        
         if(sub_nb_elem%2): #if it is an odd number
             # From the formula created in the report, this part creates 
             # the alpha/2 term
@@ -364,11 +385,17 @@ def create_action_space(env,substation_ids=list(range(14))):
 
     return all_actions
 
-def get_env_actions() -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
+def get_env_actions(removed_line: int =-1) -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
     '''
     For the rte_case14_realistic environment, find the 'set' busbar actions that are
     legal.
 
+    Parameters
+    ----------
+    removed_line : int, optional
+        The index of a line form the environment to be removed/excluded. 
+        The default is -1, i.e no line.
+        
     Returns
     -------
     all_actions : List[grid2op.Action.TopologyAction]
@@ -378,10 +405,10 @@ def get_env_actions() -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
         actions.
     '''
     env = grid2op.make("rte_case14_realistic") #making the environment
-    actions=create_action_space(env) #default subset is all 14 substations
+    actions=create_action_space(env,removed_line=removed_line) #default subset is all 14 substations
     return actions
   
-def generate_action_space(action_space_file: str):
+def generate_action_space(action_space_file: str, removed_line: int =-1):
     '''
     Saves array representations of the legal do-something 'set' busbar actions 
     of the rte_case14_realistic environment to a npy file.
@@ -390,18 +417,25 @@ def generate_action_space(action_space_file: str):
     ----------
     action_space_file : str 
         The npy file to save as.
+    removed_line : int, optional
+        The index of a line form the environment to be removed/excluded. 
+        The default is -1, i.e no line.
     '''
-    set_actions = np.array([a._set_topo_vect for a in get_env_actions()])
-    np.save(action_space_file,set_actions)
+    set_actions = np.array([a._set_topo_vect for a in get_env_actions(removed_line=removed_line)])
+    n_actions = len(set_actions)
+    if n_actions == 0:
+        print('No actions found; dropping this line leads to illegal states. No action space is saved.')
+    else:
+        print(f'Nr. of actions foud: {n_actions}')
+        np.save(action_space_file,set_actions)
     
 
 if __name__ == '__main__':
-  env = grid2op.make("rte_case14_realistic") #making the environment
-  num_of_subs=env.n_sub # number of substations in this grid
-  #substation_ids=range(num_of_subs) #default input for create_action_space function
-  nb_elements=list(env.sub_info)  #array of number of elements connected to each 
-                                #substation
-  action_space=env.action_space #defining action space
-  keys=list(env.get_obj_connect_to(None,0).keys()) #keys returns the names used 
-  #for all element types: e.g: 'gen_id','load_id'
-  actions=create_action_space(env) #default subset is all 14 substations
+    parser = argparse.ArgumentParser(description='A test program.')
+    parser.add_argument("--removed_line",  help="The index of the line to be removed.",
+                        required=False,default=-1)
+    args = parser.parse_args()
+    print(args)
+    print(args.removed_line)
+    config = util.load_config()
+    generate_action_space(config['paths']['action_space_file'], args.removed_line)
