@@ -12,11 +12,12 @@ author: chen binbin
 mail: cbb@cbb1996.com
 """
 import os
-import time
 import grid2op
 import numpy as np
-from Tutor import Tutor
+from Tutor.Tutor import Tutor
 import datetime as dt
+import util
+
 
 # =============================================================================
 # An alternative way to return to the reference topology is to simply take
@@ -67,10 +68,10 @@ def init_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
         # if lightsim2grid is available, use it.
         from lightsim2grid import LightSimBackend
         backend = LightSimBackend()
-        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH, backend=backend,
+        env = grid2op.make(dataset=data_path, chronics_path=scenario_path, backend=backend,
                            gamerules_class = grid2op.Rules.AlwaysLegal, test=True)
     except:
-        env = grid2op.make(dataset=DATA_PATH, chronics_path=SCENARIO_PATH,
+        env = grid2op.make(dataset=data_path, chronics_path=scenario_path,
                            gamerules_class = grid2op.Rules.AlwaysLegal, test=True)
         
     env.seed(seed)  # for reproducible experiments
@@ -96,7 +97,7 @@ def save_records(FILE_PATH: str, records: np.array):
     print('# records are saved! #')
     
 
-def empty_records(OBS_VECT_SIZE: int):
+def empty_records(obs_vect_size: int):
     '''
     Generate a numpy array for storing records of actions and observations.
 
@@ -112,27 +113,28 @@ def empty_records(OBS_VECT_SIZE: int):
 
     '''
     # first col for label, remaining OBS_VECT_SIZE cols for environment features
-    return np.zeros((0, 1+OBS_VECT_SIZE), dtype=np.float32)
+    return np.zeros((0, 1+obs_vect_size), dtype=np.float32)
     
 if __name__ == '__main__':
     
+    config = util.load_config()
     # environment definition
-    DATA_PATH = '../Data/rte_case14_realistic'  # for demo only, use your own dataset
-    SCENARIO_PATH = '../Data/rte_case14_realistic/chronics'
-    SAVE_PATH = '../Data/tutor_generated_data'
-    ACTION_SPACE_FILE = '../action_space/action_space.npy'
+    data_path = config['paths']['rte_case14_realistic']
+    scenario_path = config['paths']['rte_case14_realistic_chronics']
+    save_path = config['paths']['tutor_imitation']
+    action_space_file = config['paths']['action_space_file']
     # hyper-parameters
-    NUM_CHRONICS = 1
+    num_chronics = config['tutor_generated_data']['n_chronics']
     
 
-    env = init_env(DATA_PATH, SCENARIO_PATH)
+    env = init_env(data_path, scenario_path)
     obs_vect_size = len(env.get_obs().to_vect())
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
-    tutor = Tutor(env.action_space, ACTION_SPACE_FILE)
+    tutor = Tutor(env.action_space, action_space_file)
     records = empty_records(obs_vect_size)
     
-    for num in range(NUM_CHRONICS):
+    for num in range(num_chronics):
         
         obs = env.reset()
         print('current chronic: %s' % env.chronics_handler.get_name())
@@ -168,7 +170,7 @@ if __name__ == '__main__':
             
 
         # save chronic records
-        save_records(os.path.join(SAVE_PATH, 'records_chronic_%s.npy' % (num)), records)
+        save_records(os.path.join(save_path, 'records_chronic_%s.npy' % (num)), records)
         records = empty_records(obs_vect_size)
         
     

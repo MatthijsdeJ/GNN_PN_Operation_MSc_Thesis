@@ -18,7 +18,7 @@ import numpy as np
 import grid2op
 from grid2op.Agent import BaseAgent
 from typing import Tuple
-import ipdb
+import util
 
 DO_NOTHING_CAPACITY_THRESHOLD = 0.97
 
@@ -26,6 +26,9 @@ class Tutor(BaseAgent):
     def __init__(self, action_space, action_space_filepath):
         BaseAgent.__init__(self, action_space=action_space)
         self.actions = np.load(action_space_filepath)
+        
+        config = util.load_config()
+        self.do_nothing_capacity_threshold = config['tutor_generated_data']['do_nothing_capacity_threshold']
 
 # =============================================================================
 #     @staticmethod
@@ -89,15 +92,15 @@ class Tutor(BaseAgent):
         -------
         Tuple(grid2op.Action.TopologyAction,int)
             The selected set action and the index of the selected action.
-            In case that the max. line capacity is below DO_NOTHING_CAPACITY_THRESHOLD,
+            In case that the max. line capacity is below self.do_nothing_capacity_threshold,
             no action is selected, and the the index is -2.
-            In case that the max. line capacity is above DO_NOTHING_CAPACITY_THRESHOLD,
+            In case that the max. line capacity is above self.do_nothing_capacity_threshold,
             but no set action is selected, the selected action is do-nothing
             and the index is -1.
         '''
         tick = time.time()
 
-        if observation.rho.max() < DO_NOTHING_CAPACITY_THRESHOLD:
+        if observation.rho.max() < self.do_nothing_capacity_threshold:
             # secure, return "do nothing" in bus switches.
             return self.action_space(), -2
 

@@ -12,7 +12,6 @@ from typing import Union, Tuple
 import numpy as np
 import grid2op
 import util
-import Action_space_auto_realistic
 
 
 Episode = namedtuple('Episode', field_names=['reward', 'steps'])
