@@ -81,19 +81,18 @@ def init_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
     return env
     
     
-def save_records(SAVE_PATH: str, records: np.array):
+def save_records(FILE_PATH: str, records: np.array):
     '''
     Saves records to disk and prints a message that they are saved. 
 
     Parameters
     ----------
-    SAVE_PATH : str
-        String representation of the folder to save the records in.
+    FILE_PATH : str
+        String representation of file to save the records as.
     records : np.array
         The records.
     '''
-    filepath = os.path.join(SAVE_PATH, 'records_%s.npy' % (time.strftime("%m-%d-%H-%M", time.localtime())))
-    np.save(filepath, records)
+    np.save(FILE_PATH, records)
     print('# records are saved! #')
     
 
@@ -124,7 +123,6 @@ if __name__ == '__main__':
     ACTION_SPACE_FILE = '../action_space/action_space.npy'
     # hyper-parameters
     NUM_CHRONICS = 1
-    SAVE_CHRONIC_INTERVAL = 10
     OBS_VECT_SIZE = 437
 
     env = init_env(DATA_PATH, SCENARIO_PATH)
@@ -147,9 +145,6 @@ if __name__ == '__main__':
             if obs.get_time_stamp().time()==dt.time(23,55):
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
                 records = np.concatenate((records, day_records), axis=0)
-                print(day_records)
-                print(step)
-                print(done)
                 day_records = empty_records(OBS_VECT_SIZE)
                 continue
                 
@@ -171,13 +166,11 @@ if __name__ == '__main__':
             print('game over (failure) at step-%d\n\n\n' % step)
             
 
-        # periodically save current records, reset records to avoid duplicates
-        if (num + 1) % SAVE_CHRONIC_INTERVAL  == 0:
-                save_records(SAVE_PATH, records)
-                records = empty_records(OBS_VECT_SIZE)
+        # save chronic records
+        save_records(os.path.join(SAVE_PATH, 'records_chronic_%s.npy' % (num)), records)
+        records = empty_records(OBS_VECT_SIZE)
         
-    #save records when finished
-    save_records(SAVE_PATH, records)
+    
           
 
     
