@@ -123,13 +123,14 @@ if __name__ == '__main__':
     ACTION_SPACE_FILE = '../action_space/action_space.npy'
     # hyper-parameters
     NUM_CHRONICS = 1
-    OBS_VECT_SIZE = 437
+    
 
     env = init_env(DATA_PATH, SCENARIO_PATH)
+    obs_vect_size = len(env.get_obs().to_vect())
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
     tutor = Tutor(env.action_space, ACTION_SPACE_FILE)
-    records = empty_records(OBS_VECT_SIZE)
+    records = empty_records(obs_vect_size)
     
     for num in range(NUM_CHRONICS):
         
@@ -137,7 +138,7 @@ if __name__ == '__main__':
         print('current chronic: %s' % env.chronics_handler.get_name())
         done, step = False, 0
         reference_topo_vect = obs.topo_vect.copy()
-        day_records = empty_records(OBS_VECT_SIZE)
+        day_records = empty_records(obs_vect_size)
         
         while not done:
             step += 1
@@ -145,7 +146,7 @@ if __name__ == '__main__':
             if obs.get_time_stamp().time()==dt.time(23,55):
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
                 records = np.concatenate((records, day_records), axis=0)
-                day_records = empty_records(OBS_VECT_SIZE)
+                day_records = empty_records(obs_vect_size)
                 continue
                 
             #if not midnight, find a normal action
@@ -168,7 +169,7 @@ if __name__ == '__main__':
 
         # save chronic records
         save_records(os.path.join(SAVE_PATH, 'records_chronic_%s.npy' % (num)), records)
-        records = empty_records(OBS_VECT_SIZE)
+        records = empty_records(obs_vect_size)
         
     
           
