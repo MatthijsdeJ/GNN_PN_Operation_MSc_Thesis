@@ -1,0 +1,8 @@
+data_paths:
+  rte_case14_realistic: ./data/rte_case14_realistic/
+  rte_case14_realistic_chronics: ./data/rte_case14_realistic/chronics/
+  medha_imitation: ./data/medha_imitation_sample/
+  tutor_imitation: ./data/tutor_generated_data/
+  
+tutor_generated_data:
+	n_chronics: 1
