@@ -20,7 +20,6 @@ from grid2op.Agent import BaseAgent
 from typing import Tuple
 import util
 
-DO_NOTHING_CAPACITY_THRESHOLD = 0.97
 
 class Tutor(BaseAgent):
     def __init__(self, action_space, action_space_filepath):
@@ -104,11 +103,14 @@ class Tutor(BaseAgent):
             # secure, return "do nothing" in bus switches.
             return self.action_space(), -2
 
-        # not secure, do a greedy search
-        min_rho = observation.simulate(self.action_space())[0].rho.max()
-
-        print('%s: overload! line-%d has a max. rho of %.2f' % (str(observation.get_time_stamp()), observation.rho.argmax(), observation.rho.max()))
-        action_chosen = None
+        #not secure, do a greedy search
+        print('%s: close to overload! line-%d has a max. rho of %.2f' % 
+              (str(observation.get_time_stamp()), observation.rho.argmax(), observation.rho.max()))
+        
+        #default action is do nothing
+        action_chosen = self.action_space()
+        obs, _, done, _ = observation.simulate(action_chosen)
+        min_rho = obs.rho.max()
         return_idx = -1
 
         for idx, action_array in enumerate(self.actions):
@@ -122,5 +124,6 @@ class Tutor(BaseAgent):
                 action_chosen = a
                 return_idx = idx
     
-        print('Action %d results in a forecasted max. rho of %.2f, search duration is %.2fs' % (return_idx, min_rho, time.time() - tick))
-        return action_chosen if action_chosen else self.action_space(), return_idx
+        print('Action %d results in a forecasted max. rho of %.2f, search duration is %.2fs' 
+              % (return_idx, min_rho, time.time() - tick))
+        return action_chosen, return_idx
