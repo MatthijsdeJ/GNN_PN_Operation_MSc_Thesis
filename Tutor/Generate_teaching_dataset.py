@@ -84,7 +84,8 @@ def init_env(config: dict) ->  grid2op.Environment.Environment:
     return env
     
     
-def save_records(records: np.array, num: int, config: dict, lout: int = -1):
+def save_records(records: np.array, num: int, config: dict, 
+                 do_nothing_capacity_threshold: float, lout: int = -1,):
     '''
     Saves records of a chronic to disk and prints a message that they are saved. 
 
@@ -97,13 +98,14 @@ def save_records(records: np.array, num: int, config: dict, lout: int = -1):
     config : dict
         Dictionary with constant variables. Relevant here are the 
         do_nothing_capacity_threshold and the path where the file is to be saved.
+    do_nothing_capacity_threshold : int
+        The threshold max. line rho at which the tutor takes actions.
     lout : int
         Index of any line that is out.
     '''
-    dn_threshold = config['tutor_generated_data']['do_nothing_capacity_threshold']
     save_path = config['paths']['tutor_imitation']
     file_name = f'records_chronic:{num}_lout:{lout}' + \
-                             f'_dnthreshold:{dn_threshold}.npy'
+                             f'_dnthreshold:{do_nothing_capacity_threshold}.npy'
     np.save(os.path.join(save_path, file_name), records)
     print('# records are saved! #')
     
