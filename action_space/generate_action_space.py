@@ -422,7 +422,7 @@ def get_env_actions(removed_line: int =-1) -> Tuple[List[grid2op.Action.Topology
     actions=create_action_space(env,removed_line=removed_line) #default subset is all 14 substations
     return actions
   
-def generate_action_space(action_space_file: str, removed_line: int =-1):
+def generate_action_space(action_space_path: str, removed_line: int =-1):
     '''
     Saves array representations of the legal do-something 'set' busbar actions 
     of the rte_case14_realistic environment to a npy file.
@@ -438,14 +438,17 @@ def generate_action_space(action_space_file: str, removed_line: int =-1):
     set_actions = np.array([a._set_topo_vect for a in get_env_actions(removed_line=removed_line)])
     n_actions = len(set_actions)
     print(f'Nr. of actions foud: {n_actions}')
-    np.save(action_space_file,set_actions)
+    
+    filename = 'action_space.npy' if removed_line == -1 else \
+                f'action_space_lout:{removed_line}.npy'
+    np.save(action_space_path + filename,set_actions)
     
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='A test pfrogram.')
+    parser = argparse.ArgumentParser()
     parser.add_argument("--removed_line",  help="The index of the line to be removed.",
                         required=False,default=-1,type=int)
     args = parser.parse_args()
 
     config = util.load_config()
-    generate_action_space(config['paths']['action_space_file'], args.removed_line)
+    generate_action_space(config['paths']['action_space'], args.removed_line)
