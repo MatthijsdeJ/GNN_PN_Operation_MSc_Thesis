@@ -44,19 +44,15 @@ import util
 #     return obs, done
 # =============================================================================
 
-def init_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
-                grid2op.Environment.Environment:
+def init_env(config: dict) ->  grid2op.Environment.Environment:
     '''
-    Prepares the Grid2Op environment.
+    Prepares the Grid2Op environment from a dictionary containing configuration
+    setting.
 
     Parameters
     ----------
-    data_path : str
-        String representing the path of the environment definition.
-    scenario_path : str
-        String representing the path of the scenario/chronic files.
-    seed : int, optional
-        Seed for generating random numers. The default is 0.
+    config : dict
+        Dictionary containing configuration variables.
 
     Returns
     -------
@@ -64,6 +60,9 @@ def init_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
         The Grid2Op environment.
 
     '''
+    data_path = config['paths']['rte_case14_realistic']
+    scenario_path = config['paths']['rte_case14_realistic_chronics']
+
     try:
         # if lightsim2grid is available, use it.
         from lightsim2grid import LightSimBackend
@@ -74,26 +73,36 @@ def init_env(data_path: str, scenario_path: str, seed: int = 0) ->  \
         env = grid2op.make(dataset=data_path, chronics_path=scenario_path,
                            gamerules_class = grid2op.Rules.AlwaysLegal, test=True)
         
-    env.seed(seed)  # for reproducible experiments
+    # for reproducible experiments
+    env.seed(config['tutor_generated_data']['seed'])  
 
-    # thermal limits of Medha’s case
-    thermal_limits = [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
+    #Set custom thermal limits
+    thermal_limits = config['rte_case14_realistic']['thermal_limits']
     env.set_thermal_limit(thermal_limits)
     return env
     
     
-def save_records(FILE_PATH: str, records: np.array):
+def save_records(records: np.array, num: int, config: dict, lout: int = -1):
     '''
-    Saves records to disk and prints a message that they are saved. 
+    Saves records of a chronic to disk and prints a message that they are saved. 
 
     Parameters
     ----------
-    FILE_PATH : str
-        String representation of file to save the records as.
     records : np.array
         The records.
+    num : int
+        INt representing the chronic which is saved.
+    config : dict
+        Dictionary with constant variables. Relevant here are the 
+        do_nothing_capacity_threshold and the path where the file is to be saved.
+    lout : int
+        Index of any line that is out.
     '''
-    np.save(FILE_PATH, records)
+    dn_threshold = config['tutor_generated_data']['do_nothing_capacity_threshold']
+    save_path = config['paths']['tutor_imitation']
+    file_name = f'records_chronic:{num}_lout:{lout}' + \
+                             f'_dnthreshold:{dn_threshold}.npy'
+    np.save(os.path.join(save_path, file_name), records)
     print('# records are saved! #')
     
 
@@ -119,15 +128,13 @@ if __name__ == '__main__':
     
     config = util.load_config()
     # environment definition
-    data_path = config['paths']['rte_case14_realistic']
-    scenario_path = config['paths']['rte_case14_realistic_chronics']
-    save_path = config['paths']['tutor_imitation']
+
     action_space_file = config['paths']['action_space_file']
-    # hyper-parameters
+    # parameters
     num_chronics = config['tutor_generated_data']['n_chronics']
     
 
-    env = init_env(data_path, scenario_path)
+    env = init_env(config)
     obs_vect_size = len(env.get_obs().to_vect())
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
@@ -170,7 +177,7 @@ if __name__ == '__main__':
             
 
         # save chronic records
-        save_records(os.path.join(save_path, 'records_chronic_%s.npy' % (num)), records)
+        save_records(records,num,config)
         records = empty_records(obs_vect_size)
         
     
