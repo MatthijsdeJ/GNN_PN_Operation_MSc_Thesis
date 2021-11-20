@@ -230,12 +230,19 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
     substations in substation_ids. 
     - also returns a list of indices of the all_actions list which are 
     do-nothing actions. 
-    
-   Parameters
+
+    Parameters
     ----------
     removed_line : int, optional
         The index of a line form the environment to be removed/excluded. 
         The default is -1, i.e no line.
+        
+    Raises
+    ----------
+    Exception
+            Network has illegal state: this is likely due to removing a powerline
+            connected to a subtation with only two elements.
+        
     """
     nb_elements=list(env.sub_info)  #array of number of elements connected to each 
                                      #substation 
@@ -252,6 +259,7 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
         #print("SUBSTATION NUMBER: %d" % sub_id)
         sub_elem=[] 
         sub_nb_elem=nb_elements[sub_id] 
+        
         #sub_nb_elem is the number of elements conncted to this particular substation
         for k,v in env.get_obj_connect_to(None, sub_id).items():
             #this loop is to create a list of all elements connected 
@@ -283,9 +291,18 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
         # 2. if it is even
       
         #Due to line removal, object can now be connected by only a single line (i.e. removal of line 18).
-        #This is illegal, i.e. in this case no actions are possible, and we return an empty array.
+        #This is illegal, and hence throws an exception.
         if len(sub_elem)==1:
-            return []
+             raise Exception('Network has illegal state: this is likely due to removing ' +
+                             'a powerline connected to a subtation with only two elements.')
+        
+        #For substations with less than four connected objects, there is only
+        #a single valid topology, so no legal do-something actions exist for these
+        #substations. Hence, we skip them.
+        if len(sub_elem)<4:
+            continue
+        
+        #TODO Split up
         
         if(sub_nb_elem%2): #if it is an odd number
             # From the formula created in the report, this part creates 
@@ -400,9 +417,6 @@ def get_env_actions(removed_line: int =-1) -> Tuple[List[grid2op.Action.Topology
     -------
     all_actions : List[grid2op.Action.TopologyAction]
         The list of legal actions.
-    DN_actions : List[int]
-        The indices of the all_actions list where the actions are do-nothing
-        actions.
     '''
     env = grid2op.make("rte_case14_realistic") #making the environment
     actions=create_action_space(env,removed_line=removed_line) #default subset is all 14 substations
@@ -423,19 +437,15 @@ def generate_action_space(action_space_file: str, removed_line: int =-1):
     '''
     set_actions = np.array([a._set_topo_vect for a in get_env_actions(removed_line=removed_line)])
     n_actions = len(set_actions)
-    if n_actions == 0:
-        print('No actions found; dropping this line leads to illegal states. No action space is saved.')
-    else:
-        print(f'Nr. of actions foud: {n_actions}')
-        np.save(action_space_file,set_actions)
+    print(f'Nr. of actions foud: {n_actions}')
+    np.save(action_space_file,set_actions)
     
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='A test program.')
+    parser = argparse.ArgumentParser(description='A test pfrogram.')
     parser.add_argument("--removed_line",  help="The index of the line to be removed.",
-                        required=False,default=-1)
+                        required=False,default=-1,type=int)
     args = parser.parse_args()
-    print(args)
-    print(args.removed_line)
+
     config = util.load_config()
     generate_action_space(config['paths']['action_space_file'], args.removed_line)
