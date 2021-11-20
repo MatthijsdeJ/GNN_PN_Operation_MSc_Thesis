@@ -430,7 +430,7 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
 
     return all_actions
 
-def get_env_actions(removed_line: int =-1) -> Tuple[List[grid2op.Action.TopologyAction],List[int]]:
+def get_env_actions(removed_line: int =-1) -> List[grid2op.Action.TopologyAction]:
     '''
     For the rte_case14_realistic environment, find the 'set' busbar actions that are
     legal.
