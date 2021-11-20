@@ -3,8 +3,12 @@ paths:
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   medha_imitation: data/medha_imitation_sample/
   tutor_imitation: data/tutor_generated_data/
-  action_space_file: action_space/action_space.npy
+  action_space: action_space/
   
 tutor_generated_data:
   n_chronics: 1
   do_nothing_capacity_threshold: 0.97
+  seed: 1
+  
+rte_case14_realistic:
+  thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
