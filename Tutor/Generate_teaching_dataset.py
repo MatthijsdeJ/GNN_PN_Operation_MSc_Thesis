@@ -15,6 +15,7 @@ import os
 import grid2op
 import numpy as np
 from Tutor.Tutor import Tutor
+from action_space.generate_action_space import get_env_actions
 import datetime as dt
 import util
 
@@ -127,9 +128,7 @@ def empty_records(obs_vect_size: int):
 if __name__ == '__main__':
     
     config = util.load_config()
-    # environment definition
 
-    action_space_file = config['paths']['action_space_file']
     # parameters
     num_chronics = config['tutor_generated_data']['n_chronics']
     
@@ -138,7 +137,7 @@ if __name__ == '__main__':
     obs_vect_size = len(env.get_obs().to_vect())
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
-    tutor = Tutor(env.action_space, action_space_file)
+    tutor = Tutor(env.action_space, get_env_actions())
     records = empty_records(obs_vect_size)
     
     for num in range(num_chronics):

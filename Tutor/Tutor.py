@@ -22,9 +22,9 @@ import util
 
 
 class Tutor(BaseAgent):
-    def __init__(self, action_space, action_space_filepath):
-        BaseAgent.__init__(self, action_space=action_space)
-        self.actions = np.load(action_space_filepath)
+    def __init__(self, env_action_space, selected_action_space):
+        BaseAgent.__init__(self, action_space=env_action_space)
+        self.actions = selected_action_space
         
         config = util.load_config()
         self.do_nothing_capacity_threshold = config['tutor_generated_data']['do_nothing_capacity_threshold']
@@ -43,23 +43,26 @@ class Tutor(BaseAgent):
 #         return new_line_status_array
 # =============================================================================
 
-    def array2action(self, array: np.array) -> grid2op.Action.TopologyAction:
-        '''
-        Turns an array representing a set action into the corresponding
-        topology-action.
-
-        Parameters
-        ----------
-        array: np.array
-            The array representing the set action.
-
-        Returns
-        -------
-        action : grid2op.Action.TopologyAction
-            The topology action.
-        '''
-        action = self.action_space({'set_bus': array})
-        return action
+# =============================================================================
+#     def array2action(self, array: np.array) -> grid2op.Action.TopologyAction:
+#         '''
+#         Turns an array representing a set action into the corresponding
+#         topology-action.
+# 
+#         Parameters
+#         ----------
+#         array: np.array
+#             The array representing the set action.
+# 
+#         Returns
+#         -------
+#         action : grid2op.Action.TopologyAction
+#             The topology action.
+#         '''
+#         action = self.action_space({'set_bus': array})
+#         return action
+# 
+# =============================================================================
 
 # =============================================================================
 #     @staticmethod
@@ -113,9 +116,8 @@ class Tutor(BaseAgent):
         min_rho = obs.rho.max()
         return_idx = -1
 
-        for idx, action_array in enumerate(self.actions):
-            a = self.array2action(action_array)
-
+        for idx, a in enumerate(self.actions):
+            
             obs, _, done, _ = observation.simulate(a)
             if done:
                 continue
