@@ -18,6 +18,7 @@ from Tutor.Tutor import Tutor
 from action_space.generate_action_space import get_env_actions
 import datetime as dt
 import util
+import argparse
 
 
 # =============================================================================
@@ -127,6 +128,14 @@ def empty_records(obs_vect_size: int):
     
 if __name__ == '__main__':
     
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--do_nothing_capacity_threshold",  help="The threshold " +
+                        "max. line rho at which the tutor takes actions.",
+                        required=False, default=.97,type=float)
+    parser.add_argument("--removed_line",  help="The index of the line to be removed.",
+                        required=False,default=-1,type=int)
+    args = parser.parse_args()
+    
     config = util.load_config()
 
     # parameters
@@ -137,7 +146,7 @@ if __name__ == '__main__':
     obs_vect_size = len(env.get_obs().to_vect())
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
-    tutor = Tutor(env.action_space, get_env_actions())
+    tutor = Tutor(env.action_space, get_env_actions(), args.do_nothing_capacity_threshold)
     records = empty_records(obs_vect_size)
     
     for num in range(num_chronics):

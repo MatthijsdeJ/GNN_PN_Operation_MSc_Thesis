@@ -7,7 +7,6 @@ paths:
   
 tutor_generated_data:
   n_chronics: 1
-  do_nothing_capacity_threshold: 0.97
   seed: 1
   
 rte_case14_realistic:

@@ -22,12 +22,12 @@ import util
 
 
 class Tutor(BaseAgent):
-    def __init__(self, env_action_space, selected_action_space):
+    def __init__(self, env_action_space, selected_action_space,
+                 do_nothing_capacity_threshold):
         BaseAgent.__init__(self, action_space=env_action_space)
         self.actions = selected_action_space
         
-        config = util.load_config()
-        self.do_nothing_capacity_threshold = config['tutor_generated_data']['do_nothing_capacity_threshold']
+        self.do_nothing_capacity_threshold = do_nothing_capacity_threshold
 
 # =============================================================================
 #     @staticmethod
