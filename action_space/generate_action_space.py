@@ -219,6 +219,61 @@ def return_DN_actions_indices(all_actions):
   return (len(all_actions) - 1)
   
 
+def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]], 
+                                 removed_line: int = -1) -> \
+                                Tuple[List[str], int]:
+    '''
+    Returns the object connected to a subtation.
+
+    Parameters
+    ----------
+    sub_items : List['str',np.array]
+        The list of tuples of object types. Each tuple consists of a
+        string representing he object type and and array with the indexes
+        of the connected object of that type.
+        Also contains an entry with string 'nb_elements'.
+    removed_line : int, optional
+        DESCRIPTION. The default is -1.
+
+    Returns
+    -------
+    sub_elem : list
+        String representations of the objects
+    sub_nb_elem : int
+        Total number of connected objects.
+
+    '''
+    sub_elem = []
+    #sub_nb_elem is the number of elements conncted to this particular substation
+    for k,v in sub_items:
+        #this loop is to create a list of all elements connected 
+        #to a single substation
+        #example: k='lines_or_id' and v=array([2, 3, 4]
+            if k=='nb_elements': #there is a key in this dictionary called 
+            # "nb_elements" which we don't want 
+            # because we only want to list the names of the elements itself
+                continue
+            
+            #Added by Matthijs on nov 18 2021:
+            #Remove the line if it is to be removed
+            if k in ('lines_or_id','lines_ex_id'):
+                if removed_line in v:
+                    v =  np.delete(v, np.where(v == removed_line))
+                    
+            
+            
+            if np.size(v)>1: #number of elements with key k connected to sub_id
+                for j in range(np.size(v)):
+                    str1 = k + str(v[j])
+                    sub_elem.append(str1)
+                    # example: str1 = 'lines_or_id' + str(2)
+            elif np.size(v)==1:
+                sub_elem.append(str(k)+str(v[0])) 
+    # By the end of the above loop, sub_elem will be complete
+
+    sub_nb_elem= len(sub_elem)
+    return sub_elem, sub_nb_elem         
+    
 def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
     """ This function will produce a list of all actions possible for the 
     substations identified in substation_ids.
@@ -257,44 +312,15 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
     for sub_id in substation_ids: # to loop through all substations
         sub_actions = []
         #print("SUBSTATION NUMBER: %d" % sub_id)
-        sub_elem=[] 
-        sub_nb_elem=nb_elements[sub_id] 
         
-        #sub_nb_elem is the number of elements conncted to this particular substation
-        for k,v in env.get_obj_connect_to(None, sub_id).items():
-            #this loop is to create a list of all elements connected 
-            #to a single substation
-            #example: k='lines_or_id' and v=array([2, 3, 4]
-                if k=='nb_elements': #there is a key in this dictionary called 
-                # "nb_elements" which we don't want 
-                # because we only want to list the names of the elements itself
-                    continue
-                
-                #Added by Matthijs on nov 18 2021:
-                #Remove the line if it is to be removed
-                if k in ('lines_or_id','lines_ex_id'):
-                    if removed_line in v:
-                        v =  np.delete(v, np.where(v == removed_line))
-                        sub_nb_elem-=1
-                
-                if np.size(v)>1: #number of elements with key k connected to sub_id
-                    for j in range(np.size(v)):
-                        str1 = k + str(v[j])
-                        sub_elem.append(str1)
-                        # example: str1 = 'lines_or_id' + str(2)
-                elif np.size(v)==1:
-                    sub_elem.append(str(k)+str(v[0])) 
-        # By the end of the above loop, sub_elem will be complete
-        # Below, we now start to fill the sub_actions list
-        # there are two cases:
-        # 1. if the number of elements connected is odd
-        # 2. if it is even
-      
+        sub_elem, sub_nb_elem = get_obj_connect_to_subtation(env.get_obj_connect_to(None, sub_id).items(),
+                                                            removed_line)
+
         #Due to line removal, object can now be connected by only a single line (i.e. removal of line 18).
         #This is illegal, and hence throws an exception.
         if len(sub_elem)==1:
              raise Exception('Network has illegal state: this is likely due to removing ' +
-                             'a powerline connected to a subtation with only two elements.')
+                             'a powerline connected to a subtation with only two connected objects.')
         
         #For substations with less than four connected objects, there is only
         #a single valid topology, so no legal do-something actions exist for these
@@ -302,8 +328,10 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
         if len(sub_elem)<4:
             continue
         
-        #TODO Split up
-        
+        # Below, we now start to fill the sub_actions list
+        # there are two cases:
+        # 1. if the number of elements connected is odd
+        # 2. if it is even
         if(sub_nb_elem%2): #if it is an odd number
             # From the formula created in the report, this part creates 
             # the alpha/2 term
