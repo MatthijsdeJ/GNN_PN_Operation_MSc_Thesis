@@ -473,6 +473,8 @@ def generate_action_space(action_space_path: str, removed_line: int =-1):
     
 
 if __name__ == '__main__':
+    util.set_wd_to_package_root()
+    
     parser = argparse.ArgumentParser()
     parser.add_argument("--removed_line",  help="The index of the line to be removed.",
                         required=False,default=-1,type=int)

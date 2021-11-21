@@ -14,7 +14,7 @@ mail: cbb@cbb1996.com
 import os
 import grid2op
 import numpy as np
-from Tutor.Tutor import Tutor
+from Tutor import Tutor
 from action_space.generate_action_space import get_env_actions
 import datetime as dt
 import util
@@ -131,7 +131,8 @@ def empty_records(obs_vect_size: int):
     return np.zeros((0, 1+obs_vect_size), dtype=np.float32)
     
 if __name__ == '__main__':
-    
+    util.set_wd_to_package_root()
+        
     parser = argparse.ArgumentParser()
     parser.add_argument("--do_nothing_capacity_threshold",  help="The threshold " +
                         "max. line rho at which the tutor takes actions.",

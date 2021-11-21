@@ -8,6 +8,9 @@ Created on Tue Oct 26 12:04:42 2021
 import numpy as np
 from grid2op.dtypes import dt_int, dt_float, dt_bool
 import yaml
+import pkg_resources
+import os
+
 
 def connectivity_matrix(sub_info, topo_vect, line_status, line_or_pos_topo_vect, 
                         line_ex_pos_topo_vect, dim_topo, as_edge_indices=True):
@@ -107,10 +110,14 @@ def load_config():
         The config file.
 
     '''
-    
-    with open("config.yaml") as stream:
+    with open('config.yaml') as stream:
         try:
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             raise exc
         
+def set_wd_to_package_root():
+    '''
+    Set the working directory to the root of the package.
+    '''
+    os.chdir(os.path.dirname(__file__))
