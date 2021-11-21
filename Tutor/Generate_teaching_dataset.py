@@ -84,7 +84,7 @@ def init_env(config: dict) ->  grid2op.Environment.Environment:
     return env
     
     
-def save_records(records: np.array, num: int, config: dict, 
+def save_records(records: np.array, chronic: int, save_path: str,
                  do_nothing_capacity_threshold: float, lout: int = -1,):
     '''
     Saves records of a chronic to disk and prints a message that they are saved. 
@@ -93,20 +93,22 @@ def save_records(records: np.array, num: int, config: dict,
     ----------
     records : np.array
         The records.
-    num : int
-        INt representing the chronic which is saved.
-    config : dict
-        Dictionary with constant variables. Relevant here are the 
-        do_nothing_capacity_threshold and the path where the file is to be saved.
+    chronic : int
+        Int representing the chronic which is saved.
+    save_path : str
+        Path where the output folder with the records file is to be made.
     do_nothing_capacity_threshold : int
         The threshold max. line rho at which the tutor takes actions.
     lout : int
         Index of any line that is out.
     '''
-    save_path = config['paths']['tutor_imitation']
-    file_name = f'records_chronic:{num}_lout:{lout}' + \
-                             f'_dnthreshold:{do_nothing_capacity_threshold}.npy'
-    np.save(os.path.join(save_path, file_name), records)
+
+    
+    folder_name = f'records_chronics_lout:{lout}_dnthreshold:{do_nothing_capacity_threshold}'
+    file_name = f'records_chronic:{chronic}.npy'
+    if not os.path.isdir(os.path.join(save_path,folder_name)):
+        os.mkdir(os.path.join(save_path,folder_name))
+    np.save(os.path.join(save_path,folder_name,file_name), records)
     print('# records are saved! #')
     
 
@@ -139,26 +141,31 @@ if __name__ == '__main__':
     args = parser.parse_args()
     
     config = util.load_config()
-
-    # parameters
+    #Load constants, settings, hyperparameters, argurments
+    save_path = config['paths']['tutor_imitation']
     num_chronics = config['tutor_generated_data']['n_chronics']
+    do_nothing_capacity_threshold = args.do_nothing_capacity_threshold
+    removed_line = args.removed_line
     
-
+    #Initialize environment
     env = init_env(config)
-    obs_vect_size = len(env.get_obs().to_vect())
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
+    #Prepare tutor and record objects
     tutor = Tutor(env.action_space, get_env_actions(), args.do_nothing_capacity_threshold)
+    obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
     
     for num in range(num_chronics):
         
+        #Reset variables
         obs = env.reset()
-        print('current chronic: %s' % env.chronics_handler.get_name())
         done, step = False, 0
-        reference_topo_vect = obs.topo_vect.copy()
         day_records = empty_records(obs_vect_size)
         
+        print('current chronic: %s' % env.chronics_handler.get_name())
+        reference_topo_vect = obs.topo_vect.copy()
+
         while not done:
             step += 1
             #reset topology at midnight, store days' records, reset days' records
@@ -187,10 +194,15 @@ if __name__ == '__main__':
             
 
         # save chronic records
-        save_records(records,num,config)
+        save_records(records,num,save_path,do_nothing_capacity_threshold,removed_line)
         records = empty_records(obs_vect_size)
         
     
           
-
+# =============================================================================
+#         # FOR TESTING PURPOSES ONLY
+#         env.fast_forward_chronics(7488)
+#         step += 7488
+# =============================================================================
+        
     
