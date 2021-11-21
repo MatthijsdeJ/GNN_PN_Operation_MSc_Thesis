@@ -17,7 +17,7 @@ import time
 import numpy as np
 import grid2op
 from grid2op.Agent import BaseAgent
-from typing import Tuple
+from typing import Tuple, Optional
 import util
 
 
@@ -79,7 +79,8 @@ class Tutor(BaseAgent):
 # =============================================================================
 
     def act(self, observation: grid2op.Observation.CompleteObservation) \
-                        -> Tuple[grid2op.Action.TopologyAction,int]:
+                        -> Tuple[grid2op.Action.TopologyAction,int, Optional[float], \
+                                 Optional[float], Optional[float]]:
         '''
         For a particular observation, searches through the action space with 
         a greedy strategy to find the action that minimizes the max. 
@@ -92,19 +93,30 @@ class Tutor(BaseAgent):
 
         Returns
         -------
-        Tuple(grid2op.Action.TopologyAction,int)
-            The selected set action and the index of the selected action.
+        action : grid2op.Action.TopologyAction
+            The selected action.
+        return_idx : int
+            The index of the selected action.
             In case that the max. line capacity is below self.do_nothing_capacity_threshold,
             no action is selected, and the the index is -2.
             In case that the max. line capacity is above self.do_nothing_capacity_threshold,
             but no set action is selected, the selected action is do-nothing
             and the index is -1.
+        dn_rho : float
+            The rho obtained from simulating a do-nothing action.
+            None if it the max. line capacity is below self.do_nothing_capacity_threshold.
+        min_rho : float
+            The rho obtained by the selected action.
+            None if it the max. line capacity is below self.do_nothing_capacity_threshold.
+        time : float
+            The elapsed time of the function in seconds.
+            None if it the max. line capacity is below self.do_nothing_capacity_threshold.
         '''
         tick = time.time()
 
         if observation.rho.max() < self.do_nothing_capacity_threshold:
             # secure, return "do nothing" in bus switches.
-            return self.action_space(), -2
+            return self.action_space(), -2, None, None, None
 
         #not secure, do a greedy search
         print('%s: close to overload! line-%d has a max. rho of %.2f' % 
@@ -113,7 +125,7 @@ class Tutor(BaseAgent):
         #default action is do nothing
         action_chosen = self.action_space()
         obs, _, done, _ = observation.simulate(action_chosen)
-        min_rho = obs.rho.max()
+        min_rho = dn_rho = obs.rho.max()
         return_idx = -1
 
         for idx, a in enumerate(self.actions):
@@ -128,4 +140,4 @@ class Tutor(BaseAgent):
     
         print('Action %d results in a forecasted max. rho of %.2f, search duration is %.2fs' 
               % (return_idx, min_rho, time.time() - tick))
-        return action_chosen, return_idx
+        return action_chosen, return_idx, dn_rho, min_rho, time.time() - tick

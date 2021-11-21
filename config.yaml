@@ -6,7 +6,7 @@ paths:
   action_space: action_space/
   
 tutor_generated_data:
-  n_chronics: 1
+  n_chronics: 50
   seed: 1
   
 rte_case14_realistic:

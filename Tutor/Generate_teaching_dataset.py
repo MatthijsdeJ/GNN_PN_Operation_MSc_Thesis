@@ -14,7 +14,7 @@ mail: cbb@cbb1996.com
 import os
 import grid2op
 import numpy as np
-from Tutor import Tutor
+from Tutor.Tutor import Tutor
 from action_space.generate_action_space import get_env_actions
 import datetime as dt
 import util
@@ -128,7 +128,7 @@ def empty_records(obs_vect_size: int):
 
     '''
     # first col for label, remaining OBS_VECT_SIZE cols for environment features
-    return np.zeros((0, 1+obs_vect_size), dtype=np.float32)
+    return np.zeros((0, 5+obs_vect_size), dtype=np.float32)
     
 if __name__ == '__main__':
     util.set_wd_to_package_root()
@@ -177,12 +177,13 @@ if __name__ == '__main__':
                 continue
                 
             #if not midnight, find a normal action
-            action, idx = tutor.act(obs)
+            action, idx, dn_rho, min_rho, time = tutor.act(obs)
             
             #don't store the action if the max. capacity is below the threshdold
             if idx != -2:
                 # save a record
-                day_records = np.concatenate((day_records, np.concatenate(([idx], 
+                day_records = np.concatenate((day_records, np.concatenate((
+                                                [idx, dn_rho, min_rho, time, step], 
                                                 obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
             obs, _, done, _ = env.step(action)
