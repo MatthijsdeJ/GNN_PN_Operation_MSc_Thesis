@@ -17,9 +17,8 @@ import numpy as np
 from Tutor.Tutor import Tutor
 from action_space.generate_action_space import get_env_actions
 import datetime as dt
-import util
 import argparse
-
+import util
 
 # =============================================================================
 # An alternative way to return to the reference topology is to simply take
@@ -137,7 +136,7 @@ if __name__ == '__main__':
     parser.add_argument("--do_nothing_capacity_threshold",  help="The threshold " +
                         "max. line rho at which the tutor takes actions.",
                         required=False, default=.97,type=float)
-    parser.add_argument("--removed_line",  help="The index of the line to be removed.",
+    parser.add_argument("--disable_line",  help="The index of the line to be disabled.",
                         required=False,default=-1,type=int)
     args = parser.parse_args()
     
@@ -146,7 +145,7 @@ if __name__ == '__main__':
     save_path = config['paths']['tutor_imitation']
     num_chronics = config['tutor_generated_data']['n_chronics']
     do_nothing_capacity_threshold = args.do_nothing_capacity_threshold
-    removed_line = args.removed_line
+    disable_line = args.disable_line
     
     #Initialize environment
     env = init_env(config)
@@ -163,6 +162,11 @@ if __name__ == '__main__':
         obs = env.reset()
         done, step = False, 0
         day_records = empty_records(obs_vect_size)
+        
+        #Disable lines, if any
+        if disable_line != -1:
+            obs, _, done, _ = env.step(env.action_space({"set_line_status":(disable_line,-1) }))
+            step+=1
         
         print('current chronic: %s' % env.chronics_handler.get_name())
         reference_topo_vect = obs.topo_vect.copy()
@@ -196,7 +200,7 @@ if __name__ == '__main__':
             
 
         # save chronic records
-        save_records(records,num,save_path,do_nothing_capacity_threshold,removed_line)
+        save_records(records,num,save_path,do_nothing_capacity_threshold,disable_line)
         records = empty_records(obs_vect_size)
         
     
