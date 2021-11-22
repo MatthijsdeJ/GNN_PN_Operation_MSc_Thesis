@@ -138,18 +138,23 @@ if __name__ == '__main__':
                         required=False, default=.97,type=float)
     parser.add_argument("--disable_line",  help="The index of the line to be disabled.",
                         required=False,default=-1,type=int)
+    parser.add_argument("--start_chronic_id",  help="The chronic to start with.",
+                        required=False,default=1,type=int)
     args = parser.parse_args()
     
     config = util.load_config()
     #Load constants, settings, hyperparameters, argurments
     save_path = config['paths']['tutor_imitation']
     num_chronics = config['tutor_generated_data']['n_chronics']
+    start_chronic_id = args.start_chronic_id
     do_nothing_capacity_threshold = args.do_nothing_capacity_threshold
     disable_line = args.disable_line
     
     #Initialize environment
+    #NOTE: the first chronic, with id 0, is skipped as reset() is called after
     env = init_env(config)
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
+    env.set_id(start_chronic_id)
     
     #Prepare tutor and record objects
     tutor = Tutor(env.action_space, get_env_actions(disable_line=disable_line),
@@ -157,7 +162,7 @@ if __name__ == '__main__':
     obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
     
-    for num in range(num_chronics):
+    for num in range(start_chronic_id, start_chronic_id+num_chronics):
         
         #Reset variables
         obs = env.reset()
@@ -186,16 +191,16 @@ if __name__ == '__main__':
             if idx != -2:
                 # save a record
                 day_records = np.concatenate((day_records, np.concatenate((
-                                                [idx, dn_rho, min_rho, time, env.nv_time_step], 
+                                                [idx, dn_rho, min_rho, time, env.nb_time_step], 
                                                 obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
             obs, _, done, _ = env.step(action)
          
         # print whether game was completed succesfully, save days' records if so
-        if  env.nv_time_step == env.chronics_handler.max_timestep():
-            print('game over (win) at step-%d\n\n\n' %  env.nv_time_step)
+        if  env.nb_time_step == env.chronics_handler.max_timestep():
+            print('game over (win) at step-%d\n\n\n' %  env.nb_time_step)
         else:
-            print('game over (failure) at step-%d\n\n\n' %  env.nv_time_step)
+            print('game over (failure) at step-%d\n\n\n' %  env.nb_time_step)
             
 
         # save chronic records
@@ -207,7 +212,6 @@ if __name__ == '__main__':
 # =============================================================================
 #         # FOR TESTING PURPOSES ONLY
 #         env.fast_forward_chronics(7488)
-#         step += 7488
 # =============================================================================
         
     
