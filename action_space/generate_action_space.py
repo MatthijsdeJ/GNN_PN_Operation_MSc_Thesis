@@ -220,7 +220,7 @@ def return_DN_actions_indices(all_actions):
   
 
 def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]], 
-                                 removed_line: int = -1) -> \
+                                 disable_line: int = -1) -> \
                                 Tuple[List[str], int]:
     '''
     Returns the object connected to a subtation.
@@ -232,8 +232,8 @@ def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]],
         string representing he object type and and array with the indexes
         of the connected object of that type.
         Also contains an entry with string 'nb_elements'.
-    removed_line : int, optional
-        DESCRIPTION. The default is -1.
+    disable_line : int, optional
+        The index of the line to be disabled. The default is -1.
 
     Returns
     -------
@@ -255,10 +255,10 @@ def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]],
                 continue
             
             #Added by Matthijs on nov 18 2021:
-            #Remove the line if it is to be removed
+            #Disable the line if it is to be disabled
             if k in ('lines_or_id','lines_ex_id'):
-                if removed_line in v:
-                    v =  np.delete(v, np.where(v == removed_line))
+                if disable_line in v:
+                    v =  np.delete(v, np.where(v == disable_line))
                     
             
             
@@ -274,7 +274,7 @@ def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]],
     sub_nb_elem= len(sub_elem)
     return sub_elem, sub_nb_elem         
     
-def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
+def create_action_space(env,substation_ids=list(range(14)), disable_line=-1):
     """ This function will produce a list of all actions possible for the 
     substations identified in substation_ids.
     - substations_id is a list of the ids of the substations that are in scope.
@@ -288,8 +288,8 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
 
     Parameters
     ----------
-    removed_line : int, optional
-        The index of a line form the environment to be removed/excluded. 
+    disable_line : int, optional
+        The index of a line form the environment to be disabled. 
         The default is -1, i.e no line.
         
     Raises
@@ -314,7 +314,7 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
         #print("SUBSTATION NUMBER: %d" % sub_id)
         
         sub_elem, sub_nb_elem = get_obj_connect_to_subtation(env.get_obj_connect_to(None, sub_id).items(),
-                                                            removed_line)
+                                                            disable_line)
 
         #Due to line removal, object can now be connected by only a single line (i.e. removal of line 18).
         #This is illegal, and hence throws an exception.
@@ -430,15 +430,15 @@ def create_action_space(env,substation_ids=list(range(14)), removed_line=-1):
 
     return all_actions
 
-def get_env_actions(removed_line: int =-1) -> List[grid2op.Action.TopologyAction]:
+def get_env_actions(disable_line: int =-1) -> List[grid2op.Action.TopologyAction]:
     '''
     For the rte_case14_realistic environment, find the 'set' busbar actions that are
     legal.
 
     Parameters
     ----------
-    removed_line : int, optional
-        The index of a line form the environment to be removed/excluded. 
+    disable_line : int, optional
+        The index of a line form the environment to be disabled. 
         The default is -1, i.e no line.
         
     Returns
@@ -447,10 +447,10 @@ def get_env_actions(removed_line: int =-1) -> List[grid2op.Action.TopologyAction
         The list of legal actions.
     '''
     env = grid2op.make("rte_case14_realistic") #making the environment
-    actions=create_action_space(env,removed_line=removed_line) #default subset is all 14 substations
+    actions=create_action_space(env,disable_line=disable_line) #default subset is all 14 substations
     return actions
   
-def generate_action_space(action_space_path: str, removed_line: int =-1):
+def generate_action_space(action_space_path: str, disable_line: int =-1):
     '''
     Saves array representations of the legal do-something 'set' busbar actions 
     of the rte_case14_realistic environment to a npy file.
@@ -459,16 +459,16 @@ def generate_action_space(action_space_path: str, removed_line: int =-1):
     ----------
     action_space_file : str 
         The npy file to save as.
-    removed_line : int, optional
-        The index of a line form the environment to be removed/excluded. 
+    disable_line : int, optional
+        The index of a line form the environment to be disabled. 
         The default is -1, i.e no line.
     '''
-    set_actions = np.array([a._set_topo_vect for a in get_env_actions(removed_line=removed_line)])
+    set_actions = np.array([a._set_topo_vect for a in get_env_actions(disable_line=disable_line)])
     n_actions = len(set_actions)
     print(f'Nr. of actions foud: {n_actions}')
     
-    filename = 'action_space.npy' if removed_line == -1 else \
-                f'action_space_lout:{removed_line}.npy'
+    filename = 'action_space.npy' if disable_line == -1 else \
+                f'action_space_lout:{disable_line}.npy'
     np.save(action_space_path + filename,set_actions)
     
 
@@ -476,9 +476,9 @@ if __name__ == '__main__':
     util.set_wd_to_package_root()
     
     parser = argparse.ArgumentParser()
-    parser.add_argument("--removed_line",  help="The index of the line to be removed.",
+    parser.add_argument("--disable_line",  help="The index of the line to be disabled.",
                         required=False,default=-1,type=int)
     args = parser.parse_args()
 
     config = util.load_config()
-    generate_action_space(config['paths']['action_space'], args.removed_line)
+    generate_action_space(config['paths']['action_space'], args.disable_line)
