@@ -152,7 +152,8 @@ if __name__ == '__main__':
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     
     #Prepare tutor and record objects
-    tutor = Tutor(env.action_space, get_env_actions(), args.do_nothing_capacity_threshold)
+    tutor = Tutor(env.action_space, get_env_actions(disable_line=disable_line),
+                  args.do_nothing_capacity_threshold)
     obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
     
