@@ -161,19 +161,17 @@ if __name__ == '__main__':
         
         #Reset variables
         obs = env.reset()
-        done, step = False, 0
+        done = False
         day_records = empty_records(obs_vect_size)
         
         #Disable lines, if any
         if disable_line != -1:
             obs, _, done, _ = env.step(env.action_space({"set_line_status":(disable_line,-1) }))
-            step+=1
         
         print('current chronic: %s' % env.chronics_handler.get_name())
         reference_topo_vect = obs.topo_vect.copy()
 
         while not done:
-            step += 1
             #reset topology at midnight, store days' records, reset days' records
             if obs.get_time_stamp().time()==dt.time(23,55):
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
@@ -188,16 +186,16 @@ if __name__ == '__main__':
             if idx != -2:
                 # save a record
                 day_records = np.concatenate((day_records, np.concatenate((
-                                                [idx, dn_rho, min_rho, time, step], 
+                                                [idx, dn_rho, min_rho, time, env.nv_time_step], 
                                                 obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
             obs, _, done, _ = env.step(action)
          
         # print whether game was completed succesfully, save days' records if so
-        if step == env.chronics_handler.max_timestep():
-            print('game over (win) at step-%d\n\n\n' % step)
+        if  env.nv_time_step == env.chronics_handler.max_timestep():
+            print('game over (win) at step-%d\n\n\n' %  env.nv_time_step)
         else:
-            print('game over (failure) at step-%d\n\n\n' % step)
+            print('game over (failure) at step-%d\n\n\n' %  env.nv_time_step)
             
 
         # save chronic records
