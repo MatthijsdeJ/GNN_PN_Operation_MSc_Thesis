@@ -139,7 +139,7 @@ if __name__ == '__main__':
     parser.add_argument("--disable_line",  help="The index of the line to be disabled.",
                         required=False,default=-1,type=int)
     parser.add_argument("--start_chronic_id",  help="The chronic to start with.",
-                        required=False,default=1,type=int)
+                        required=False,default=0,type=int)
     args = parser.parse_args()
     
     config = util.load_config()
@@ -164,7 +164,7 @@ if __name__ == '__main__':
     
     for num in range(start_chronic_id, start_chronic_id+num_chronics):
         
-        #Reset variables
+        #(Re)set variables
         obs = env.reset()
         done = False
         day_records = empty_records(obs_vect_size)
@@ -206,7 +206,7 @@ if __name__ == '__main__':
         # save chronic records
         save_records(records,num,save_path,do_nothing_capacity_threshold,disable_line)
         records = empty_records(obs_vect_size)
-        
+
     
           
 # =============================================================================
