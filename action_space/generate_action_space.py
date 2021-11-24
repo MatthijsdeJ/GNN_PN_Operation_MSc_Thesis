@@ -223,7 +223,7 @@ def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]],
                                  disable_line: int = -1) -> \
                                 Tuple[List[str], int]:
     '''
-    Returns the object connected to a subtation.
+    Returns the objects connected to a subtation.
 
     Parameters
     ----------
@@ -237,7 +237,7 @@ def get_obj_connect_to_subtation(sub_items : List[Tuple['str',np.array]],
 
     Returns
     -------
-    sub_elem : list
+    sub_elem : List[str]
         String representations of the objects
     sub_nb_elem : int
         Total number of connected objects.
@@ -318,14 +318,14 @@ def create_action_space(env,substation_ids=list(range(14)), disable_line=-1):
 
         #Due to line removal, object can now be connected by only a single line (i.e. removal of line 18).
         #This is illegal, and hence throws an exception.
-        if len(sub_elem)==1:
+        if sub_nb_elem<2:
              raise Exception('Network has illegal state: this is likely due to removing ' +
                              'a powerline connected to a subtation with only two connected objects.')
         
         #For substations with less than four connected objects, there is only
         #a single valid topology, so no legal do-something actions exist for these
         #substations. Hence, we skip them.
-        if len(sub_elem)<4:
+        if sub_nb_elem<4:
             continue
         
         # Below, we now start to fill the sub_actions list
