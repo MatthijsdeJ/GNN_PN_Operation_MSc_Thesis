@@ -227,34 +227,3 @@ def preprocess_observation(obs: np.array, obs_space: grid2op.Observation.Observa
     
     return X_gen, X_load, X_or, X_ex, topo_vect, connectivity_edges
 
-class action_identificator():
-    '''
-    Class for identifying action IDs as originating from Medha's model and
-    retrieving the corresponding Grid2Op actions. The actions are limited
-    to instances of setting the topology vector.
-    
-    A class to reduce overhead.
-    '''
-    
-    def __init__(self):
-        self.all_actions,self.DN_actions = \
-                Action_space_auto_realistic.get_env_actions()
-        
-    def get_set_topo_vect(self, action_id: int):
-        '''
-        Retrieve the 'set_topo_vect' attribute containing the set
-        object-busbar connections belonging, identified by a particular id.
-
-        Parameters
-        ----------
-        action_id : int
-            The id of the action.
-
-        Returns
-        -------
-        np.array
-            The array indicating with object-busbar connections were set.
-            A 0 represent no change, 1 set to the first busbar, 2 set to the second busbar.
-
-        '''
-        return self.all_actions[action_id]._set_topo_vect

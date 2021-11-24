@@ -430,6 +430,38 @@ def create_action_space(env,substation_ids=list(range(14)), disable_line=-1):
 
     return all_actions
 
+class action_identificator():
+    '''
+    Class for identifying action IDs as originating from Medha's model and
+    retrieving the corresponding Grid2Op actions. The actions are limited
+    to instances of setting the topology vector.
+    
+    A class to reduce overhead.
+    '''
+    
+    def __init__(self,line_disabled: int=-1):
+
+        self.all_actions = get_env_actions(line_disabled)
+        
+    def get_set_topo_vect(self, action_id: int):
+        '''
+        Retrieve the 'set_topo_vect' attribute containing the set
+        object-busbar connections belonging, identified by a particular id.
+
+        Parameters
+        ----------
+        action_id : int
+            The id of the action.
+
+        Returns
+        -------
+        np.array
+            The array indicating with object-busbar connections were set.
+            A 0 represent no change, 1 set to the first busbar, 2 set to the second busbar.
+
+        '''
+        return self.all_actions[action_id]._set_topo_vect
+    
 def get_env_actions(disable_line: int =-1) -> List[grid2op.Action.TopologyAction]:
     '''
     For the rte_case14_realistic environment, find the 'set' busbar actions that are
@@ -471,6 +503,7 @@ def generate_action_space(action_space_path: str, disable_line: int =-1):
                 f'action_space_lout:{disable_line}.npy'
     np.save(action_space_path + filename,set_actions)
     
+
 
 if __name__ == '__main__':
     util.set_wd_to_package_root()
