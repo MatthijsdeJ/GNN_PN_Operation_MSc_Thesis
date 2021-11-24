@@ -83,7 +83,7 @@ def init_env(config: dict) ->  grid2op.Environment.Environment:
     return env
     
     
-def save_records(records: np.array, chronic: int, save_path: str,
+def save_records(records: np.array, chronic: int, save_path: str, day: int,
                  do_nothing_capacity_threshold: float, lout: int = -1,):
     '''
     Saves records of a chronic to disk and prints a message that they are saved. 
@@ -96,6 +96,8 @@ def save_records(records: np.array, chronic: int, save_path: str,
         Int representing the chronic which is saved.
     save_path : str
         Path where the output folder with the records file is to be made.
+    day : int
+        The number of days completed.
     do_nothing_capacity_threshold : int
         The threshold max. line rho at which the tutor takes actions.
     lout : int
@@ -104,7 +106,7 @@ def save_records(records: np.array, chronic: int, save_path: str,
 
     
     folder_name = f'records_chronics_lout:{lout}_dnthreshold:{do_nothing_capacity_threshold}'
-    file_name = f'records_chronic:{chronic}.npy'
+    file_name = f'records_chronic:{chronic}_days:{day}.npy'
     if not os.path.isdir(os.path.join(save_path,folder_name)):
         os.mkdir(os.path.join(save_path,folder_name))
     np.save(os.path.join(save_path,folder_name,file_name), records)
@@ -166,7 +168,7 @@ if __name__ == '__main__':
         
         #(Re)set variables
         obs = env.reset()
-        done = False
+        done,day = False, 0
         day_records = empty_records(obs_vect_size)
         
         #Disable lines, if any
@@ -182,6 +184,7 @@ if __name__ == '__main__':
                 obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
                 records = np.concatenate((records, day_records), axis=0)
                 day_records = empty_records(obs_vect_size)
+                day+=1
                 continue
                 
             #if not midnight, find a normal action
@@ -204,7 +207,7 @@ if __name__ == '__main__':
             
 
         # save chronic records
-        save_records(records,num,save_path,do_nothing_capacity_threshold,disable_line)
+        save_records(records,num,save_path,day,do_nothing_capacity_threshold,disable_line)
         records = empty_records(obs_vect_size)
 
     
