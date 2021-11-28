@@ -19,6 +19,7 @@ from action_space.generate_action_space import get_env_actions
 import datetime as dt
 import argparse
 import util
+import math
 
 # =============================================================================
 # An alternative way to return to the reference topology is to simply take
@@ -80,10 +81,11 @@ def init_env(config: dict) ->  grid2op.Environment.Environment:
     #Set custom thermal limits
     thermal_limits = config['rte_case14_realistic']['thermal_limits']
     env.set_thermal_limit(thermal_limits)
+    
     return env
     
     
-def save_records(records: np.array, chronic: int, save_path: str, day: int,
+def save_records(records: np.array, chronic: int, save_path: str, days_completed: int,
                  do_nothing_capacity_threshold: float, lout: int = -1,):
     '''
     Saves records of a chronic to disk and prints a message that they are saved. 
@@ -96,7 +98,7 @@ def save_records(records: np.array, chronic: int, save_path: str, day: int,
         Int representing the chronic which is saved.
     save_path : str
         Path where the output folder with the records file is to be made.
-    day : int
+    days_completed : int
         The number of days completed.
     do_nothing_capacity_threshold : int
         The threshold max. line rho at which the tutor takes actions.
@@ -106,7 +108,7 @@ def save_records(records: np.array, chronic: int, save_path: str, day: int,
 
     
     folder_name = f'records_chronics_lout:{lout}_dnthreshold:{do_nothing_capacity_threshold}'
-    file_name = f'records_chronic:{chronic}_days:{day}.npy'
+    file_name = f'records_chronic:{chronic}_dayscomp:{days_completed}.npy'
     if not os.path.isdir(os.path.join(save_path,folder_name)):
         os.mkdir(os.path.join(save_path,folder_name))
     np.save(os.path.join(save_path,folder_name,file_name), records)
@@ -131,6 +133,9 @@ def empty_records(obs_vect_size: int):
     # first col for label, remaining OBS_VECT_SIZE cols for environment features
     return np.zeros((0, 5+obs_vect_size), dtype=np.float32)
     
+def ts_to_day(ts: int):
+    return math.floor(ts/ts_in_day)
+
 if __name__ == '__main__':
     util.set_wd_to_package_root()
         
@@ -148,12 +153,12 @@ if __name__ == '__main__':
     #Load constants, settings, hyperparameters, argurments
     save_path = config['paths']['tutor_imitation']
     num_chronics = config['tutor_generated_data']['n_chronics']
+    ts_in_day = int(config['rte_case14_realistic']['ts_in_day'])
     start_chronic_id = args.start_chronic_id
     do_nothing_capacity_threshold = args.do_nothing_capacity_threshold
     disable_line = args.disable_line
     
     #Initialize environment
-    #NOTE: the first chronic, with id 0, is skipped as reset() is called after
     env = init_env(config)
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     env.set_id(start_chronic_id)
@@ -168,23 +173,26 @@ if __name__ == '__main__':
         
         #(Re)set variables
         obs = env.reset()
-        done,day = False, 0
+        done,days_completed = False, 0
         day_records = empty_records(obs_vect_size)
         
         #Disable lines, if any
         if disable_line != -1:
-            obs, _, done, _ = env.step(env.action_space({"set_line_status":(disable_line,-1) }))
+            obs, _, _, _ = env.step(env.action_space(
+                            {"set_line_status":(disable_line,-1) }))
         
         print('current chronic: %s' % env.chronics_handler.get_name())
         reference_topo_vect = obs.topo_vect.copy()
 
-        while not done:
+        while env.nb_time_step < env.chronics_handler.max_timestep():
             #reset topology at midnight, store days' records, reset days' records
-            if obs.get_time_stamp().time()==dt.time(23,55):
-                obs, _, done, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
+            if env.nb_time_step%ts_in_day == ts_in_day-1:
+                print(f'Day {ts_to_day(env.nb_time_step)} completed.')
+                obs, _, _, _ = env.step(env.action_space({'set_bus': 
+                                                        reference_topo_vect}))
                 records = np.concatenate((records, day_records), axis=0)
                 day_records = empty_records(obs_vect_size)
-                day+=1
+                days_completed += 1
                 continue
                 
             #if not midnight, find a normal action
@@ -194,22 +202,37 @@ if __name__ == '__main__':
             if idx != -2:
                 # save a record
                 day_records = np.concatenate((day_records, np.concatenate((
-                                                [idx, dn_rho, min_rho, time, env.nb_time_step], 
-                                                obs.to_vect())).astype(np.float32)[None, :]), axis=0)
+                                [idx, dn_rho, min_rho, time, env.nb_time_step], 
+                                obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
             obs, _, done, _ = env.step(action)
+            
+            #If the game is done at this point, this indicated a (failed) game over
+            #If so, reset the environment to the start of next day and discard the records
+            if done:
+                print(f'Failure at step {env.nb_time_step} '+
+                      f'on day {ts_to_day(env.nb_time_step)}')
+                ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step))
+                env.set_id(num)
+                _ = env.reset()
+                
+                if disable_line != -1:
+                    _, _, _, _ = env.step(env.action_space(
+                        {"set_line_status":(disable_line,-1) }))
+                    env.fast_forward_chronics(ts_next_day-1)
+                else:
+                    env.fast_forward_chronics(ts_next_day)
+                obs = env.get_obs()
+                day_records = empty_records(obs_vect_size)
          
         # print whether game was completed succesfully, save days' records if so
-        if  env.nb_time_step == env.chronics_handler.max_timestep():
-            print('game over (win) at step-%d\n\n\n' %  env.nb_time_step)
-        else:
-            print('game over (failure) at step-%d\n\n\n' %  env.nb_time_step)
+        print('Chronic exhausted! \n\n\n')
             
-
+        
         # save chronic records
-        save_records(records,num,save_path,day,do_nothing_capacity_threshold,disable_line)
+        save_records(records,num,save_path,days_completed,
+                     do_nothing_capacity_threshold,disable_line)
         records = empty_records(obs_vect_size)
-
     
           
 # =============================================================================
