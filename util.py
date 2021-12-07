@@ -12,7 +12,7 @@ import pkg_resources
 import os
 
 
-def connectivity_matrix(sub_info, topo_vect, line_status, line_or_pos_topo_vect, 
+def connectivity_matrix(sub_info, topo_vect, line_or_pos_topo_vect, 
                         line_ex_pos_topo_vect, dim_topo, as_edge_indices=True):
         """
         Computes and return the "connectivity matrix" `con_mat`.
@@ -75,8 +75,8 @@ def connectivity_matrix(sub_info, topo_vect, line_status, line_or_pos_topo_vect,
             beg_ += nb_obj
 
         # both ends of a line are connected together (if line is connected)
-        for q_id in range(len(line_status)):
-            if line_status[q_id]:
+        for q_id in range(len(line_or_pos_topo_vect)):
+            if topo_vect[line_or_pos_topo_vect][q_id]!=-1:
                 # if powerline is connected connect both its side
                 row_ind.append(line_or_pos_topo_vect[q_id])
                 col_ind.append(line_ex_pos_topo_vect[q_id])

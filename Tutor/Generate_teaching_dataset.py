@@ -185,6 +185,7 @@ if __name__ == '__main__':
         reference_topo_vect = obs.topo_vect.copy()
 
         while env.nb_time_step < env.chronics_handler.max_timestep():
+            obs = env.get_obs()
             #reset topology at midnight, store days' records, reset days' records
             if env.nb_time_step%ts_in_day == ts_in_day-1:
                 print(f'Day {ts_to_day(env.nb_time_step)} completed.')
@@ -222,7 +223,6 @@ if __name__ == '__main__':
                     env.fast_forward_chronics(ts_next_day-1)
                 else:
                     env.fast_forward_chronics(ts_next_day)
-                obs = env.get_obs()
                 day_records = empty_records(obs_vect_size)
          
         # print whether game was completed succesfully, save days' records if so

@@ -3,6 +3,7 @@ paths:
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   medha_imitation: data/medha_imitation_sample/
   tutor_imitation: data/tutor_generated_data/
+  processed_tutor_imitation: data/processed_tutor_data/
   action_space: action_space/
   
 tutor_generated_data:
