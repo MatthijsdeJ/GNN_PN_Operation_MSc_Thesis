@@ -268,6 +268,26 @@ class con_matrix_cache():
         with open(fpath+'con_matrices.json', 'w') as outfile:
             json.dump(self.con_matrices, outfile, cls=NumpyEncoder)
             
+    
+def save_data_to_file(data: List[dict], output_data_path: str):
+    '''
+    Given a list of dictionaries, representing various data points,
+    save these to a json file. If the list is empty, save nothing.
+    
+    Parameters
+    ----------
+    data : List[dict]
+        Various data points.
+    output_data_path : str
+        The output directory where to save the file.
+    '''
+    if not data:
+        return
+    
+    filename = f'data_lout{data[0]["line_disabled"]}_' + \
+        f'chr{data[0]["chronic_id"]}.json'
+    with open(output_data_path + filename, 'w') as outfile:
+        json.dump(data, outfile, cls=NumpyEncoder)
 # =============================================================================
 # def extract_features_zero_impunement(obs: grid2op.Observation.CompleteObservation):
 #     '''
