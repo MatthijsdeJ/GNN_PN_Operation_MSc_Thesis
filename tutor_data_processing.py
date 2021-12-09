@@ -144,7 +144,8 @@ def extract_data_from_filepath(relat_fp: PosixPath) \
             int(dayscomp)
 
 def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
-                                vect2obs_func: Callable) -> dict:
+                                vect2obs_func: Callable, line_disabled: int,
+                                env_info_dict: dict) -> dict:
     '''
     Given the vector of a datapoint rperesenting a single timestep, extract
     the interesting data from this vector and return it as a dictionary.
@@ -158,6 +159,11 @@ def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
     vect2obs_func : Callable
         Function for transferring a vector represention of a grid2op 
         observation to the corresponding grid2op observation object.
+    line_disabled : int
+        The line index to be disabled. -1 if no line is disabled.     
+    env_info_dict: dict
+        Dictionary with variables from the environment. Important here,
+        the index in the topo vect of the disabled line origin/extremity.
 
     Returns
     -------
@@ -168,6 +174,7 @@ def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
     obs = vect2obs_func(grid2op_obs_vect)
     obs_dict = obs.to_dict()
 
+    
     data = {'action_index': int(ts_vect[0]),
             'timestep': int(ts_vect[4]),
             'gen_features': extract_gen_features(obs_dict),
@@ -176,13 +183,29 @@ def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
             'ex_features': extract_ex_features(obs_dict),
             'topo_vect': obs_dict['topo_vect'].copy()
            }
+    
+
+    #Remove the disabled line from the data, if necessary
+    if line_disabled != -1:
+        data['or_features'] = np.delete(data['or_features'],line_disabled,axis=0)
+        data['ex_features'] = np.delete(data['ex_features'],line_disabled,axis=0)
+        data['topo_vect'] = np.delete(data['topo_vect'],[
+                                        env_info_dict['dis_line_or_tv'],
+                                        env_info_dict['dis_line_ex_tv']])
+         
+    #Assert the topo_vect has the same length as the features
+    assert len(data['topo_vect']) == len(data['gen_features']) + \
+                                     len(data['load_features']) + \
+                                     len(data['or_features']) + \
+                                     len(data['ex_features'])
     return data
 
 def env_info_line_disabled(env:  grid2op.Environment.Environment, 
                            line_disabled: int) -> dict:
     '''
     Generates the adapted grid2op environment variables for the possible 
-    disablement of a line.
+    disablement of a line. This essentially removes the corresponding
+    origin and extremity from the variables.
 
     Parameters
     ----------
@@ -255,7 +278,6 @@ def env_info_line_disabled(env:  grid2op.Environment.Environment,
         info_dict['dis_line_or_tv'] = dis_line_or_tv
         info_dict['dis_line_ex_tv'] = dis_line_ex_tv
         
-
     return info_dict
 
 def hash_nparray(arr: np.array) -> int:
@@ -325,6 +347,15 @@ class con_matrix_cache():
             for con. matrices.
 
         '''
+        #Check that line_or_pos_topo_vect and line_ex_pos_topo_vect 
+        #have no overlap
+        assert set(line_or_pos_topo_vect).isdisjoint(set(line_ex_pos_topo_vect))
+        #And have the same size
+        assert len(line_or_pos_topo_vect)==len(line_ex_pos_topo_vect)
+        #Check that the number of objcets according to sub_info and topo_vect
+        #are equal
+        assert sum(sub_info)==len(topo_vect)
+        
         h_topo_vect = hash_nparray(topo_vect)
         if h_topo_vect not in self.con_matrices:
             con_matrix = util.connectivity_matrix(sub_info.astype(int),
@@ -418,8 +449,6 @@ def save_data_to_file(data: List[dict], output_data_path: str):
 #                         [(f**2).sum(axis=0) for f in features]
 #         else:
 #             if np.max(data['or_features'][:,4]) > 100:
-#                 import ipdb
-#                 ipdb.set_trace()
 #             #Increase the sum
 #             self.S_gen, self.S_load, self.S_or, self.S_ex = \
 #                 [s+f.sum(axis=0) for f,s in zip(features,
