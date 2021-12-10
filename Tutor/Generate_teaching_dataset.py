@@ -216,7 +216,9 @@ if __name__ == '__main__':
         if disable_line != -1:
             obs, _, _, info = env.step(env.action_space(
                             {"set_line_status":(disable_line,-1) }))
-        
+        else:
+            info = {'exception':[]}
+
         print('current chronic: %s' % env.chronics_handler.get_name())
         reference_topo_vect = obs.topo_vect.copy()
 
@@ -226,7 +228,7 @@ if __name__ == '__main__':
                         [type(e) for e in info['exception']]: 
                 print(f'Powerflow exception at step {env.nb_time_step} '+
                       f'on day {ts_to_day(env.nb_time_step)}')
-                skip_to_next_day(env, num, disable_line)
+                info = skip_to_next_day(env, num, disable_line)
                 day_records = empty_records(obs_vect_size)
                 continue
                 
@@ -259,7 +261,7 @@ if __name__ == '__main__':
             if env.done:
                 print(f'Failure at step {env.nb_time_step} '+
                       f'on day {ts_to_day(env.nb_time_step)}')
-                skip_to_next_day(env, num, disable_line)
+                info = skip_to_next_day(env, num, disable_line)
                 day_records = empty_records(obs_vect_size)
          
         # print whether game was completed succesfully, save days' records if so
