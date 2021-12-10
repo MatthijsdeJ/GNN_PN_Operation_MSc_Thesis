@@ -20,6 +20,7 @@ import datetime as dt
 import argparse
 import util
 import math
+from typing import Tuple
 
 # =============================================================================
 # An alternative way to return to the reference topology is to simply take
@@ -136,6 +137,41 @@ def empty_records(obs_vect_size: int):
 def ts_to_day(ts: int):
     return math.floor(ts/ts_in_day)
 
+def skip_to_next_day(env: grid2op.Environment.Environment,
+                     num: int,
+                     disable_line: int) -> dict:
+    '''
+    Skip the environment to the next day.
+
+    Parameters
+    ----------
+    env : grid2op.Environment.Environment
+        The environment to fast forward to the next day in.
+    num : int
+        The current chronic id.
+    disable_line : int
+        The index of the line to be disabled.
+
+    Returns
+    -------
+    info : dict
+        Grid2op dict given out as the fourth otuput of env.step(). Contains 
+        the info about whether an error has occured.
+    '''
+
+    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step))
+    env.set_id(num)
+    _ = env.reset()
+    
+    if disable_line != -1:
+        env.fast_forward_chronics(ts_next_day-1)
+        _, _, _, info = env.step(env.action_space(
+            {"set_line_status":(disable_line,-1) }))
+    else:
+        env.fast_forward_chronics(ts_next_day)
+
+    return info
+                
 if __name__ == '__main__':
     util.set_wd_to_package_root()
         
@@ -178,14 +214,24 @@ if __name__ == '__main__':
         
         #Disable lines, if any
         if disable_line != -1:
-            obs, _, _, _ = env.step(env.action_space(
+            obs, _, _, info = env.step(env.action_space(
                             {"set_line_status":(disable_line,-1) }))
         
         print('current chronic: %s' % env.chronics_handler.get_name())
         reference_topo_vect = obs.topo_vect.copy()
 
         while env.nb_time_step < env.chronics_handler.max_timestep():
+            #Check for Diverging Powerflow exceptions, which happen sporadically
+            if grid2op.Exceptions.PowerflowExceptions.DivergingPowerFlow in \
+                        [type(e) for e in info['exception']]: 
+                print(f'Powerflow exception at step {env.nb_time_step} '+
+                      f'on day {ts_to_day(env.nb_time_step)}')
+                skip_to_next_day(env, num, disable_line)
+                day_records = empty_records(obs_vect_size)
+                continue
+                
             obs = env.get_obs()
+            
             #reset topology at midnight, store days' records, reset days' records
             if env.nb_time_step%ts_in_day == ts_in_day-1:
                 print(f'Day {ts_to_day(env.nb_time_step)} completed.')
@@ -206,23 +252,14 @@ if __name__ == '__main__':
                                 [idx, dn_rho, min_rho, time, env.nb_time_step], 
                                 obs.to_vect())).astype(np.float32)[None, :]), axis=0)
                 
-            obs, _, done, _ = env.step(action)
+            obs, _, done, info = env.step(action)
             
             #If the game is done at this point, this indicated a (failed) game over
             #If so, reset the environment to the start of next day and discard the records
-            if done:
+            if env.done:
                 print(f'Failure at step {env.nb_time_step} '+
                       f'on day {ts_to_day(env.nb_time_step)}')
-                ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step))
-                env.set_id(num)
-                _ = env.reset()
-                
-                if disable_line != -1:
-                    _, _, _, _ = env.step(env.action_space(
-                        {"set_line_status":(disable_line,-1) }))
-                    env.fast_forward_chronics(ts_next_day-1)
-                else:
-                    env.fast_forward_chronics(ts_next_day)
+                skip_to_next_day(env, num, disable_line)
                 day_records = empty_records(obs_vect_size)
          
         # print whether game was completed succesfully, save days' records if so
