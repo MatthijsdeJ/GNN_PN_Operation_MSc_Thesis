@@ -10,90 +10,110 @@ from grid2op.dtypes import dt_int, dt_float, dt_bool
 import yaml
 import pkg_resources
 import os
+from typing import List, Tuple, Sequence
+
+def connectivity_matrices(sub_info: Sequence[int], 
+                          topo_vect: Sequence[int], 
+                          line_or_pos_topo_vect: Sequence[int], 
+                          line_ex_pos_topo_vect: Sequence[int]
+                          ) -> Tuple[np.array,np.array,np.array]:
+    '''
+    Computes and return three connectivity matrices, based on three possible relations between objects.
+    Matrices are returned as sparse matrices, represented by the indices of the edges.
+    All relations are bidirectional, i.e. duplicated.
+
+    Parameters
+    ----------
+    sub_info : Sequence[int]
+        The number of objects per substation.
+    topo_vect : Sequence[int]
+        The bus to which each object is connected.
+    line_or_pos_topo_vect : Sequence[int]
+        The indices in the topo vector of the line origins.
+    line_ex_pos_topo_vect : Sequence[int]
+        The indices in the topo vector of the line extremities.
 
 
-def connectivity_matrix(sub_info, topo_vect, line_or_pos_topo_vect, 
-                        line_ex_pos_topo_vect, dim_topo, as_edge_indices=True):
-        """
-        Computes and return the "connectivity matrix" `con_mat`.
-        Let "dim_topo := 2 * n_line + n_prod + n_conso + n_storage" (the total number of elements on the grid)
+    Returns
+    -------
+    connectivity_matrix_samebus: np.array
+        The sparse connectivity matrix between objects connected to the same bus 
+        of their substation.
+    connectivity_matrix_otherbus = np.array
+        The sparse connectivity matrix between objects connected to the other bus 
+        of their substation.
+    connectivity_matrix_line = np.array
+        The sparse connectivity matrix between objects connected by lines.
+    '''
 
-        It is a matrix of size dim_topo, dim_topo, with values 0 or 1.
-        For two objects (lines extremity, generator unit, load) i,j :
-
-            - if i and j are connected on the same substation:
-                - if `conn_mat[i,j] = 0` it means the objects id'ed i and j are not connected to the same bus.
-                - if `conn_mat[i,j] = 1` it means the objects id'ed i and j are connected to the same bus
-
-            - if i and j are not connected on the same substation then`conn_mat[i,j] = 0` except if i and j are
-              the two extremities of the same power line, in this case `conn_mat[i,j] = 1` (if the powerline is
-              in service or 0 otherwise).
-
-        Returns
-        -------
-        res: ``numpy.ndarray``, shape:dim_topo,dim_topo, dtype:float
-            The connectivity matrix, as defined above
-
-        Notes
-        -------
-        Matrix can be either a sparse matrix or a dense matrix depending on the argument `as_csr_matrix`
-        """
-        beg_ = 0
-        end_ = 0
-        row_ind = []
-        col_ind = []
-        for sub_id, nb_obj in enumerate(sub_info):
-            # it must be a vanilla python integer, otherwise it's not handled by some backend
-            # especially if written in c++
-            nb_obj = int(nb_obj)
-            end_ += nb_obj
-            # tmp = np.zeros(shape=(nb_obj, nb_obj), dtype=dt_float)
-            for obj1 in range(nb_obj):
-                my_bus = topo_vect[beg_+obj1]
-                if my_bus == -1:
-                    # object is disconnected, nothing is done
-                    continue
-                # connect an object to itself
+    beg_ = 0
+    end_ = 0
+    row_ind_samebus = []
+    col_ind_samebus = []
+    row_ind_otherbus = []
+    col_ind_otherbus = []
+    row_ind_line = []
+    col_ind_line = []         
+    
+    for sub_id, nb_obj in enumerate(sub_info):
+        # it must be a vanilla python integer, otherwise it's not handled by some backend
+        # especially if written in c++
+        nb_obj = int(nb_obj)
+        end_ += nb_obj
+        # tmp = np.zeros(shape=(nb_obj, nb_obj), dtype=dt_float)
+        for obj1 in range(nb_obj):
+            my_bus = topo_vect[beg_+obj1]
+            if my_bus == -1:
+                # object is disconnected, nothing is done
+                continue
+            # connect an object to itself
 #                 row_ind.append(beg_ + obj1)
 #                 col_ind.append(beg_ + obj1)
 #                 WHY??
 
-                # connect the other objects to it
-                for obj2 in range(obj1+1, nb_obj):
-                    my_bus2 = topo_vect[beg_+obj2]
-                    if my_bus2 == -1:
-                        # object is disconnected, nothing is done
-                        continue
-                    if my_bus == my_bus2:
-                        # objects are on the same bus
-                        # tmp[obj1, obj2] = 1
-                        # tmp[obj2, obj1] = 1
-                        row_ind.append(beg_ + obj2)
-                        col_ind.append(beg_ + obj1)
-                        row_ind.append(beg_ + obj1)
-                        col_ind.append(beg_ + obj2)
-            beg_ += nb_obj
+            # connect the other objects to it
+            for obj2 in range(obj1+1, nb_obj):
+                my_bus2 = topo_vect[beg_+obj2]
+                if my_bus2 == -1:
+                    # object is disconnected, nothing is done
+                    continue
+                if my_bus == my_bus2:
+                    # objects are on the same bus
+                    # tmp[obj1, obj2] = 1
+                    # tmp[obj2, obj1] = 1
+                    row_ind_samebus.append(beg_ + obj2)
+                    col_ind_samebus.append(beg_ + obj1)
+                    row_ind_samebus.append(beg_ + obj1)
+                    col_ind_samebus.append(beg_ + obj2)
+                else:
+                    # objects are on different bus 
+                    row_ind_otherbus.append(beg_ + obj2)
+                    col_ind_otherbus.append(beg_ + obj1)
+                    row_ind_otherbus.append(beg_ + obj1)
+                    col_ind_otherbus.append(beg_ + obj2)                      
+        beg_ += nb_obj
 
-        # both ends of a line are connected together (if line is connected)
-        for q_id in range(len(line_or_pos_topo_vect)):
-            if topo_vect[line_or_pos_topo_vect][q_id]!=-1:
-                # if powerline is connected connect both its side
-                row_ind.append(line_or_pos_topo_vect[q_id])
-                col_ind.append(line_ex_pos_topo_vect[q_id])
-                row_ind.append(line_ex_pos_topo_vect[q_id])
-                col_ind.append(line_or_pos_topo_vect[q_id])
-        row_ind = np.array(row_ind).astype(dt_int)
-        col_ind = np.array(col_ind).astype(dt_int)
-        if not as_edge_indices:
-            _connectivity_matrix_ = np.zeros(shape=(dim_topo, dim_topo), dtype=dt_float)
-            _connectivity_matrix_[row_ind.T, col_ind] = 1.0
-        else:
-            _connectivity_matrix_ = np.stack((row_ind,col_ind))
-#             data = np.ones(row_ind.shape[0], dtype=dt_float)
-#             _connectivity_matrix_ = csr_matrix((data, (row_ind, col_ind)),
-#                                                     shape=(dim_topo, dim_topo),
-#                                                     dtype=dt_float)
-        return _connectivity_matrix_
+    # both ends of a line are connected together (if line is connected)
+    for q_id in range(len(line_or_pos_topo_vect)):
+        if topo_vect[line_or_pos_topo_vect][q_id]!=-1:
+            # if powerline is connected connect both its side
+            row_ind_line.append(line_or_pos_topo_vect[q_id])
+            col_ind_line.append(line_ex_pos_topo_vect[q_id])
+            row_ind_line.append(line_ex_pos_topo_vect[q_id])
+            col_ind_line.append(line_or_pos_topo_vect[q_id])
+         
+    row_ind_samebus = np.array(row_ind_samebus).astype(dt_int)
+    col_ind_samebus = np.array(col_ind_samebus).astype(dt_int)
+    row_ind_otherbus = np.array(row_ind_otherbus).astype(dt_int)
+    col_ind_otherbus = np.array(col_ind_otherbus).astype(dt_int)
+    row_ind_line = np.array(row_ind_line).astype(dt_int)
+    col_ind_line = np.array(col_ind_line).astype(dt_int)
+           
+    connectivity_matrix_samebus = np.stack((row_ind_samebus,col_ind_samebus))
+    connectivity_matrix_otherbus = np.stack((row_ind_otherbus,col_ind_otherbus))
+    connectivity_matrix_line = np.stack((row_ind_line,col_ind_line))
+
+    return connectivity_matrix_samebus,  connectivity_matrix_otherbus, connectivity_matrix_line
     
 def load_config():
     '''

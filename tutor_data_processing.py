@@ -306,7 +306,7 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
     
-class con_matrix_cache():
+class ConMatrixCache():
     '''
     Connectivity matrices are expensive to compute and store and many 
     datapoints might share the same connectivity matrix. For this reason, we
@@ -358,12 +358,14 @@ class con_matrix_cache():
         
         h_topo_vect = hash_nparray(topo_vect)
         if h_topo_vect not in self.con_matrices:
-            con_matrix = util.connectivity_matrix(sub_info.astype(int),
+            
+            con_matrices = util.connectivity_matrices(sub_info.astype(int),
                                                   topo_vect.astype(int),
                                         line_or_pos_topo_vect.astype(int),
-                                        line_ex_pos_topo_vect.astype(int),
-                                        sum(sub_info))
-            self.con_matrices[h_topo_vect] = (topo_vect,con_matrix)
+                                        line_ex_pos_topo_vect.astype(int))
+
+            self.con_matrices[h_topo_vect] = (topo_vect,con_matrices)
+
 
         return h_topo_vect
     
@@ -377,8 +379,23 @@ class con_matrix_cache():
             Where to store the json file. The default is the wdir.
 
         '''
-        with open(fpath+'con_matrices.json', 'w') as outfile:
+        with open(fpath, 'w') as outfile:
             json.dump(self.con_matrices, outfile, cls=NumpyEncoder)
+            
+    @classmethod
+    def load(cls, fpath: str):
+        '''
+        Factory class: initialize a ConMatrixCache based on a file.
+
+        Parameters
+        ----------
+        fpath : str
+            The filepath of the file.
+        '''
+        cmc = cls()
+        with open(fpath, 'r') as file:
+            cmc.con_matrices = json.loads(file.read())
+        return cmc
             
     
 def save_data_to_file(data: List[dict], output_data_path: str):
