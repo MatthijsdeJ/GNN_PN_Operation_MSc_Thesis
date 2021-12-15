@@ -418,91 +418,87 @@ def save_data_to_file(data: List[dict], output_data_path: str):
     with open(output_data_path + filename, 'w') as outfile:
         json.dump(data, outfile, cls=NumpyEncoder)
         
+class FeatureStatistics():
+    '''
+    Used to track the statistics about features (N, mean, std), which are used 
+    in feature normalization.
+    
+    Since the dataset is too large to hold in memory completely, the feature 
+    statistics are computed iteratively.
+    '''
+    def __init__(self):   
+        #Initialize statistics about features
+        self.N_gen, self.N_load, self.N_line = 0,0,0
+        self.S_gen, self.S_load, self.S_or, self.S_ex = None,None,None,None
+        self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = None,None,None,None
+    
+    def update_feature_statistics(self,data: dict):
+        '''
+        Update the statistics (number, sum, sum of squares) of the feature
+        values.
+
+        Parameters
+        ----------
+        data : np.array
+            Dictionary representing the datapoints, containing the features.
+
+        '''
+        features = [data['gen_features'],data['load_features'],
+                    data['or_features'],data['ex_features']]
+        
+        #Update number of objects
+        self.N_gen, self.N_load, self.N_line = [n+f.shape[0] for f,n in 
+                    zip(features[:-1],[self.N_gen, self.N_load, self.N_line])]
+        
+        if self.S_gen is None:
+            #Initialize sum
+            self.S_gen, self.S_load, self.S_or, self.S_ex = \
+                        [f.sum(axis=0) for f in features]
+            #Initialize sum of squares
+            self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = \
+                        [(f**2).sum(axis=0) for f in features]
+        else:
+            #Increase the sum
+            self.S_gen, self.S_load, self.S_or, self.S_ex = \
+                [s+f.sum(axis=0) for f,s in zip(features,
+                [self.S_gen, self.S_load, self.S_or, self.S_ex])]
+            #Increase the sum of squares
+            self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = \
+                [s2+(f**2).sum(axis=0) for f,s2 in zip(features,
+                [self.S2_gen, self.S2_load, self.S2_or, self.S2_ex])]
+                
+    def save_feature_statistics(self, fpath: str) -> dict:
+        '''
+        Save the feature statistics in the form of the mean and standard 
+        deviation per obejct type to a specified location.
+        
+        Parameters
+        ----------
+        fpath : str
+            The filepath to save to.
+        '''
+        def std(N,S,S2):
+            return np.sqrt(S2/N-(S/N)**2) 
+        
+        stats = {}
+        for name, N, S, S2 in [('gen',self.N_gen,self.S_gen,self.S2_gen),
+                                ('load',self.N_load,self.S_load,self.S2_load),
+                                ('or',self.N_line,self.S_or,self.S2_or),
+                                ('ex',self.N_line,self.S_ex,self.S2_ex)]:
+            stats[name] = {'mean':S/N,
+                              'std':std(N,S,S2)}
+        with open(fpath, 'w') as outfile:
+            json.dump(stats, outfile, cls=NumpyEncoder)
+    
 # =============================================================================
-# class DataSummary():
-#     '''
-#     Since the dataset is too large to hold in memory completely, information
-#     about the dataset is accumulated iteratively (one datapoint at a time)
-#     and summarized by tobjects of this type
-#     '''
-#     def __init__(self):
-#         #Initialize general statistics
-#         self.N = 0
-#         self.action_hash_counter = collections.Counter()
-#         self.con_matrix_hash_counter = collections.Counter()
-#         self.timestep_counter = collections.Counter()
-#         
-#         #Initialize statistics about features
-#         self.N_gen, self.N_load, self.N_line = 0,0,0
-#         self.S_gen, self.S_load, self.S_or, self.S_ex = None,None,None,None
-#         self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = None,None,None,None
-#     
-#     def update_feature_statistics(self,data: dict):
-#         '''
-#         Update the statistics (number, sum, sum of squares) of the feature
-#         values.
-# 
-#         Parameters
-#         ----------
-#         data : np.array
-#             Dictionary representing the datapoints, containing the features.
-# 
-#         '''
-#         #TODO: inspect statistics with line outages
-# 
-#         features = [data['gen_features'],data['load_features'],
-#                     data['or_features'],data['ex_features']]
-#         
-#         #Update number of objects
-#         self.N_gen, self.N_load, self.N_line = [n+f.shape[0] for f,n in 
-#                     zip(features[:-1],[self.N_gen, self.N_load, self.N_line])]
-#         
-#         if self.S_gen is None:
-#             #Initialize sum
-#             self.S_gen, self.S_load, self.S_or, self.S_ex = \
-#                         [f.sum(axis=0) for f in features]
-#             #Initialize sum of squares
-#             self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = \
-#                         [(f**2).sum(axis=0) for f in features]
-#         else:
-#             if np.max(data['or_features'][:,4]) > 100:
-#             #Increase the sum
-#             self.S_gen, self.S_load, self.S_or, self.S_ex = \
-#                 [s+f.sum(axis=0) for f,s in zip(features,
-#                 [self.S_gen, self.S_load, self.S_or, self.S_ex])]
-#             #Increase the sum of squares
-#             self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = \
-#                 [s2+(f**2).sum(axis=0) for f,s2 in zip(features,
-#                 [self.S2_gen, self.S2_load, self.S2_or, self.S2_ex])]
-#                 
-#     def get_feature_statistics(self) -> dict:
-#         '''
-#         Return the feature statistics in the form of the mean and standard 
-#         deviation.
-# 
-#         Returns
-#         -------
-#         Dictionary of the different object types, containing the mean and
-#         the std of each feature.
-#         '''
-#         def std(N,S,S2):
-#             return np.sqrt(S2/N-(S/N)**2) 
-#         stats = {}
-#         for name, N, S, S2 in [('gen',self.N_gen,self.S_gen,self.S2_gen),
-#                                ('load',self.N_load,self.S_load,self.S2_load),
-#                                ('or',self.N_line,self.S_or,self.S2_or),
-#                                ('ex',self.N_line,self.S_ex,self.S2_ex)]:
-#             stats[name] = {'mean':S/N,
-#                              'std':std(N,S,S2)}
-#         return stats
-#         
 #     def update_datapoint(self, data):
 #         self.N +=1
 #         self.action_hash_counter[data['']] +=1 
 #         self.topo_vect_hash_counter[data['']] +=1 
 #         self.timestep_counter[data['timestep']] +=1 
-#             
 # =============================================================================
+            
+
 # =============================================================================
 # def extract_features_zero_impunement(obs: grid2op.Observation.CompleteObservation):
 #     '''
