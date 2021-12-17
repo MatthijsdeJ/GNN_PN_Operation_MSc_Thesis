@@ -318,6 +318,7 @@ class ConMatrixCache():
         self.con_matrices = {}
         
     def get_key_add_to_dict(self, topo_vect: np.array, 
+                            line_disabled: int,
                             sub_info: np.array,
                             line_or_pos_topo_vect: np.array,
                             line_ex_pos_topo_vect: np.array
@@ -331,6 +332,8 @@ class ConMatrixCache():
         ----------
         topo_vect : np.array
             The topology vector from which to compute the con. matrix.
+        line_disabled : int
+            The line index to be disabled. -1 if no line is disabled.     
         sub_info : np.array
             Vector representing the number of objects per substation.
         line_or_pos_topo_vect : np.array
@@ -356,7 +359,7 @@ class ConMatrixCache():
         #are equal
         assert sum(sub_info)==len(topo_vect)
         
-        h_topo_vect = hash_nparray(topo_vect)
+        h_topo_vect = hash_nparray((line_disabled,topo_vect))
         if h_topo_vect not in self.con_matrices:
             
             con_matrices = util.connectivity_matrices(sub_info.astype(int),
