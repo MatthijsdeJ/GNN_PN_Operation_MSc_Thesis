@@ -359,7 +359,7 @@ class ConMatrixCache():
         #are equal
         assert sum(sub_info)==len(topo_vect)
         
-        h_topo_vect = hash_nparray((line_disabled,topo_vect))
+        h_topo_vect = hash((line_disabled,hash_nparray(topo_vect)))
         if h_topo_vect not in self.con_matrices:
             
             con_matrices = util.connectivity_matrices(sub_info.astype(int),
