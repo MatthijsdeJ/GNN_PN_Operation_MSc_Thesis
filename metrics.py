@@ -7,6 +7,7 @@ Created on Thu Oct 28 08:11:12 2021
 """
 from typing import Optional, Dict, Callable, List, Tuple
 import torch
+import wandb
 
 class IncrementalAverage():
     '''
@@ -84,6 +85,17 @@ class IncrementalAverageMetrics():
         '''
         return [(key,val[1].get()) for key,val in self.metrics_dict.items()]
     
+    def log_to_wandb(self, run: wandb.sdk.wandb_run.Run):
+        '''
+        Log the metrics to wandb.
+
+        Parameters
+        ----------
+        run : wandb.sdk.wandb_run.Run
+            The run to log to.
+        '''
+        run.log(dict(self.get_values()))
+    
     def reset(self):
         '''
         Reset all incremental averages.
@@ -145,7 +157,7 @@ def micro_accuracy(**kwargs: dict) -> float:
     '''
     P = kwargs['P']
     Y = kwargs['Y']
-    return torch.mean(torch.eq(torch.round(P),torch.round(Y)).float())
+    return torch.mean(torch.eq(torch.round(P),torch.round(Y)).float()).item()
 
 def n_predicted_changes(**kwargs: dict) -> int:
     '''
@@ -163,7 +175,7 @@ def n_predicted_changes(**kwargs: dict) -> int:
         The number of predicted changes.
     '''
     P = kwargs['P']
-    return torch.sum(torch.round(P))
+    return torch.sum(torch.round(P)).item()
 
 def any_predicted_changes(**kwargs: dict) -> bool:
     '''
