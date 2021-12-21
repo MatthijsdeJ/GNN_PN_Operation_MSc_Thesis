@@ -6,6 +6,7 @@ Created on Thu Oct 28 08:11:12 2021
 @author: matthijs
 """
 from typing import Optional, Dict, Callable, List, Tuple
+import torch
 
 class IncrementalAverage():
     '''
@@ -100,75 +101,158 @@ class IncrementalAverageMetrics():
         '''
         return  '\n'.join([f'{n}: {v}' for n,v in self.get_values()])
     
-def correct_whether_changes(**kwargs: dict):
-    '''
-    Check whether the model correctly predicted whether there were any
-    changes in the imitation example.
-    
-    Parameters
-    ----------
-    kwargs['any_changes'] : bool
-        Whether the imitation example had any changes.
-    kwargs['out'] : torch.Tensor
-        The output of the model. Elements are floats in the range (0,1).
-        A value below 0.5 represents no change; above 0.5, change.
-            
-    Returns
-    -------
-    float
-        Metric value. For this metric, 0 or 1.
-    '''
-    any_changes = kwargs['any_changes']
-    out = kwargs['out']
-    return any_changes == any(out>=0.5)
-    
-def whether_changes(**kwargs):
-    '''
-    Check whether the model predicted any changes.
-    
-    Parameters
-    ----------
-    kwargs['out'] : torch.Tensor
-        The output of the model. Elements are floats in the range (0,1).
-        A value below 0.5 represents no change; above 0.5, change.
-        
-    Returns
-    -------
-    float
-        Metric value. For this metric, 0 (no changes) or 1 (changes).
-    '''
-    out = kwargs['out']
-    return any(out>=0.5)
 
-def accuracy_if_changes(**kwargs):
+def macro_accuracy(**kwargs: dict) -> bool:
     '''
-    Check the accuracy of the output assuming the imitation example included
-    changes. Returns 'None' otherwise.
-    
+    Calculates whether the predicted output wholly matches the true output.
+    Differes from micro_accuracy in that it doesn't check the element-wise
+    accuracy.
+
     Parameters
     ----------
-    kwargs['any_changes'] : bool
-        Whether the imitation example had any changes.
-    kwargs['set_idxs'] : torch.Tensor
-        The indexes of what objects were set (NOT changed!) in the imitation
-        example.
-    kwargs['set_objects'] : np.array[int]
-        The busbar-object connections that have been set in the imitation 
-        example, and whether that 'set' action caused a change. 
-        0 represents no change; 1, change.
-        The vector only represents the objects indexed by 'set_idxs'.
-    kwargs['out'] : torch.Tensor
+    **kwargs['P'] : torch.Tensor[float]
         The output of the model. Elements are floats in the range (0,1).
         A value below 0.5 represents no change; above 0.5, change.
+    **kwargs['Y'] : torch.Tensor[float]
+        The label of the datapoints Elements are floats in {0,1}.
+        A value below 0 represents no change; of 1, change.
         
     Returns
     -------
-    Optional[float]
-        If float, the accuracy.
+    bool
+        Whether the predicted output matches the true output.
     '''
-    if kwargs['any_changes']:
-        out = kwargs['out'][kwargs['set_idxs']].round()
-        changed_objects = kwargs['set_objects']
-        return float(sum(out==changed_objects))/len(out)
-    else:
-        return None
+    P = kwargs['P']
+    Y = kwargs['Y']
+    return torch.equal(torch.round(P),torch.round(Y))
+
+def micro_accuracy(**kwargs: dict) -> float:
+    '''
+    Calculates the element-wise accuracy between the predicted 
+    output and the true output.
+    
+    Parameters
+    ----------
+
+    **kwargs['Y'] : torch.Tensor[float]
+        The label of the datapoints Elements are floats in {0,1}.
+        A value below 0 represents no change; of 1, change.
+        
+    Returns
+    -------
+    float
+        The element-wise accuracy.
+    '''
+    P = kwargs['P']
+    Y = kwargs['Y']
+    return torch.mean(torch.eq(torch.round(P),torch.round(Y)).float())
+
+def n_predicted_changes(**kwargs: dict) -> int:
+    '''
+    Calculates the number of predicted changes.
+
+    Parameters
+    ----------
+    **kwargs['P'] : torch.Tensor[float]
+        The output of the model. Elements are floats in the range (0,1).
+        A value below 0.5 represents no change; above 0.5, change.
+
+    Returns
+    -------
+    int
+        The number of predicted changes.
+    '''
+    P = kwargs['P']
+    return torch.sum(torch.round(P))
+
+def any_predicted_changes(**kwargs: dict) -> bool:
+    '''
+    Calculates whether there were any predicted changes.
+
+    Parameters
+    ----------
+    kwargs
+        The dictionary containing the necessary information for computing
+        the changes.
+
+    Returns
+    -------
+    bool
+        Whether there were any predicted changes.
+    '''
+    return n_predicted_changes(**kwargs)>0
+
+# =============================================================================
+# def correct_whether_changes(**kwargs: dict):
+#     '''
+#     Check whether the model correctly predicted whether there were any
+#     changes in the imitation example.
+#     
+#     Parameters
+#     ----------
+#     kwargs['any_changes'] : bool
+#         Whether the imitation example had any changes.
+#     kwargs['out'] : torch.Tensor
+#         The output of the model. Elements are floats in the range (0,1).
+#         A value below 0.5 represents no change; above 0.5, change.
+#             
+#     Returns
+#     -------
+#     float
+#         Metric value. For this metric, 0 or 1.
+#     '''
+#     any_changes = kwargs['any_changes']
+#     out = kwargs['out']
+#     return any_changes == any(out>=0.5)
+#     
+# def whether_changes(**kwargs):
+#     '''
+#     Check whether the model predicted any changes.
+#     
+#     Parameters
+#     ----------
+#     kwargs['out'] : torch.Tensor
+#         The output of the model. Elements are floats in the range (0,1).
+#         A value below 0.5 represents no change; above 0.5, change.
+#         
+#     Returns
+#     -------
+#     float
+#         Metric value. For this metric, 0 (no changes) or 1 (changes).
+#     '''
+#     out = kwargs['out']
+#     return any(out>=0.5)
+# 
+# def accuracy_if_changes(**kwargs):
+#     '''
+#     Check the accuracy of the output assuming the imitation example included
+#     changes. Returns 'None' otherwise.
+#     
+#     Parameters
+#     ----------
+#     kwargs['any_changes'] : bool
+#         Whether the imitation example had any changes.
+#     kwargs['set_idxs'] : torch.Tensor
+#         The indexes of what objects were set (NOT changed!) in the imitation
+#         example.
+#     kwargs['set_objects'] : np.array[int]
+#         The busbar-object connections that have been set in the imitation 
+#         example, and whether that 'set' action caused a change. 
+#         0 represents no change; 1, change.
+#         The vector only represents the objects indexed by 'set_idxs'.
+#     kwargs['out'] : torch.Tensor
+#         The output of the model. Elements are floats in the range (0,1).
+#         A value below 0.5 represents no change; above 0.5, change.
+#         
+#     Returns
+#     -------
+#     Optional[float]
+#         If float, the accuracy.
+#     '''
+#     if kwargs['any_changes']:
+#         out = kwargs['out'][kwargs['set_idxs']].round()
+#         changed_objects = kwargs['set_objects']
+#         return float(sum(out==changed_objects))/len(out)
+#     else:
+#         return None
+# =============================================================================
