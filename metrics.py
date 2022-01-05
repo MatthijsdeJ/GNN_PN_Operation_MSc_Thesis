@@ -138,6 +138,16 @@ def macro_accuracy(**kwargs: dict) -> bool:
     Y = kwargs['Y']
     return torch.equal(torch.round(P),torch.round(Y))
 
+def macro_accuracy_one_sub(**kwargs: dict) -> bool:
+    one_sub_P = kwargs['one_sub_P']
+    Y = kwargs['Y']
+    return torch.equal(torch.round(one_sub_P),torch.round(Y))
+
+def micro_accuracy_one_sub(**kwargs: dict) -> float:
+    one_sub_P = kwargs['one_sub_P']
+    Y = kwargs['Y']
+    return torch.mean(torch.eq(torch.round(one_sub_P),torch.round(Y)).float()).item()
+
 def micro_accuracy(**kwargs: dict) -> float:
     '''
     Calculates the element-wise accuracy between the predicted 
@@ -193,6 +203,28 @@ def any_predicted_changes(**kwargs: dict) -> bool:
         Whether there were any predicted changes.
     '''
     return n_predicted_changes(**kwargs)>0
+
+def accuracy_predicted_substation(**kwargs: dict) -> bool:
+    '''
+    Calculates whether the substation where the chagnges are predicted
+    at corresponds to the substation with the label changes.
+
+    Parameters
+    ----------
+    **kwargs['Y_subchanged_idx'] : int
+        The index of the substation where the 'true' changes would be applied. 
+    **kwargs['P_subchanged_idx'] : int
+        The index of the substation where the predicted changes would be applied. 
+        
+    Returns
+    -------
+    bool
+        Whether the two substations indices match.
+    '''  
+    Y_subchanged_idx = kwargs['Y_subchanged_idx']
+    P_subchanged_idx = kwargs['P_subchanged_idx']
+    return Y_subchanged_idx==P_subchanged_idx
+    
 
 # =============================================================================
 # def correct_whether_changes(**kwargs: dict):
