@@ -77,7 +77,11 @@ def extract_or_features(obs_dict: dict) -> np.array:
         objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho' features.
     '''
     X = np.array(list(obs_dict['lines_or'].values())).T
-    X = np.concatenate((X,np.reshape(np.array(obs_dict['rho']),(-1,1))),axis=1)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        X = np.concatenate((X,
+                            np.reshape(np.array(obs_dict['rho']),(-1,1)),
+                            np.reshape(np.array(X[:,3]/obs_dict['rho']),(-1,1))),
+                           axis=1)
     return X
 
 def extract_ex_features(obs_dict: dict) -> np.array:
@@ -97,7 +101,11 @@ def extract_ex_features(obs_dict: dict) -> np.array:
         objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho' features.
     '''
     X = np.array(list(obs_dict['lines_ex'].values())).T
-    X = np.concatenate((X,np.reshape(np.array(obs_dict['rho']),(-1,1))),axis=1)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        X = np.concatenate((X,
+                            np.reshape(np.array(obs_dict['rho']),(-1,1)),
+                            np.reshape(np.array(X[:,3]/obs_dict['rho']),(-1,1))),
+                           axis=1)
     return X
 
 def get_filepaths(tutor_data_path: str) -> List[PosixPath]:
