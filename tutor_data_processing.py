@@ -7,7 +7,7 @@ Created on Thu Oct 28 16:30:55 2021
 """
 import grid2op
 import numpy as np
-from typing import List, Tuple, Callable
+from typing import List, Tuple, Callable, Sequence
 from pathlib import Path, PosixPath
 import re
 import util
@@ -59,7 +59,7 @@ def extract_load_features(obs_dict: dict) -> np.array:
     X = np.array(list(obs_dict['loads'].values())).T
     return X
 
-def extract_or_features(obs_dict: dict) -> np.array:
+def extract_or_features(obs_dict: dict, thermal_limits: Sequence[int]) -> np.array:
     '''
     Given the grid2op observation in dictionary form, 
     return the load features.
@@ -69,22 +69,25 @@ def extract_or_features(obs_dict: dict) -> np.array:
     obs : dict
         Dictionary epresentation of the grid2op observation. Can be obtained 
         with obs.to_dict().
-
+    thermal_limits : Sequence[int]
+        Sequence with the thermal limits of the lines.
+        
     Returns
     -------
     X : np.array
         Array representation of the features;  rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho' features.
+        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho', 
+        'line_capacity' features.
     '''
     X = np.array(list(obs_dict['lines_or'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
         X = np.concatenate((X,
                             np.reshape(np.array(obs_dict['rho']),(-1,1)),
-                            np.reshape(np.array(X[:,3]/obs_dict['rho']),(-1,1))),
-                           axis=1)
+                            np.reshape(np.array(thermal_limits),(-1,1))),
+                         axis=1)
     return X
 
-def extract_ex_features(obs_dict: dict) -> np.array:
+def extract_ex_features(obs_dict: dict, thermal_limits: Sequence[int]) -> np.array:
     '''
     Given the grid2op observation in dictionary form, 
     return the generator features.
@@ -94,17 +97,20 @@ def extract_ex_features(obs_dict: dict) -> np.array:
     obs : dict
         Dictionary epresentation of the grid2op observation. Can be obtained 
         with obs.to_dict().
+    thermal_limits : Sequence[int]
+        Sequence with the thermal limits of the lines.
     Returns
     -------
     X : np.array
         Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho' features.
+        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho', 
+        'line_capacity' features.
     '''
     X = np.array(list(obs_dict['lines_ex'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
         X = np.concatenate((X,
                             np.reshape(np.array(obs_dict['rho']),(-1,1)),
-                            np.reshape(np.array(X[:,3]/obs_dict['rho']),(-1,1))),
+                            np.reshape(np.array(thermal_limits),(-1,1))),
                            axis=1)
     return X
 
@@ -153,7 +159,7 @@ def extract_data_from_filepath(relat_fp: PosixPath) \
 
 def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
                                 vect2obs_func: Callable, line_disabled: int,
-                                env_info_dict: dict) -> dict:
+                                env_info_dict: dict, thermal_limits: Sequence[int]) -> dict:
     '''
     Given the vector of a datapoint rperesenting a single timestep, extract
     the interesting data from this vector and return it as a dictionary.
@@ -172,7 +178,9 @@ def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
     env_info_dict: dict
         Dictionary with variables from the environment. Important here,
         the index in the topo vect of the disabled line origin/extremity.
-
+    thermal_limits : Sequence[int]
+        Sequence with the thermal limits of the lines.
+        
     Returns
     -------
     dict
@@ -187,8 +195,8 @@ def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
             'timestep': int(ts_vect[4]),
             'gen_features': extract_gen_features(obs_dict),
             'load_features': extract_load_features(obs_dict),
-            'or_features': extract_or_features(obs_dict),
-            'ex_features': extract_ex_features(obs_dict),
+            'or_features': extract_or_features(obs_dict, thermal_limits),
+            'ex_features': extract_ex_features(obs_dict, thermal_limits),
             'topo_vect': obs_dict['topo_vect'].copy()
            }
     
