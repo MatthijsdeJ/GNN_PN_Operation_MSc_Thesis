@@ -14,5 +14,22 @@ tutor_generated_data:
   
 rte_case14_realistic:
   thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
-  #24*12
-  ts_in_day: 288
+  ts_in_day: 288 #Number of timesteps in a grid2op day
+  
+training:
+  model_name: test_hetero_labelsmth
+  model_tags: [test]
+  train_log_freq: 2000 #How often to log the training set statistics
+  val_log_freq: 6000 #How often to evaluate the validation set
+  n_epoch: 100
+  lr: 3.0E-3
+  network_type: heterogenous #Should be 'homogenous' or 'heterogenous'
+  GNN_layers: 8
+  N_node_hidden: 32 #Size of hidden layers in model
+  LReLu_neg_slope: 0.1
+  batch_size: 64
+  label_smoothing_alpha: 0.2 #Controls the extent of label smoothing
+  aggr: add #Aggregation function: should be 'add' or 'mean'
+  f_gen: 3 #Number of generator features
+  f_load: 3 #Number of load features
+  f_endpoint: 6 #Number of endpoint (origin/extremity) features
