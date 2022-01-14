@@ -24,7 +24,7 @@ training:
   n_epoch: 100
   lr: 3.0E-3
   network_type: heterogenous #Should be 'homogenous' or 'heterogenous'
-  GNN_layers: 8
+  N_GNN_layers: 8
   N_node_hidden: 32 #Size of hidden layers in model
   LReLu_neg_slope: 0.1
   batch_size: 64
