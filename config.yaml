@@ -30,6 +30,6 @@ training:
   batch_size: 64
   label_smoothing_alpha: 0.2 #Controls the extent of label smoothing
   aggr: add #Aggregation function: should be 'add' or 'mean'
-  f_gen: 3 #Number of generator features
-  f_load: 3 #Number of load features
-  f_endpoint: 6 #Number of endpoint (origin/extremity) features
+  N_f_gen: 3 #Number of generator features
+  N_f_load: 3 #Number of load features
+  N_f_endpoint: 6 #Number of endpoint (origin/extremity) features
