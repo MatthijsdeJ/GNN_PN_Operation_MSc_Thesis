@@ -21,6 +21,7 @@ class GCN(torch.nn.Module):
     
     '''
     def __init__(self, 
+                 LReLu_neg_slope: float,
                  N_f_gen: int,
                  N_f_load: int,
                  N_f_endpoint: int,
@@ -31,6 +32,8 @@ class GCN(torch.nn.Module):
         '''
         Parameters
         ----------
+        LReLu_neg_slope : float
+            The negative slope of the LReLu activation function.
         N_f_gen : int
             The number of features per generator object.
         N_f_load : int
@@ -51,7 +54,8 @@ class GCN(torch.nn.Module):
         
         #The activation function. Inplace helps make it work for both
         #network types.
-        self.activation_f = torch.nn.LeakyReLU(0.1, inplace=True)
+        self.LReLu_neg_slope = LReLu_neg_slope
+        self.activation_f = torch.nn.LeakyReLU(LReLu_neg_slope, inplace=True)
         
         #The embedding layers
         
@@ -163,3 +167,21 @@ class GCN(torch.nn.Module):
         x=torch.sigmoid(x if self.network_type == 'homogenous' else x['object'])
         
         return x
+    
+    def init_weights(self):
+        '''
+        Initialize the weights of this network according to the kaiming uniform
+        distribution. The biases are initialized to zero.
+        '''
+        def weights_kaiming_uniform(m):
+            '''
+            Apply initialization to a single layer.
+            '''
+            classname = m.__class__.__name__
+            # for every Linear layer in a model..
+            if classname.find('Linear') != -1:
+                torch.nn.init.kaiming_normal_(m.weight,a=self.LReLu_neg_slope)
+                if m.bias is not None:
+                    m.bias.data.fill_(0)
+        
+        self.apply(weights_kaiming_uniform)
