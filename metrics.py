@@ -85,7 +85,7 @@ class IncrementalAverageMetrics():
         '''
         return [(key,val[1].get()) for key,val in self.metrics_dict.items()]
     
-    def log_to_wandb(self, run: wandb.sdk.wandb_run.Run):
+    def log_to_wandb(self, run: wandb.sdk.wandb_run.Run, step: int):
         '''
         Log the metrics to wandb.
 
@@ -94,7 +94,7 @@ class IncrementalAverageMetrics():
         run : wandb.sdk.wandb_run.Run
             The run to log to.
         '''
-        run.log(dict(self.get_values()))
+        run.log(dict(self.get_values()), step=step)
     
     def reset(self):
         '''
@@ -138,24 +138,18 @@ def macro_accuracy(**kwargs: dict) -> bool:
     Y = kwargs['Y']
     return torch.equal(torch.round(P),torch.round(Y))
 
-def macro_accuracy_one_sub(**kwargs: dict) -> bool:
-    one_sub_P = kwargs['one_sub_P']
-    Y = kwargs['Y']
-    return torch.equal(torch.round(one_sub_P),torch.round(Y))
-
-def micro_accuracy_one_sub(**kwargs: dict) -> float:
-    one_sub_P = kwargs['one_sub_P']
-    Y = kwargs['Y']
-    return torch.mean(torch.eq(torch.round(one_sub_P),torch.round(Y)).float()).item()
-
 def micro_accuracy(**kwargs: dict) -> float:
     '''
     Calculates the element-wise accuracy between the predicted 
     output and the true output.
+    Differes from micro_accuracy in that this function checks the
+    element-wise accuracy.
     
     Parameters
     ----------
-
+    **kwargs['P'] : torch.Tensor[float]
+        The output of the model. Elements are floats in the range (0,1).
+        A value below 0.5 represents no change; above 0.5, change.
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
@@ -168,6 +162,130 @@ def micro_accuracy(**kwargs: dict) -> float:
     P = kwargs['P']
     Y = kwargs['Y']
     return torch.mean(torch.eq(torch.round(P),torch.round(Y)).float()).item()
+
+def macro_accuracy_one_sub(**kwargs: dict) -> bool:
+    '''
+    Calculates whether the predicted output, after the postprocessing step of
+    selecting the single most 'changed' substation has been applied, wholly 
+    matches the true output.
+    Differes from micro_accuracy_one_sub in that it doesn't check the 
+    element-wise accuracy.
+    Differes from macro_accuracy and macro_accuracy_valid in the 
+    postprocessing that has been applied to the prediction.
+
+    Parameters
+    ----------
+    **kwargs['one_sub_P'] : torch.Tensor[float]
+        The output of the model after the postprocessing step of
+        selecting the single most 'changed' substation has been applied. 
+        Elements are floats in the range (0,1). A value below 0.5 represents 
+        no change; above 0.5, change.
+    **kwargs['Y'] : torch.Tensor[float]
+        The label of the datapoints Elements are floats in {0,1}.
+        A value below 0 represents no change; of 1, change.
+        
+    Returns
+    -------
+    bool
+        Whether the postprocessed predicted output matches the true output.
+    '''
+    one_sub_P = kwargs['one_sub_P']
+    Y = kwargs['Y']
+    return torch.equal(torch.round(one_sub_P),torch.round(Y))
+
+def micro_accuracy_one_sub(**kwargs: dict) -> float:
+    '''
+    Calculates the element-wise accuracy between predicted output, after the 
+    postprocessing step of selecting the single most 'changed' substation has 
+    been applied, and the true output.
+    Differes from macro_accuracy_one_sub in that this function checks the
+    element-wise accuracy.
+    Differes from micro_accuracy and micro_accuracy_valid in the 
+    postprocessing that has been applied to the prediction.
+
+    Parameters
+    ----------
+    **kwargs['one_sub_P'] : torch.Tensor[float]
+        The output of the model after the postprocessing step of
+        selecting the single most 'changed' substation has been applied. 
+        Elements are floats in the range (0,1). A value below 0.5 represents 
+        no change; above 0.5, change.
+    **kwargs['Y'] : torch.Tensor[float]
+        The label of the datapoints Elements are floats in {0,1}.
+        A value below 0 represents no change; of 1, change.
+        
+    Returns
+    -------
+    bool
+        Whether the predicted output matches the true output.
+    '''
+    one_sub_P = kwargs['one_sub_P']
+    Y = kwargs['Y']
+    return torch.mean(torch.eq(torch.round(one_sub_P),
+                               torch.round(Y)).float()
+                      ).item()
+
+
+def macro_accuracy_valid(**kwargs: dict) -> bool:
+    '''
+    Calculates whether the predicted output, after the postprocessing step of
+    selecting the closest valid action has been applied, wholly 
+    matches the true output.
+    Differes from micro_accuracy_valid in that it doesn't check the 
+    element-wise accuracy.
+    Differes from macro_accuracy and macro_accuracy_one_sub in the 
+    postprocessing that has been applied to the prediction.
+
+    Parameters
+    ----------
+    **kwargs['nearest_valid_P'] : torch.Tensor[float]
+        The output of the model after the postprocessing step of
+        selecting the nearest valid action has been applied.
+        Elements are floats in the range (0,1). A value below 0.5 represents 
+        no change; above 0.5, change.
+    **kwargs['Y'] : torch.Tensor[float]
+        The label of the datapoints Elements are floats in {0,1}.
+        A value below 0 represents no change; of 1, change.
+        
+    Returns
+    -------
+    bool
+        Whether the postprocessed predicted output matches the true output.
+    '''
+    nearest_valid_P = kwargs['nearest_valid_P']
+    Y = kwargs['Y']
+    return torch.equal(nearest_valid_P,torch.round(Y))
+
+def micro_accuracy_valid(**kwargs: dict) -> float:
+    '''
+    Calculates the element-wise accuracy between predicted output, after the 
+    postprocessing step of selecting the closest valid action has been applied, 
+    and the true output.
+    Differes from macro_accuracy_valid in that this function checks the
+    element-wise accuracy.
+    Differes from micro_accuracy and micro_accuracy_one_sub in the 
+    postprocessing that has been applied to the prediction.
+
+    Parameters
+    ----------
+    **kwargs['one_sub_P'] : torch.Tensor[float]
+        The output of the model after the postprocessing step of selecting the 
+        closest valid action has been applied
+        Elements are floats in the range (0,1). A value below 0.5 represents 
+        no change; above 0.5, change.
+    **kwargs['Y'] : torch.Tensor[float]
+        The label of the datapoints Elements are floats in {0,1}.
+        A value below 0 represents no change; of 1, change.
+        
+    Returns
+    -------
+    bool
+        Whether the predicted output matches the true output.
+    '''
+    nearest_valid_P = kwargs['nearest_valid_P']
+    Y = kwargs['Y']
+    return torch.mean(torch.eq(nearest_valid_P,torch.round(Y)).float()).item()
+
 
 def n_predicted_changes(**kwargs: dict) -> int:
     '''
@@ -225,6 +343,7 @@ def accuracy_predicted_substation(**kwargs: dict) -> bool:
     P_subchanged_idx = kwargs['P_subchanged_idx']
     return Y_subchanged_idx==P_subchanged_idx
     
+
 
 # =============================================================================
 # def correct_whether_changes(**kwargs: dict):
