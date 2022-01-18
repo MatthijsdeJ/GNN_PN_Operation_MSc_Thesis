@@ -141,3 +141,19 @@ def set_wd_to_package_root():
     Set the working directory to the root of the package.
     '''
     os.chdir(os.path.dirname(__file__))
+    
+def flatten(t: Sequence[Sequence]) -> List:
+    '''
+    Flatten a sequence of sequences.
+
+    Parameters
+    ----------
+    t : Sequence[Sequence]
+        The sequence of sequences to flatten.
+
+    Returns
+    -------
+    List
+        Flattened sequence.
+    '''
+    return [item for sublist in t for item in sublist]
