@@ -15,6 +15,7 @@ tutor_generated_data:
 rte_case14_realistic:
   thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
   ts_in_day: 288 #Number of timesteps in a grid2op day
+  n_subs: 14
   
 training:
   settings:
@@ -38,6 +39,6 @@ training:
     estimated_train_size: 18195 #Used for estimating tqdm duration
   wandb:
     model_name: test_hetero_labelsmth
-    model_tags: [test]
+    model_tags: [scipt_tests]
     project: msc_thesis_gnn_power
     entity: mattholomew
