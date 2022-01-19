@@ -9,7 +9,7 @@ import torch
 from torch_geometric.nn import  SAGEConv, Linear, HeteroConv
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
-from Typing import Dict, List
+from typing import Dict, List
 
 #These indices are required from transferring from the order where different objects appear first \
 #(gens, loads, ors, exs) to the order in the adjacency matrix
@@ -187,7 +187,7 @@ class GCN(torch.nn.Module):
         
         self.apply(weights_kaiming_uniform)
         
-    def compute_difference_weights(self) -> Dict[List[float]]:
+    def compute_difference_weights(self) -> Dict[str,List[float]]:
         '''
         Compute the difference between the self weights and the neighbour
         weights.
@@ -199,7 +199,7 @@ class GCN(torch.nn.Module):
 
         Returns
         -------
-        diffs : Dict[List[float]]
+        diffs : Dict[str,List[float]]
             The dictionary  of lists (each lists corresponding to one neighbour
             weight type) with differences (each difference corresponding to a 
             one layer). The number of lists depends on the network type.
