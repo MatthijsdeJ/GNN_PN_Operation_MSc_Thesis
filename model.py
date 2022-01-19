@@ -9,6 +9,7 @@ import torch
 from torch_geometric.nn import  SAGEConv, Linear, HeteroConv
 import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss
+from Typing import Dict, List
 
 #These indices are required from transferring from the order where different objects appear first \
 #(gens, loads, ors, exs) to the order in the adjacency matrix
@@ -168,7 +169,7 @@ class GCN(torch.nn.Module):
         
         return x
     
-    def init_weights(self):
+    def init_weights_kaiming(self):
         '''
         Initialize the weights of this network according to the kaiming uniform
         distribution. The biases are initialized to zero.
@@ -185,3 +186,52 @@ class GCN(torch.nn.Module):
                     m.bias.data.fill_(0)
         
         self.apply(weights_kaiming_uniform)
+        
+    def compute_difference_weights(self) -> Dict[List[float]]:
+        '''
+        Compute the difference between the self weights and the neighbour
+        weights.
+
+        Raises
+        ------
+        NotImplementedError
+            Todo!
+
+        Returns
+        -------
+        diffs : Dict[List[float]]
+            The dictionary  of lists (each lists corresponding to one neighbour
+            weight type) with differences (each difference corresponding to a 
+            one layer). The number of lists depends on the network type.
+        '''
+        
+        def l_w_norm(layer):
+            '''
+            Calculate the norm of the weights of a layer.
+            '''
+            return abs(layer.weight).sum().item()
+            
+        diffs = {}
+        if self.network_type == 'heterogenous':
+            
+            diffs['self_line_neigh'] = []
+            diffs['self_sb_neigh'] = []
+            diffs['self_ob_neigh'] = []
+            
+            for l in self.GNN_layers:
+                l_key = 'object__line__object'
+                sb_key = 'object__same_busbar__object'
+                ob_key = 'object__other_busbar__object'
+                
+                norm_w_self = l_w_norm(l.convs[sb_key].lin_r)
+                norm_w_line = l_w_norm(l.convs[l_key].lin_l)
+                norm_w_sb = l_w_norm(l.convs[sb_key].lin_l)
+                norm_w_ob = l_w_norm(l.convs[ob_key].lin_l)
+                
+                diffs['self_line_neigh'].append(norm_w_self-norm_w_line)
+                diffs['self_sb_neigh'] .append(norm_w_self-norm_w_sb)
+                diffs['self_ob_neigh'].append(norm_w_self-norm_w_ob)
+        else:
+            raise NotImplementedError
+            
+        return diffs
