@@ -212,7 +212,7 @@ class GCN(torch.nn.Module):
             classname = m.__class__.__name__
             # for every Linear layer in a model..
             if classname.find('Linear') != -1:
-                std = weight_init_std/m.in_channel
+                std = weight_init_std/m.in_channels
                 torch.nn.init.normal_(m.weight,std=std)
                 if m.bias is not None:
                     m.bias.data.fill_(0)
