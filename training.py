@@ -294,8 +294,10 @@ class Run():
             self.model.init_weights_kaiming()
 
         #Init optimizer
+        w_decay = train_config['hyperparams']['weight_decay']
         self.optimizer = torch.optim.Adam(self.model.parameters(), 
-                                          lr=train_config['hyperparams']['lr'])
+                                          lr=train_config['hyperparams']['lr'],
+                                          weight_decay=w_decay)
         
         #Initalize dataloaders
         network_type = train_config['hyperparams']['network_type']
@@ -414,8 +416,10 @@ class Run():
                   label_smth_alpha*0.5*torch.ones_like(Y,device=self.device)
              
         #Compute the weights for the loss
+        non_sub_label_weight = self.train_config['hyperparams'] \
+                                            ['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y,dp['sub_info'])
-        weights = label_weights(1-Y_sub_mask,0.1)
+        weights = label_weights(1-Y_sub_mask,non_sub_label_weight)
         
         #Compute the loss, update gradients
         l = BCELoss_labels_weighted(P,Y_smth,weights)
@@ -487,8 +491,10 @@ class Run():
                   label_smth_alpha*0.5*torch.ones_like(Y,device=self.device)
 
         #Compute the weights for the loss
+        non_sub_label_weight = self.train_config['hyperparams'] \
+                                            ['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y,dp['sub_info'])
-        weights = label_weights(1-Y_sub_mask,0.1)
+        weights = label_weights(1-Y_sub_mask,non_sub_label_weight)
         
         #Compute the loss, update gradients
         l = BCELoss_labels_weighted(P,Y_smth,weights)

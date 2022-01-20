@@ -30,15 +30,18 @@ training:
     LReLu_neg_slope: 0.1
     batch_size: 64
     label_smoothing_alpha: 0.2 #Controls the extent of label smoothing
-    kaiming_weight_init: false
+    #kaiming_weight_init: false
+    weight_init_std: 1
     aggr: add #Aggregation function: should be 'add' or 'mean'
+    weight_decay: 0.01
+    non_sub_label_weight: 0.1
   constants:
     N_f_gen: 3 #Number of generator features
     N_f_load: 3 #Number of load features
     N_f_endpoint: 6 #Number of endpoint (origin/extremity) features
     estimated_train_size: 18195 #Used for estimating tqdm duration
   wandb:
-    model_name: test_hetero_labelsmth
-    model_tags: [scipt_tests]
+    model_name: test_hetero_wdecay
+    model_tags: [tests]
     project: msc_thesis_gnn_power
     entity: mattholomew

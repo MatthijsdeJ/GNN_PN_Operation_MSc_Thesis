@@ -23,6 +23,7 @@ class GCN(torch.nn.Module):
     '''
     def __init__(self, 
                  LReLu_neg_slope: float,
+                 weight_init_std: float,
                  N_f_gen: int,
                  N_f_load: int,
                  N_f_endpoint: int,
@@ -35,6 +36,9 @@ class GCN(torch.nn.Module):
         ----------
         LReLu_neg_slope : float
             The negative slope of the LReLu activation function.
+        weight_init_std: float,
+            The standard deviation of the normal distribution according to 
+            which the weights are initialized.
         N_f_gen : int
             The number of features per generator object.
         N_f_load : int
@@ -91,6 +95,9 @@ class GCN(torch.nn.Module):
                                                for _ in range(N_GNN_layers-1)])
         #Create the final layer
         self.GNN_layers.append(GNN_layer(N_node_hidden,1,aggr))
+        
+        #Initialize weights according to normal distribution
+        self.init_weights_normalized_normal(weight_init_std)
 
     def forward(self, 
                 x_gen: torch.Tensor, 
@@ -174,9 +181,9 @@ class GCN(torch.nn.Module):
         Initialize the weights of this network according to the kaiming uniform
         distribution. The biases are initialized to zero.
         '''
-        def weights_kaiming_uniform(m):
+        def layer_weights_kaiming(m):
             '''
-            Apply initialization to a single layer.
+            Apply kaiming initialization to a single layer.
             '''
             classname = m.__class__.__name__
             # for every Linear layer in a model..
@@ -185,7 +192,32 @@ class GCN(torch.nn.Module):
                 if m.bias is not None:
                     m.bias.data.fill_(0)
         
-        self.apply(weights_kaiming_uniform)
+        self.apply(layer_weights_kaiming)
+        
+    def init_weights_normalized_normal(self, weight_init_std : float):
+        '''
+        Initialize the weights of this network according to the normal
+        distribution, but with the std divided by the number of in channels. 
+        The biases are initialized to zero.
+
+        Parameters
+        ----------
+        weight_init_std : float
+            The standard deviation of the normal distribution.
+        '''
+        def layer_weights_normal(m):
+            '''
+            Apply initialization to a single layer.
+            '''
+            classname = m.__class__.__name__
+            # for every Linear layer in a model..
+            if classname.find('Linear') != -1:
+                std = weight_init_std/m.in_channel
+                torch.nn.init.normal_(m.weight,std=std)
+                if m.bias is not None:
+                    m.bias.data.fill_(0)
+        
+        self.apply(layer_weights_normal)
         
     def compute_difference_weights(self) -> Dict[str,List[float]]:
         '''
