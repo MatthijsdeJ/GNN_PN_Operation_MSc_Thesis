@@ -21,6 +21,7 @@ training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
     val_log_freq: 6000 #How often to evaluate the validation set
+    advanced_val_analysis: false
   hyperparams:
     n_epoch: 100
     lr: 3.0E-3
@@ -41,7 +42,7 @@ training:
     N_f_endpoint: 6 #Number of endpoint (origin/extremity) features
     estimated_train_size: 18195 #Used for estimating tqdm duration
   wandb:
-    model_name: test_hetero_wdecay
-    model_tags: [tests]
+    #model_name: test_hetero_wdecay
+    model_tags: [hetero, hyperparameter_search1]
     project: msc_thesis_gnn_power
     entity: mattholomew

@@ -346,7 +346,7 @@ class Run():
         #Start wandb run
         self.run = wandb.init(project=train_config['wandb']["project"],
                               entity=train_config['wandb']["entity"],
-                              name=train_config['wandb']['model_name'],
+#                              name=train_config['wandb']['model_name'],
                               tags=train_config['wandb']['model_tags'],
                               config=train_config)
         self.run.watch(self.model,
@@ -560,6 +560,9 @@ class Run():
                 Y, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                 nearest_valid_actions = self.process_single_val_dp(dp, step)
                     
+                if not self.config['training']['settings']['advanced_val_analysis']:
+                    continue
+                
                 #Increment the counters for counting the number of (in)correct
                 #classifications of each label
                 sub_Y = tuple(Y[Y_sub_mask.bool()].cpu().tolist())
@@ -582,6 +585,9 @@ class Run():
             #Logging metrics
             self.val_metrics.log_to_wandb(run, step)
             self.val_metrics.reset()
+            
+            if not self.config['training']['settings']['advanced_val_analysis']:
+                return
             
             #Logging substation confusion matrix
             Y_subs = [(v if v is not None else -1) for v in Y_subs]

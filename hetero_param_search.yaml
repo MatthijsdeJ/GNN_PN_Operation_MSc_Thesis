@@ -47,3 +47,4 @@ command:
   - ${interpreter}
   - ${program}
   - "-d=data/nooutage_processed_tutor_data"
+  - ${args}

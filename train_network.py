@@ -19,6 +19,10 @@ def main():
     parser.add_argument("-d","--processed_tutor_imitation", help="Directory " +
                         "where the subdirectories with data points are " +
                         "stored.")
+#    parser.add_argument("-aa","--advanced_analysis", help="Whether to" + 
+#                        "perform a more advanced analysis on the val set")
+    
+    #specify hyperparameter arguments
     parser.add_argument("-nl","--GNN_layers", help="Number of GNN layers " +
                         "in the model", type=int)   
     parser.add_argument("-nh","--N_node_hidden", help="Number of nodes in " +
@@ -37,6 +41,7 @@ def main():
                         "affected in the action.", type=float)   
     parser.add_argument("-lsa","--label_smoothing_alpha", help="Label " +
                         "smoothing coefficient.", type=float)   
+
     
     #Parse
     args = parser.parse_args()
@@ -76,7 +81,7 @@ def main():
     if args.label_smoothing_alpha is not None:
         config['training']['hyperparams']['label_smoothing_alpha'] = \
             args.label_smoothing_alpha
-            
+    
     #Start the run
     r = Run(config)
     r.start()
