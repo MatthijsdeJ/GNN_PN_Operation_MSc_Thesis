@@ -282,6 +282,7 @@ class Run():
         
         #Init model
         self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
+                         train_config['hyperparams']['weight_init_std'],
                          train_config['constants']['N_f_gen'],
                          train_config['constants']['N_f_load'],
                          train_config['constants']['N_f_endpoint'],
@@ -290,8 +291,8 @@ class Run():
                          train_config['hyperparams']['aggr'],
                          train_config['hyperparams']['network_type'])
         self.model.to(self.device)
-        if train_config['hyperparams']['kaiming_weight_init']:
-            self.model.init_weights_kaiming()
+#        if train_config['hyperparams']['kaiming_weight_init']:
+#            self.model.init_weights_kaiming()
 
         #Init optimizer
         w_decay = train_config['hyperparams']['weight_decay']
