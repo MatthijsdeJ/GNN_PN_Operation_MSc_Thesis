@@ -41,7 +41,8 @@ def main():
                         "affected in the action.", type=float)   
     parser.add_argument("-lsa","--label_smoothing_alpha", help="Label " +
                         "smoothing coefficient.", type=float)   
-
+    parser.add_argument("-nt","--network_type", help="Homogeneous or " +
+                        "heterogeneous.", type=float)   
     
     #Parse
     args = parser.parse_args()
@@ -81,7 +82,10 @@ def main():
     if args.label_smoothing_alpha is not None:
         config['training']['hyperparams']['label_smoothing_alpha'] = \
             args.label_smoothing_alpha
-    
+    if args.network_type is not None:
+        config['training']['hyperparams']['network_type'] = \
+            args.network_type
+            
     #Start the run
     r = Run(config)
     r.start()

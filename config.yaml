@@ -36,6 +36,8 @@ training:
     aggr: add #Aggregation function: should be 'add' or 'mean'
     weight_decay: 0.01
     non_sub_label_weight: 0.1
+    early_stopping_patience: 5 #stop training when max. val. macro accuracy 
+    #valid hasn't improved
   constants:
     N_f_gen: 3 #Number of generator features
     N_f_load: 3 #Number of load features

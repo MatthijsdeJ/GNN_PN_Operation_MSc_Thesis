@@ -343,6 +343,10 @@ class Run():
         #Initialize action space cache used for 
         self.as_cache = ActSpaceCache()
 
+        #Early stopping paramter
+        self.stop_countdown = train_config['hyperparams']['early_stopping_patience']
+        self.best_score = 0
+        
         #Start wandb run
         self.run = wandb.init(project=train_config['wandb']["project"],
                               entity=train_config['wandb']["entity"],
@@ -560,6 +564,8 @@ class Run():
                 Y, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                 nearest_valid_actions = self.process_single_val_dp(dp, step)
                     
+                
+                
                 if not self.config['training']['settings']['advanced_val_analysis']:
                     continue
                 
@@ -581,6 +587,16 @@ class Run():
                 Y_index_in_valid = torch.where((nearest_valid_actions == Y) \
                                                .all(dim=1))[0].item()
                 Y_rank_in_nearest_v_acts.append(Y_index_in_valid)
+            
+            #Checkign early stopping
+            val_macro_accuracy_valid = self.val_metrics.metrics_dict['val_macro_accuracy_valid'][1].get()
+            if  val_macro_accuracy_valid > self.best_score:
+                self.best_score = val_macro_accuracy_valid
+                self.stop_countdown = self.train_config['early_stopping_patience']
+            else:
+                self.stop_countdown -= 1
+            if self.stop_countdown < 1:
+                quit()
             
             #Logging metrics
             self.val_metrics.log_to_wandb(run, step)
