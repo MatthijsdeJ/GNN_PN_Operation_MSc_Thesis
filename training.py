@@ -592,7 +592,7 @@ class Run():
             val_macro_accuracy_valid = self.val_metrics.metrics_dict['val_macro_accuracy_valid'][1].get()
             if  val_macro_accuracy_valid > self.best_score:
                 self.best_score = val_macro_accuracy_valid
-                self.stop_countdown = self.train_config['early_stopping_patience']
+                self.stop_countdown = self.train_config['hyperparams']['early_stopping_patience']
             else:
                 self.stop_countdown -= 1
             if self.stop_countdown < 1:
