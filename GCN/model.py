@@ -52,7 +52,7 @@ class GCN(torch.nn.Module):
         aggr : str
             The aggregation function for GNN layers. Should be 'add' or 'mean'.
         network_type : str
-            The type of network. Should be 'homogenous' or 'heterogenous'.
+            The type of network. Should be 'homogeneous' or 'heterogeneous'.
         '''
         super().__init__()
         self.network_type = network_type
@@ -78,9 +78,9 @@ class GCN(torch.nn.Module):
         
         #Factory function that creates GNN layers.
         def GNN_layer(n_in,n_out,aggr='add'):
-            if network_type == 'homogenous':
+            if network_type == 'homogeneous':
                 return SAGEConv(n_in,n_out,root_weight=True,aggr=aggr)
-            elif network_type == 'heterogenous':
+            elif network_type == 'heterogeneous':
                 return HeteroConv({
                     ('object', 'line', 'object'): 
                         SAGEConv(n_in,n_out,root_weight=False,aggr=aggr,bias=False),
@@ -162,17 +162,17 @@ class GCN(torch.nn.Module):
         x = x[object_ptv]
 
         
-        if self.network_type == 'heterogenous':
+        if self.network_type == 'heterogeneous':
             x = {'object':x}
 
         #Pass through the GNN layers
         for l in self.GNN_layers[:-1]:
             x=l(x, edge_index)
-            self.activation_f(x if self.network_type == 'homogenous' else x['object'])
+            self.activation_f(x if self.network_type == 'homogeneous' else x['object'])
                 
         #Pass through the final layer and the sigmoid activation function
         x=self.GNN_layers[-1](x, edge_index)
-        x=torch.sigmoid(x if self.network_type == 'homogenous' else x['object'])
+        x=torch.sigmoid(x if self.network_type == 'homogeneous' else x['object'])
         
         return x
     
@@ -244,7 +244,7 @@ class GCN(torch.nn.Module):
             return abs(layer.weight).sum().item()
             
         diffs = {}
-        if self.network_type == 'heterogenous':
+        if self.network_type == 'heterogeneous':
             
             diffs['self_line_neigh'] = []
             diffs['self_sb_neigh'] = []

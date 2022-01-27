@@ -128,11 +128,11 @@ class TutorDataLoader():
             #network type
             same_busbar_e, other_busbar_e, line_e = \
                 self._matrix_cache.con_matrices[str(raw_dp['cm_index'])][1]
-            if self.network_type == 'homogenous':
+            if self.network_type == 'homogeneous':
                 dp['edges'] = torch.tensor(np.append(same_busbar_e,line_e,axis=1),
                                            device=device,
                                            dtype=torch.long)
-            elif self.network_type == 'heterogenous': 
+            elif self.network_type == 'heterogeneous': 
                 dp['edges'] = {('object','line','object'):
                                    torch.tensor(line_e,
                                                 device=device,
