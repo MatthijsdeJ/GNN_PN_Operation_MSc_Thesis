@@ -42,7 +42,7 @@ def main():
     parser.add_argument("-lsa","--label_smoothing_alpha", help="Label " +
                         "smoothing coefficient.", type=float)   
     parser.add_argument("-nt","--network_type", help="Homogeneous or " +
-                        "heterogeneous.", type=float)   
+                        "heterogeneous.")   
     
     #Parse
     args = parser.parse_args()
