@@ -51,7 +51,7 @@ class TutorDataLoader():
             self._feature_statistics = json.loads(file.read())
         self.device=device
         
-        assert network_type in ['homogenous','heterogenous'], \
+        assert network_type in ['homogeneous','heterogeneous'], \
                                 'Invalid network type'
         self.network_type=network_type
         self.train = train
