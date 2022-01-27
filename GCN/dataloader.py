@@ -9,7 +9,7 @@ import torch
 import os
 import json
 import random
-import data_preprocessing_analysis.tutor_data_processing as tdp
+import data_preprocessing_analysis.imitation_data_preprocessing as idp
 from typing import List
 import numpy as np
 
@@ -43,16 +43,16 @@ class TutorDataLoader():
             Whether the loaded data is used for training or validation. 
             More data is included in validation.
         '''
-#TODO:        super().__init__(root, None, None)
         
         self._file_names = os.listdir(root)
         self._file_paths = [os.path.join(root,fn) for fn in self._file_names]
-        self._matrix_cache = tdp.ConMatrixCache.load(matrix_cache_path)
+        self._matrix_cache = idp.ConMatrixCache.load(matrix_cache_path)
         with open(feature_statistics_path, 'r') as file:
             self._feature_statistics = json.loads(file.read())
         self.device=device
         
-        assert network_type in ['homogenous','heterogenous'], 'Invalid network type'
+        assert network_type in ['homogenous','heterogenous'], \
+                                'Invalid network type'
         self.network_type=network_type
         self.train = train
         

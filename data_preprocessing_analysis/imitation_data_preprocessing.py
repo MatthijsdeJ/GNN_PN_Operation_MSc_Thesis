@@ -10,109 +10,18 @@ import numpy as np
 from typing import List, Tuple, Callable, Sequence
 from pathlib import Path, PosixPath
 import re
-import util
 import json
-import collections
-
+import auxilary.grid2op_util as g2o_util
+import auxilary.util as util
+from auxilary.util import NumpyEncoder
+from tqdm import tqdm
+from auxilary.generate_action_space import action_identificator
 '''
 TODO: Functions in this file were created during data exploration, but
 have not been tested rigourisly or updated since. Be mindful.
 '''
 
-def extract_gen_features(obs_dict: dict) -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
-    return the generator features.
 
-    Parameters
-    ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
-        with obs.to_dict().
-
-    Returns
-    -------
-    X : np.array
-        Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v' features.
-    '''
-    X = np.array(list(obs_dict['gens'].values())).T
-    return X
-
-def extract_load_features(obs_dict: dict) -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
-    return the generator features.
-
-    Parameters
-    ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
-        with obs.to_dict().
-
-    Returns
-    -------
-    X : np.array
-        Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v' features.
-    '''
-    X = np.array(list(obs_dict['loads'].values())).T
-    return X
-
-def extract_or_features(obs_dict: dict, thermal_limits: Sequence[int]) -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
-    return the load features.
-
-    Parameters
-    ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
-        with obs.to_dict().
-    thermal_limits : Sequence[int]
-        Sequence with the thermal limits of the lines.
-        
-    Returns
-    -------
-    X : np.array
-        Array representation of the features;  rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho', 
-        'line_capacity' features.
-    '''
-    X = np.array(list(obs_dict['lines_or'].values())).T
-    with np.errstate(divide='ignore', invalid='ignore'):
-        X = np.concatenate((X,
-                            np.reshape(np.array(obs_dict['rho']),(-1,1)),
-                            np.reshape(np.array(thermal_limits),(-1,1))),
-                         axis=1)
-    return X
-
-def extract_ex_features(obs_dict: dict, thermal_limits: Sequence[int]) -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
-    return the generator features.
-
-    Parameters
-    ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
-        with obs.to_dict().
-    thermal_limits : Sequence[int]
-        Sequence with the thermal limits of the lines.
-    Returns
-    -------
-    X : np.array
-        Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho', 
-        'line_capacity' features.
-    '''
-    X = np.array(list(obs_dict['lines_ex'].values())).T
-    with np.errstate(divide='ignore', invalid='ignore'):
-        X = np.concatenate((X,
-                            np.reshape(np.array(obs_dict['rho']),(-1,1)),
-                            np.reshape(np.array(thermal_limits),(-1,1))),
-                           axis=1)
-    return X
 
 def get_filepaths(tutor_data_path: str) -> List[PosixPath]:
     '''
@@ -193,10 +102,12 @@ def extract_data_from_single_ts(ts_vect: np.array, grid2op_vect_len: int,
     
     data = {'action_index': int(ts_vect[0]),
             'timestep': int(ts_vect[4]),
-            'gen_features': extract_gen_features(obs_dict),
-            'load_features': extract_load_features(obs_dict),
-            'or_features': extract_or_features(obs_dict, thermal_limits),
-            'ex_features': extract_ex_features(obs_dict, thermal_limits),
+            'gen_features': g2o_util.extract_gen_features(obs_dict),
+            'load_features': g2o_util.extract_load_features(obs_dict),
+            'or_features': g2o_util.extract_or_features(obs_dict, 
+                                                        thermal_limits),
+            'ex_features': g2o_util.extract_ex_features(obs_dict, 
+                                                       thermal_limits),
             'topo_vect': obs_dict['topo_vect'].copy()
            }
     
@@ -296,31 +207,7 @@ def env_info_line_disabled(env:  grid2op.Environment.Environment,
         
     return info_dict
 
-def hash_nparray(arr: np.array) -> int:
-    '''
-    Hashes a numpy array.
 
-    Parameters
-    ----------
-    arr : np.array
-        The array.
-
-    Returns
-    -------
-    int
-        The hash value.
-    '''
-    return hash(arr.data.tobytes())
-
-class NumpyEncoder(json.JSONEncoder):
-    '''
-    Class that can be used in json.dump() to encode np.array objects.
-    '''
-    
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
     
 class ConMatrixCache():
     '''
@@ -375,10 +262,10 @@ class ConMatrixCache():
         #are equal
         assert sum(sub_info)==len(topo_vect)
         
-        h_topo_vect = hash((line_disabled,hash_nparray(topo_vect)))
+        h_topo_vect = hash((line_disabled,util.hash_nparray(topo_vect)))
         if h_topo_vect not in self.con_matrices:
             
-            con_matrices = util.connectivity_matrices(sub_info.astype(int),
+            con_matrices = g2o_util.connectivity_matrices(sub_info.astype(int),
                                                   topo_vect.astype(int),
                                         line_or_pos_topo_vect.astype(int),
                                         line_ex_pos_topo_vect.astype(int))
@@ -509,6 +396,133 @@ class FeatureStatistics():
         with open(fpath, 'w') as outfile:
             json.dump(stats, outfile, cls=NumpyEncoder)
     
+def process_raw_tutor_data(config: dict):
+    '''
+    Process the raw datapoints and store the processed datapoints.
+
+    Parameters
+    ----------
+    config : dict
+        Config dict with information such as file paths and constants.
+    '''
+    
+    #Specify paths
+    tutor_data_path = config['paths']['tutor_imitation']
+    output_data_path = config['paths']['processed_tutor_imitation']
+    con_matrix_path = config['paths']['con_matrix_cache']
+    fstats_path = config['paths']['feature_statistics']
+
+    #Initialize environment and environment variables
+    env = g2o_util.init_env(config,
+                            grid2op.Rules.AlwaysLegal)
+    grid2op_vect_size = len(env.get_obs().to_vect())
+    thermal_limits = config['rte_case14_realistic']['thermal_limits']
+        
+    #Create a an object for caching connectivity matrices
+    cmc = ConMatrixCache()
+    #Create a dictionary used for finding actions corresponding to action ids
+    action_iders = {}
+    #Create object for tracking the feature statistics
+    fstats = FeatureStatistics()
+
+
+    for fp in tqdm(get_filepaths(tutor_data_path)):
+        line_disabled, _, chronic_id, dayscomp = \
+            extract_data_from_filepath(fp.relative_to(tutor_data_path))
+        
+        #Load a single file with raw datapoints
+        chr_ldis_raw_dps = np.load(fp)
+
+        #If it doesn't already exit, create action_identificator for this 
+        #particular line disabled
+        #Action identificator give the action corresponding to an action index
+        if line_disabled not in action_iders:
+            action_iders[line_disabled] = action_identificator(line_disabled)
+
+        #Create a list wherein to store the processed datapoints for this 
+        #particular file
+        file_dps = []
+
+        #Env information specifically for a line removed
+        env_info_dict = env_info_line_disabled(env, line_disabled)
+
+        #Loop over the datapoints
+        for raw_dp in chr_ldis_raw_dps:
+            #Extract information dictionary from the datapoint
+            dp = extract_data_from_single_ts(raw_dp,
+                                             grid2op_vect_size,
+                                             env.observation_space.from_vect,
+                                             line_disabled,
+                                             env_info_dict,
+                                             thermal_limits)
+            
+            #Add the data from the filepath and environment to the data dictionary
+            dp.update({'line_disabled':line_disabled, 
+                       'chronic_id':chronic_id, 
+                       'dayscomp':dayscomp})
+            dp.update({'sub_info':env_info_dict['sub_info'],
+                       'gen_pos_topo_vect':env_info_dict['gen_pos_topo_vect'],
+                       'load_pos_topo_vect':env_info_dict['load_pos_topo_vect'],
+                       'line_or_pos_topo_vect':env_info_dict['line_or_pos_topo_vect'],
+                       'line_ex_pos_topo_vect':env_info_dict['line_ex_pos_topo_vect'],
+                      })
+
+            #Update the feature statistics.
+            fstats.update_feature_statistics(dp)
+            
+            #Find the set action topology vector and add it to the datapoint
+            if dp['action_index'] != -1:
+                action_ider = action_iders[line_disabled]
+                dp['set_topo_vect'] = action_ider.get_set_topo_vect(dp['action_index'])
+                #Remove disables lines from topo vect objects
+                if line_disabled != -1:
+                    dp['set_topo_vect'] = np.delete(dp['set_topo_vect'],[
+                                                    env_info_dict['dis_line_or_tv'],
+                                                    env_info_dict['dis_line_ex_tv']])
+            else:
+                dp['set_topo_vect'] = np.zeros_like(dp['topo_vect'])
+
+            dp['change_topo_vect'] = np.array([0 if s==0 else abs(t-s) for t,s in 
+                                               zip(dp['topo_vect'],dp['set_topo_vect'])])
+            dp['res_topo_vect'] = np.array([t if s==0 else s for t,s in 
+                                            zip(dp['topo_vect'],dp['set_topo_vect'])])
+
+            #Skip datapoint if any other line is disabled
+            if -1 in dp['topo_vect']:
+                continue
+
+            assert len(dp['set_topo_vect']) == len(dp['topo_vect']) == len(dp['change_topo_vect']) \
+                    == len(dp['res_topo_vect']) , "Not equal lengths"
+            assert len(dp['topo_vect']) == (56 if line_disabled == -1 else 54), \
+                "Incorrect length" 
+            assert all([(o in [0,1,2]) for o in dp['set_topo_vect']]), \
+                "Incorrect element in set_topo_vect" 
+            assert all([(o in [1,2]) for o in dp['topo_vect']]), \
+                "Incorrect element in topo_vect" 
+            assert all([(o in [0,1]) for o in dp['change_topo_vect']]), \
+                "Incorrect element in change_topo_vect" 
+            assert all([(o in [1,2]) for o in dp['res_topo_vect']]), \
+                "Incorrect element in res_topo_vect"
+
+            #Add the index of the connectivity matrix to the data object
+            cm_index = cmc.get_key_add_to_dict(dp['topo_vect'],
+                                               line_disabled,
+                                               env_info_dict['sub_info'],
+                                               env_info_dict['line_or_pos_topo_vect'],
+                                               env_info_dict['line_ex_pos_topo_vect'])
+            dp['cm_index'] = cm_index
+            assert dp['cm_index'] in cmc.con_matrices
+
+            #Append datapoint to the datapoints for a particular chronic and 
+            #line disabled, update summary object
+            file_dps.append(dp)
+
+        #Save the processed datapoints for a particular chronic and line disabled
+        save_data_to_file(file_dps, output_data_path)
+        
+    cmc.save(con_matrix_path)
+    fstats.save_feature_statistics(fstats_path)
+
 # =============================================================================
 #     def update_datapoint(self, data):
 #         self.N +=1

@@ -17,26 +17,31 @@ rte_case14_realistic:
   ts_in_day: 288 #Number of timesteps in a grid2op day
   n_subs: 14
   
+dataset:
+  train_perc: 0.7 #Percentage of the files used in the training set
+  val_perc: 0.15 #Percentage of the files validation set
+  #Remainder is used in the test set
+  
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
     val_log_freq: 6000 #How often to evaluate the validation set
-    advanced_val_analysis: false
+    advanced_val_analysis: true
   hyperparams:
     n_epoch: 100
-    lr: 3.0E-3
+    lr: 1.5E-3
     network_type: heterogenous #Should be 'homogenous' or 'heterogenous'
-    N_GNN_layers: 8
-    N_node_hidden: 32 #Size of hidden layers in model
+    N_GNN_layers: 5
+    N_node_hidden: 120 #Size of hidden layers in model
     LReLu_neg_slope: 0.1
-    batch_size: 64
-    label_smoothing_alpha: 0.2 #Controls the extent of label smoothing
+    batch_size: 32
+    label_smoothing_alpha: 0 #Controls the extent of label smoothing
     #kaiming_weight_init: false
-    weight_init_std: 1
+    weight_init_std: 3
     aggr: add #Aggregation function: should be 'add' or 'mean'
-    weight_decay: 0.01
+    weight_decay: 3.0E-3
     non_sub_label_weight: 0.1
-    early_stopping_patience: 5 #stop training when max. val. macro accuracy 
+    early_stopping_patience: 15 #stop training when max. val. macro accuracy 
     #valid hasn't improved
   constants:
     N_f_gen: 3 #Number of generator features
@@ -44,7 +49,7 @@ training:
     N_f_endpoint: 6 #Number of endpoint (origin/extremity) features
     estimated_train_size: 18195 #Used for estimating tqdm duration
   wandb:
-    #model_name: test_hetero_wdecay
-    model_tags: [hetero, hyperparameter_search1]
+    model_name: tuned_hetero_model
+    model_tags: [tuned, hetero]
     project: msc_thesis_gnn_power
     entity: mattholomew

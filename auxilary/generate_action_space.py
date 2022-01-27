@@ -58,7 +58,7 @@ import grid2op
 import numpy as np
 import itertools as it
 from typing import Tuple, List
-import util
+import auxilary.util as util
 import argparse
 
 def create_dictionary(combs,sub_elem): 
@@ -301,7 +301,7 @@ def create_action_space(env,substation_ids=list(range(14)), disable_line=-1):
     """
     nb_elements=list(env.sub_info)  #array of number of elements connected to each 
                                      #substation 
-                                     
+                              
     global keys
     global action_space
 

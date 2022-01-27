@@ -6,9 +6,9 @@ Created on Wed Jan 19 13:01:28 2022
 @author: matthijs
 """
 
-from training import Run
+from GCN.training import Run
 import argparse
-import util
+import auxilary.util as util
 
 def main():
     

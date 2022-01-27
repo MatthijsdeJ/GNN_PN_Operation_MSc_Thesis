@@ -12,21 +12,16 @@ most, as well as its index [api: Tutor.act(obs)].
 original author: chen binbin
 mail: cbb@cbb1996.com
 """
-import os
 import time
-import numpy as np
 import grid2op
 from grid2op.Agent import BaseAgent
 from typing import Tuple, Optional
-import util
-
 
 class Tutor(BaseAgent):
     def __init__(self, env_action_space, selected_action_space,
                  do_nothing_capacity_threshold):
         BaseAgent.__init__(self, action_space=env_action_space)
         self.actions = selected_action_space
-        
         self.do_nothing_capacity_threshold = do_nothing_capacity_threshold
 
 # =============================================================================

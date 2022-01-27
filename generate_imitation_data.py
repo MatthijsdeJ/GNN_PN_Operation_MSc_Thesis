@@ -14,13 +14,11 @@ mail: cbb@cbb1996.com
 import os
 import grid2op
 import numpy as np
-from Tutor.Tutor import Tutor
-from action_space.generate_action_space import get_env_actions
-import datetime as dt
+from imitation_generation.tutor import Tutor
+from auxilary.generate_action_space import get_env_actions
 import argparse
-import util
-import math
-from typing import Tuple
+import auxilary.grid2op_util as g2o_util
+import auxilary.util as util
 
 # =============================================================================
 # An alternative way to return to the reference topology is to simply take
@@ -46,48 +44,13 @@ from typing import Tuple
 #     
 #     return obs, done
 # =============================================================================
-
-def init_env(config: dict) ->  grid2op.Environment.Environment:
-    '''
-    Prepares the Grid2Op environment from a dictionary containing configuration
-    setting.
-
-    Parameters
-    ----------
-    config : dict
-        Dictionary containing configuration variables.
-
-    Returns
-    -------
-    env : TYPE
-        The Grid2Op environment.
-
-    '''
-    data_path = config['paths']['rte_case14_realistic']
-    scenario_path = config['paths']['rte_case14_realistic_chronics']
-
-    try:
-        # if lightsim2grid is available, use it.
-        from lightsim2grid import LightSimBackend
-        backend = LightSimBackend()
-        env = grid2op.make(dataset=data_path, chronics_path=scenario_path, backend=backend,
-                           gamerules_class = grid2op.Rules.AlwaysLegal, test=True)
-    except:
-        env = grid2op.make(dataset=data_path, chronics_path=scenario_path,
-                           gamerules_class = grid2op.Rules.AlwaysLegal, test=True)
-        
-    # for reproducible experiments
-    env.seed(config['tutor_generated_data']['seed'])  
-
-    #Set custom thermal limits
-    thermal_limits = config['rte_case14_realistic']['thermal_limits']
-    env.set_thermal_limit(thermal_limits)
     
-    return env
-    
-    
-def save_records(records: np.array, chronic: int, save_path: str, days_completed: int,
-                 do_nothing_capacity_threshold: float, lout: int = -1,):
+def save_records(records: np.array, 
+                 chronic: int, 
+                 save_path: str, 
+                 days_completed: int,
+                 do_nothing_capacity_threshold: float, 
+                 lout: int = -1,):
     '''
     Saves records of a chronic to disk and prints a message that they are saved. 
 
@@ -133,48 +96,8 @@ def empty_records(obs_vect_size: int):
     '''
     # first col for label, remaining OBS_VECT_SIZE cols for environment features
     return np.zeros((0, 5+obs_vect_size), dtype=np.float32)
-    
-def ts_to_day(ts: int):
-    return math.floor(ts/ts_in_day)
-
-def skip_to_next_day(env: grid2op.Environment.Environment,
-                     num: int,
-                     disable_line: int) -> dict:
-    '''
-    Skip the environment to the next day.
-
-    Parameters
-    ----------
-    env : grid2op.Environment.Environment
-        The environment to fast forward to the next day in.
-    num : int
-        The current chronic id.
-    disable_line : int
-        The index of the line to be disabled.
-
-    Returns
-    -------
-    info : dict
-        Grid2op dict given out as the fourth otuput of env.step(). Contains 
-        the info about whether an error has occured.
-    '''
-
-    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step))
-    env.set_id(num)
-    _ = env.reset()
-    
-    if disable_line != -1:
-        env.fast_forward_chronics(ts_next_day-1)
-        _, _, _, info = env.step(env.action_space(
-            {"set_line_status":(disable_line,-1) }))
-    else:
-        env.fast_forward_chronics(ts_next_day)
-
-    return info
                 
 if __name__ == '__main__':
-    util.set_wd_to_package_root()
-        
     parser = argparse.ArgumentParser()
     parser.add_argument("--do_nothing_capacity_threshold",  help="The threshold " +
                         "max. line rho at which the tutor takes actions.",
@@ -195,7 +118,7 @@ if __name__ == '__main__':
     disable_line = args.disable_line
     
     #Initialize environment
-    env = init_env(config)
+    env = g2o_util.init_env(config, grid2op.Rules.AlwaysLegal)
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     env.set_id(start_chronic_id)
     
@@ -204,6 +127,9 @@ if __name__ == '__main__':
                   args.do_nothing_capacity_threshold)
     obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
+    
+    #Auxilary ts_to_day function
+    ts_to_day = lambda ts: g2o_util.ts_to_day(ts,ts_in_day)
     
     for num in range(start_chronic_id, start_chronic_id+num_chronics):
         
@@ -228,7 +154,8 @@ if __name__ == '__main__':
                         [type(e) for e in info['exception']]: 
                 print(f'Powerflow exception at step {env.nb_time_step} '+
                       f'on day {ts_to_day(env.nb_time_step)}')
-                info = skip_to_next_day(env, num, disable_line)
+                info = g2o_util.skip_to_next_day(env, ts_in_day,
+                                                 num, disable_line)
                 day_records = empty_records(obs_vect_size)
                 continue
                 
@@ -261,7 +188,8 @@ if __name__ == '__main__':
             if env.done:
                 print(f'Failure at step {env.nb_time_step} '+
                       f'on day {ts_to_day(env.nb_time_step)}')
-                info = skip_to_next_day(env, num, disable_line)
+                info = g2o_util.skip_to_next_day(env,  ts_in_day, 
+                                                 num, disable_line)
                 day_records = empty_records(obs_vect_size)
          
         # print whether game was completed succesfully, save days' records if so
