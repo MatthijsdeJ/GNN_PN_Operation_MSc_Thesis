@@ -488,8 +488,11 @@ class Run():
             wrong_indices = util.flatten([wrong_counter[a]*[i] for i,(a,_) \
                     in enumerate(comb_counter_mc)])
             fig, ax = plt.subplots()
-            n_bins = max(correct_indices + wrong_indices)
-            ax.hist([correct_indices,wrong_indices], bins=n_bins,stacked=True)
+            n_bins = max(correct_indices + wrong_indices)+1
+            ax.hist([correct_indices,wrong_indices], 
+                    color=['lime','red'],
+                    bins=n_bins,
+                    stacked=True)
             run.log({"action_correct_dist": fig},step=step) 
             plt.close(fig)
         
