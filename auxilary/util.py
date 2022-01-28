@@ -37,7 +37,7 @@ def set_wd_to_package_root():
     '''
     Set the working directory to the root of the package.
     '''
-    os.chdir(os.path.dirname(__file__))
+    os.chdir(os.path.dirname(__file__) + '/..' )
     
 def flatten(t: Sequence[Sequence]) -> List:
     '''
