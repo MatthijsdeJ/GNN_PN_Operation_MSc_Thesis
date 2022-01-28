@@ -16,6 +16,7 @@ import auxilary.util as util
 from auxilary.util import NumpyEncoder
 from tqdm import tqdm
 from auxilary.generate_action_space import action_identificator
+from collections import Counter
 '''
 TODO: Functions in this file were created during data exploration, but
 have not been tested rigourisly or updated since. Be mindful.
@@ -411,6 +412,7 @@ def process_raw_tutor_data(config: dict):
     output_data_path = config['paths']['processed_tutor_imitation']
     con_matrix_path = config['paths']['con_matrix_cache']
     fstats_path = config['paths']['feature_statistics']
+    ac_path = config['paths']['action_counter']
 
     #Initialize environment and environment variables
     env = g2o_util.init_env(config,
@@ -424,7 +426,9 @@ def process_raw_tutor_data(config: dict):
     action_iders = {}
     #Create object for tracking the feature statistics
     fstats = FeatureStatistics()
-
+    #Object for tracking action frequencies. Can be used to filter out 
+    #rare actions
+    action_counter = Counter()
 
     for fp in tqdm(get_filepaths(tutor_data_path)):
         line_disabled, _, chronic_id, dayscomp = \
@@ -487,6 +491,12 @@ def process_raw_tutor_data(config: dict):
             dp['res_topo_vect'] = np.array([t if s==0 else s for t,s in 
                                             zip(dp['topo_vect'],dp['set_topo_vect'])])
 
+            #Update action counter
+            #TODO: Change this for scenarios with different topologies
+            act_hash = util.hash_nparray(dp['change_topo_vect'])
+            action_counter[act_hash] += 1
+            dp['act_hash'] = act_hash
+            
             #Skip datapoint if any other line is disabled
             if -1 in dp['topo_vect']:
                 continue
@@ -522,6 +532,11 @@ def process_raw_tutor_data(config: dict):
         
     cmc.save(con_matrix_path)
     fstats.save_feature_statistics(fstats_path)
+    with open(ac_path, 'w') as outfile:
+        json.dump(action_counter, 
+                  outfile, 
+                  cls=NumpyEncoder)
+    
 
 # =============================================================================
 #     def update_datapoint(self, data):

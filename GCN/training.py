@@ -116,6 +116,7 @@ class Run():
         processed_data_path = config['paths']['processed_tutor_imitation']
         matrix_cache_path = config['paths']['con_matrix_cache']
         feature_statistics_path = config['paths']['feature_statistics']
+        action_counter_path = config['paths']['action_counter']
         
         #Specify device to use
         self.device = torch.device('cuda' if torch.cuda.is_available() 
@@ -132,8 +133,6 @@ class Run():
                          train_config['hyperparams']['aggr'],
                          train_config['hyperparams']['network_type'])
         self.model.to(self.device)
-#        if train_config['hyperparams']['kaiming_weight_init']:
-#            self.model.init_weights_kaiming()
 
         #Init optimizer
         w_decay = train_config['hyperparams']['weight_decay']
@@ -143,18 +142,23 @@ class Run():
         
         #Initalize dataloaders
         network_type = train_config['hyperparams']['network_type']
+        af_th = train_config['hyperparams']['action_frequency_threshold']
         self.train_dl = TutorDataLoader(processed_data_path + '/train', 
                                         matrix_cache_path, 
                                         feature_statistics_path,
+                                        action_counter_path,
                                         device=self.device,
                                         network_type=network_type,
-                                        train=True)
+                                        train=True,
+                                        action_frequency_threshold=af_th)
         self.val_dl = TutorDataLoader(processed_data_path + '/val', 
                                       matrix_cache_path, 
                                       feature_statistics_path,
+                                      action_counter_path,
                                       device=self.device,
                                       network_type=network_type,
-                                      train=False)
+                                      train=False,
+                                      action_frequency_threshold=af_th)
         
         #Initialize metrics objects
         IA = metrics.IncrementalAverage

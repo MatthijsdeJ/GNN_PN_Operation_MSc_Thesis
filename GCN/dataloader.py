@@ -12,6 +12,7 @@ import random
 import data_preprocessing_analysis.imitation_data_preprocessing as idp
 from typing import List
 import numpy as np
+import auxilary.util as util
 
 class TutorDataLoader():
     '''
@@ -21,10 +22,12 @@ class TutorDataLoader():
     def __init__(self, 
                  root: str, 
                  matrix_cache_path: str, 
-                 feature_statistics_path: str, 
+                 feature_statistics_path: str,
+                 action_counter_path: str,
                  device: torch.device,
                  network_type: str,
-                 train: bool):
+                 train: bool,
+                 action_frequency_threshold: int = 0):
         '''
         Parameters
         ----------
@@ -34,6 +37,8 @@ class TutorDataLoader():
             The path of the matrix cache file.
         feature_statistics_path : str
             The path of the feature statistics file.
+        action_counter_path: str
+            The path of the action counter json file.
         device : torch.device
             What device to load the data on.
         network_type : str
@@ -41,7 +46,11 @@ class TutorDataLoader():
             in a different format. Should be 'homogenous' or 'heterogenous'.
         train : bool
             Whether the loaded data is used for training or validation. 
-            More data is included in validation.
+            More information is included in validation.
+        action_frequency_threshold : int
+            Mimimum frequency of an action in the dataset in order to be 
+            used during training. Can be used to filter out infrequent actions.
+            Default is zero.
         '''
         
         self._file_names = os.listdir(root)
@@ -49,12 +58,15 @@ class TutorDataLoader():
         self._matrix_cache = idp.ConMatrixCache.load(matrix_cache_path)
         with open(feature_statistics_path, 'r') as file:
             self._feature_statistics = json.loads(file.read())
+        with open(action_counter_path, 'r') as file:
+            self._action_counter = json.loads(file.read())
         self.device=device
         
         assert network_type in ['homogeneous','heterogeneous'], \
                                 'Invalid network type'
         self.network_type=network_type
         self.train = train
+        self.action_frequency_threshold = action_frequency_threshold
         
 
     def get_file_datapoints(self, idx: int) -> List[dict]:
@@ -76,13 +88,26 @@ class TutorDataLoader():
         
         #'raw' is not fully true, as these datapoints should already have been
         #preprocessed
+        
         with open(self._file_paths[idx], 'r') as file:
             raw_datapoints = json.loads(file.read())
             
         processed_datapoints = []
         for raw_dp in raw_datapoints:
             dp = dict()
+
+            act_freq = self._action_counter[str(raw_dp['act_hash'])]
+            if act_freq < self.action_frequency_threshold:
+                continue
+                
+            #Load the label
+            dp['change_topo_vect'] = torch.tensor(raw_dp['change_topo_vect'],
+                                                  device=device,
+                                                  dtype=torch.float)
             
+            
+                
+                
             #Create the object position topology vector, which relates the
             #objects ordered by type to their position in the topology vector
             dp['object_ptv'] = np.argsort(np.concatenate(
@@ -96,10 +121,7 @@ class TutorDataLoader():
             dp['sub_info'] = raw_dp['sub_info']
             
             
-            #Load the label
-            dp['change_topo_vect'] = torch.tensor(raw_dp['change_topo_vect'],
-                                                  device=device,
-                                                  dtype=torch.float)
+
             
             #Load, normalize features, turn them into tensors
             fstats = self._feature_statistics

@@ -7,6 +7,7 @@ paths:
   action_space: action_space/
   con_matrix_cache: data/auxilary_data_objects/con_matrix_cache.json
   feature_statistics: data/auxilary_data_objects/feature_statistics.json
+  action_counter: data/auxilary_data_objects/action_counter.json
 
 tutor_generated_data:
   n_chronics: 50
@@ -30,7 +31,7 @@ training:
   hyperparams:
     n_epoch: 100
     lr: 1.5E-3
-    network_type: heterogenous #Should be 'homogenous' or 'heterogenous'
+    network_type: heterogeneous #Should be 'homogenous' or 'heterogenous'
     N_GNN_layers: 5
     N_node_hidden: 120 #Size of hidden layers in model
     LReLu_neg_slope: 0.1
@@ -43,6 +44,9 @@ training:
     non_sub_label_weight: 0.1
     early_stopping_patience: 15 #stop training when max. val. macro accuracy 
     #valid hasn't improved
+    action_frequency_threshold: 1000 #min. frequency of an action in the 
+    #dataset in order to be used during training. Can be used to filter 
+    #infrequent actions
   constants:
     N_f_gen: 3 #Number of generator features
     N_f_load: 3 #Number of load features
