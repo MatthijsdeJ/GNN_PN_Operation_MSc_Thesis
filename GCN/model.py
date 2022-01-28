@@ -264,6 +264,12 @@ class GCN(torch.nn.Module):
                 diffs['self_sb_neigh'] .append(norm_w_self-norm_w_sb)
                 diffs['self_ob_neigh'].append(norm_w_self-norm_w_ob)
         else:
-            raise NotImplementedError
+            
+            diffs['self_neigh'] = []
+            
+            for l in self.GNN_layers:
+                norm_w_self = l_w_norm(l.lin_r)
+                norm_w_neigh = l_w_norm(l.lin_l)
+                diffs['self_neigh'].append(norm_w_self - norm_w_neigh)
             
         return diffs
