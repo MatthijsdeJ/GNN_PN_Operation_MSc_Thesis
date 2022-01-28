@@ -19,11 +19,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--do_nothing_capacity_threshold",  help="The threshold " +
                         "max. line rho at which the tutor takes actions.",
-                        required=False, default=.97,type=float)
+                        required=False, default=.97, type=float)
     parser.add_argument("--disable_line",  help="The index of the line to be disabled.",
-                        required=False,default=-1,type=int)
+                        required=False, default=-1, type=int)
     parser.add_argument("--start_chronic_id",  help="The chronic to start with.",
-                        required=False,default=0,type=int)
+                        required=False, default=0, type=int)
     args = parser.parse_args()
     
     config = util.load_config()
