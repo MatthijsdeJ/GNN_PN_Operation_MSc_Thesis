@@ -6,7 +6,7 @@ Created on Thu Jan 27 12:27:45 2022
 @author: matthijs
 """
 
-import auxilary.util as util
+import auxiliary.util as util
 from data_preprocessing_analysis.imitation_data_preprocessing import process_raw_tutor_data
 import os
 from random import shuffle

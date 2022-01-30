@@ -11,9 +11,10 @@ import yaml
 import os
 from typing import List, Sequence, Callable
 import json
-    
+
+
 def load_config():
-    '''
+    """
     Loads the config file as dictionary
 
     Raises
@@ -26,21 +27,23 @@ def load_config():
     dict
         The config file.
 
-    '''
+    """
     with open('config.yaml') as stream:
         try:
             return yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             raise exc
-        
+
+
 def set_wd_to_package_root():
-    '''
+    """
     Set the working directory to the root of the package.
-    '''
-    os.chdir(os.path.dirname(__file__) + '/..' )
-    
+    """
+    os.chdir(os.path.dirname(__file__) + '/..')
+
+
 def flatten(t: Sequence[Sequence]) -> List:
-    '''
+    """
     Flatten a sequence of sequences.
 
     Parameters
@@ -52,11 +55,12 @@ def flatten(t: Sequence[Sequence]) -> List:
     -------
     List
         Flattened sequence.
-    '''
+    """
     return [item for sublist in t for item in sublist]
 
+
 def hash_nparray(arr: np.array) -> int:
-    '''
+    """
     Hashes a numpy array.
 
     Parameters
@@ -68,27 +72,29 @@ def hash_nparray(arr: np.array) -> int:
     -------
     int
         The hash value.
-    '''
+    """
     return hash(arr.data.tobytes())
 
+
 class NumpyEncoder(json.JSONEncoder):
-    '''
+    """
     Class that can be used in json.dump() to encode np.array objects.
-    '''
+    """
     
     def default(self, obj):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
-def argmax_f(x: Sequence, f: Callable) -> int:
-    '''
-    Take the argmax (i.e. the index) based on a the maximum of a particular 
+
+def argmax_f(s: Sequence, f: Callable) -> int:
+    """
+    Take the argmax (i.e. the index) based on the maximum of a particular
     function.
 
     Parameters
     ----------
-    x : Sequence
+    s : Sequence
         The sequence to find the argmax of.
     f : Callable
         The function to apply to the elements
@@ -98,5 +104,6 @@ def argmax_f(x: Sequence, f: Callable) -> int:
     int
         The index produced by the argmax.
 
-    '''
-    return max(enumerate([f(d) for d in x]),key=lambda x:x[1])[0]
+    """
+    return max(enumerate([f(d) for d in s]),
+               key=lambda x: x[1])[0]

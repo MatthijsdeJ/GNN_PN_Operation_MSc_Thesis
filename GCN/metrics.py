@@ -9,60 +9,63 @@ from typing import Optional, Dict, Callable, List, Tuple
 import torch
 import wandb
 
-class IncrementalAverage():
-    '''
+
+class IncrementalAverage:
+    """
     A class for keeping an average that can be incremented one value at the time.
-    '''
+    """
+
     def __init__(self):
-        self.sum=0.0
-        self.n=0
-        
-    def log(self,val: Optional[float]):
-        '''
+        self.sum = 0.0
+        self.n = 0
+
+    def log(self, val: Optional[float]):
+        """
         Increment the average with a value.
 
         Parameters
         ----------
         val : Optional[float]
             The value. Can be 'None', and it will then be ignored.
-        '''
+        """
         if val is not None:
-            self.sum+=val
-            self.n+=1
-        
+            self.sum += val
+            self.n += 1
+
     def get(self) -> float:
-        '''
+        """
         Get the value of the average.
-        '''
-        return self.sum/self.n
-    
+        """
+        return self.sum / self.n
+
     def reset(self):
-        '''
+        """
         Reset the average.
-        '''
-        self.sum=0.0
-        self.n=0    
-        
-class IncrementalAverageMetrics():
-    '''
-    A class for storing, updating, retrieving, printing, and resetting 
+        """
+        self.sum = 0.0
+        self.n = 0
+
+
+class IncrementalAverageMetrics:
+    """
+    A class for storing, updating, retrieving, printing, and resetting
     multiple incremental averages.
-    '''
-    
-    def __init__(self, metrics_dict: Dict[str,Tuple[Callable,IncrementalAverage]]):
-        '''
+    """
+
+    def __init__(self, metrics_dict: Dict[str, Tuple[Callable, IncrementalAverage]]):
+        """
         Parameters
         ----------
         metrics_dict : dict
             The dictionary is of the typeDict[str,tuple(Callable,IncrementalAverage)].
             The string is the metric name.
             The 'Callable' is the function that computes the metric.
-            The 'IncrementalAverage' is, suprisingly, the incremental average.
-        '''
+            The 'IncrementalAverage' is, surprisingly, the incremental average.
+        """
         self.metrics_dict = metrics_dict
-        
-    def log(self,**kwargs: dict):
-        '''
+
+    def log(self, **kwargs: dict):
+        """
         Update the incremental averages.
 
         Parameters
@@ -70,11 +73,11 @@ class IncrementalAverageMetrics():
         **kwargs : dict
             This dictionary contains arbitrary information that the metrics
             might need to update.
-        '''
-        [run_avr.log(f(**kwargs)) for f,run_avr in self.metrics_dict.values()]
-        
-    def get_values(self) -> List[Tuple[str,float]]:
-        '''
+        """
+        [run_avr.log(f(**kwargs)) for f, run_avr in self.metrics_dict.values()]
+
+    def get_values(self) -> List[Tuple[str, float]]:
+        """
         Returns
         -------
         List[Tuple[str,float]]
@@ -82,42 +85,45 @@ class IncrementalAverageMetrics():
             First element of each tuple represents the name of the metric,
             the second its average value.
 
-        '''
-        return [(key,val[1].get()) for key,val in self.metrics_dict.items()]
-    
+        """
+        return [(key, val[1].get()) for key, val in self.metrics_dict.items()]
+
     def log_to_wandb(self, run: wandb.sdk.wandb_run.Run, step: int):
-        '''
+        #  run: wandb.sdk.wandb_run.Run
+        """
         Log the metrics to wandb.
 
         Parameters
         ----------
         run : wandb.sdk.wandb_run.Run
             The run to log to.
-        '''
+        step : int
+            The current step in the run.
+        """
         run.log(dict(self.get_values()), step=step)
-    
+
     def reset(self):
-        '''
+        """
         Reset all incremental averages.
-        '''
-        [run_avr.reset() for _,run_avr in self.metrics_dict.values()]
-        
+        """
+        [run_avr.reset() for _, run_avr in self.metrics_dict.values()]
+
     def __str__(self):
-        '''
+        """
         Returns human-readable string representation of the metrics.
 
         Returns
         -------
         str
             The string.
-        '''
-        return  '\n'.join([f'{n}: {v}' for n,v in self.get_values()])
-    
+        """
+        return '\n'.join([f'{n}: {v}' for n, v in self.get_values()])
+
 
 def macro_accuracy(**kwargs: dict) -> bool:
-    '''
+    """
     Calculates whether the predicted output wholly matches the true output.
-    Differes from micro_accuracy in that it doesn't check the element-wise
+    Differs from micro_accuracy in that it doesn't check the element-wise
     accuracy.
 
     Parameters
@@ -128,23 +134,24 @@ def macro_accuracy(**kwargs: dict) -> bool:
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
-        
+
     Returns
     -------
     bool
         Whether the predicted output matches the true output.
-    '''
+    """
     P = kwargs['P']
     Y = kwargs['Y']
-    return torch.equal(torch.round(P),torch.round(Y))
+    return torch.equal(torch.round(P), torch.round(Y))
+
 
 def micro_accuracy(**kwargs: dict) -> float:
-    '''
-    Calculates the element-wise accuracy between the predicted 
+    """
+    Calculates the element-wise accuracy between the predicted
     output and the true output.
-    Differes from micro_accuracy in that this function checks the
+    Differs from micro_accuracy in that this function checks the
     element-wise accuracy.
-    
+
     Parameters
     ----------
     **kwargs['P'] : torch.Tensor[float]
@@ -153,72 +160,74 @@ def micro_accuracy(**kwargs: dict) -> float:
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
-        
+
     Returns
     -------
     float
         The element-wise accuracy.
-    '''
+    """
     P = kwargs['P']
     Y = kwargs['Y']
-    return torch.mean(torch.eq(torch.round(P),torch.round(Y)).float()).item()
+    return torch.mean(torch.eq(torch.round(P), torch.round(Y)).float()).item()
+
 
 def macro_accuracy_one_sub(**kwargs: dict) -> bool:
-    '''
+    """
     Calculates whether the predicted output, after the postprocessing step of
-    selecting the single most 'changed' substation has been applied, wholly 
+    selecting the single most 'changed' substation has been applied, wholly
     matches the true output.
-    Differes from micro_accuracy_one_sub in that it doesn't check the 
+    Differs from micro_accuracy_one_sub in that it doesn't check the
     element-wise accuracy.
-    Differes from macro_accuracy and macro_accuracy_valid in the 
+    Differs from macro_accuracy and macro_accuracy_valid in the
     postprocessing that has been applied to the prediction.
 
     Parameters
     ----------
     **kwargs['one_sub_P'] : torch.Tensor[float]
         The output of the model after the postprocessing step of
-        selecting the single most 'changed' substation has been applied. 
-        Elements are floats in the range (0,1). A value below 0.5 represents 
+        selecting the single most 'changed' substation has been applied.
+        Elements are floats in the range (0,1). A value below 0.5 represents
         no change; above 0.5, change.
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
-        
+
     Returns
     -------
     bool
-        Whether the postprocessed predicted output matches the true output.
-    '''
+        Whether the post-processed predicted output matches the true output.
+    """
     one_sub_P = kwargs['one_sub_P']
     Y = kwargs['Y']
-    return torch.equal(torch.round(one_sub_P),torch.round(Y))
+    return torch.equal(torch.round(one_sub_P), torch.round(Y))
+
 
 def micro_accuracy_one_sub(**kwargs: dict) -> float:
-    '''
-    Calculates the element-wise accuracy between predicted output, after the 
-    postprocessing step of selecting the single most 'changed' substation has 
+    """
+    Calculates the element-wise accuracy between predicted output, after the
+    postprocessing step of selecting the single most 'changed' substation has
     been applied, and the true output.
-    Differes from macro_accuracy_one_sub in that this function checks the
+    Differs from macro_accuracy_one_sub in that this function checks the
     element-wise accuracy.
-    Differes from micro_accuracy and micro_accuracy_valid in the 
-    postprocessing that has been applied to the prediction.
+    Differs from micro_accuracy and micro_accuracy_valid in the
+    post-processing that has been applied to the prediction.
 
     Parameters
     ----------
     **kwargs['one_sub_P'] : torch.Tensor[float]
         The output of the model after the postprocessing step of
-        selecting the single most 'changed' substation has been applied. 
-        Elements are floats in the range (0,1). A value below 0.5 represents 
+        selecting the single most 'changed' substation has been applied.
+        Elements are floats in the range (0,1). A value below 0.5 represents
         no change; above 0.5, change.
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
-        
+
     Returns
     -------
     bool
         Whether the predicted output matches the true output.
-    '''
+    """
     one_sub_P = kwargs['one_sub_P']
     Y = kwargs['Y']
     return torch.mean(torch.eq(torch.round(one_sub_P),
@@ -227,13 +236,13 @@ def micro_accuracy_one_sub(**kwargs: dict) -> float:
 
 
 def macro_accuracy_valid(**kwargs: dict) -> bool:
-    '''
+    """
     Calculates whether the predicted output, after the postprocessing step of
-    selecting the closest valid action has been applied, wholly 
+    selecting the closest valid action has been applied, wholly
     matches the true output.
-    Differes from micro_accuracy_valid in that it doesn't check the 
+    Differs from micro_accuracy_valid in that it doesn't check the
     element-wise accuracy.
-    Differes from macro_accuracy and macro_accuracy_one_sub in the 
+    Differs from macro_accuracy and macro_accuracy_one_sub in the
     postprocessing that has been applied to the prediction.
 
     Parameters
@@ -241,54 +250,55 @@ def macro_accuracy_valid(**kwargs: dict) -> bool:
     **kwargs['nearest_valid_P'] : torch.Tensor[float]
         The output of the model after the postprocessing step of
         selecting the nearest valid action has been applied.
-        Elements are floats in the range (0,1). A value below 0.5 represents 
+        Elements are floats in the range (0,1). A value below 0.5 represents
         no change; above 0.5, change.
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
-        
+
     Returns
     -------
     bool
-        Whether the postprocessed predicted output matches the true output.
-    '''
+        Whether the post-processed predicted output matches the true output.
+    """
     nearest_valid_P = kwargs['nearest_valid_P']
     Y = kwargs['Y']
-    return torch.equal(nearest_valid_P,torch.round(Y))
+    return torch.equal(nearest_valid_P, torch.round(Y))
+
 
 def micro_accuracy_valid(**kwargs: dict) -> float:
-    '''
-    Calculates the element-wise accuracy between predicted output, after the 
-    postprocessing step of selecting the closest valid action has been applied, 
+    """
+    Calculates the element-wise accuracy between predicted output, after the
+    postprocessing step of selecting the closest valid action has been applied,
     and the true output.
-    Differes from macro_accuracy_valid in that this function checks the
+    Differs from macro_accuracy_valid in that this function checks the
     element-wise accuracy.
-    Differes from micro_accuracy and micro_accuracy_one_sub in the 
+    Differs from micro_accuracy and micro_accuracy_one_sub in the
     postprocessing that has been applied to the prediction.
 
     Parameters
     ----------
     **kwargs['one_sub_P'] : torch.Tensor[float]
-        The output of the model after the postprocessing step of selecting the 
+        The output of the model after the postprocessing step of selecting the
         closest valid action has been applied
-        Elements are floats in the range (0,1). A value below 0.5 represents 
+        Elements are floats in the range (0,1). A value below 0.5 represents
         no change; above 0.5, change.
     **kwargs['Y'] : torch.Tensor[float]
         The label of the datapoints Elements are floats in {0,1}.
         A value below 0 represents no change; of 1, change.
-        
+
     Returns
     -------
     bool
         Whether the predicted output matches the true output.
-    '''
+    """
     nearest_valid_P = kwargs['nearest_valid_P']
     Y = kwargs['Y']
-    return torch.mean(torch.eq(nearest_valid_P,torch.round(Y)).float()).item()
+    return torch.mean(torch.eq(nearest_valid_P, torch.round(Y)).float()).item()
 
 
 def n_predicted_changes(**kwargs: dict) -> int:
-    '''
+    """
     Calculates the number of predicted changes.
 
     Parameters
@@ -301,12 +311,13 @@ def n_predicted_changes(**kwargs: dict) -> int:
     -------
     int
         The number of predicted changes.
-    '''
+    """
     P = kwargs['P']
     return torch.sum(torch.round(P)).item()
 
+
 def any_predicted_changes(**kwargs: dict) -> bool:
-    '''
+    """
     Calculates whether there were any predicted changes.
 
     Parameters
@@ -319,31 +330,30 @@ def any_predicted_changes(**kwargs: dict) -> bool:
     -------
     bool
         Whether there were any predicted changes.
-    '''
-    return n_predicted_changes(**kwargs)>0
+    """
+    return n_predicted_changes(**kwargs) > 0
+
 
 def accuracy_predicted_substation(**kwargs: dict) -> bool:
-    '''
-    Calculates whether the substation where the chagnges are predicted
+    """
+    Calculates whether the substation where the changes are predicted
     at corresponds to the substation with the label changes.
 
     Parameters
     ----------
     **kwargs['Y_subchanged_idx'] : int
-        The index of the substation where the 'true' changes would be applied. 
+        The index of the substation where the 'true' changes would be applied.
     **kwargs['P_subchanged_idx'] : int
-        The index of the substation where the predicted changes would be applied. 
-        
+        The index of the substation where the predicted changes would be applied.
+
     Returns
     -------
     bool
         Whether the two substations indices match.
-    '''  
+    """
     Y_subchanged_idx = kwargs['Y_subchanged_idx']
     P_subchanged_idx = kwargs['P_subchanged_idx']
-    return Y_subchanged_idx==P_subchanged_idx
-    
-
+    return Y_subchanged_idx == P_subchanged_idx
 
 # =============================================================================
 # def correct_whether_changes(**kwargs: dict):

@@ -12,7 +12,7 @@ author: chen binbin
 mail: cbb@cbb1996.com
 """
 import argparse
-import auxilary.util as util
+import auxiliary.util as util
 import imitation_generation.generation as gnr
                 
 if __name__ == '__main__':

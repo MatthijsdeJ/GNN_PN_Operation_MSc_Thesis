@@ -5,9 +5,9 @@ paths:
   tutor_imitation: data/tutor_generated_data/
   processed_tutor_imitation: data/processed_tutor_data/
   action_space: action_space/
-  con_matrix_cache: data/auxilary_data_objects/con_matrix_cache.json
-  feature_statistics: data/auxilary_data_objects/feature_statistics.json
-  action_counter: data/auxilary_data_objects/action_counter.json
+  con_matrix_cache: data/auxiliary_data_objects/con_matrix_cache.json
+  feature_statistics: data/auxiliary_data_objects/feature_statistics.json
+  action_counter: data/auxiliary_data_objects/action_counter.json
 
 tutor_generated_data:
   n_chronics: 50

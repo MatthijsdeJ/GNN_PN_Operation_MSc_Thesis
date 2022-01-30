@@ -8,7 +8,7 @@ Created on Wed Jan 19 13:01:28 2022
 
 from GCN.training import Run
 import argparse
-import auxilary.util as util
+import auxiliary.util as util
 
 
 def main():

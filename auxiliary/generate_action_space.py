@@ -58,7 +58,7 @@ import grid2op
 import numpy as np
 import itertools as it
 from typing import Tuple, List
-import auxilary.util as util
+import auxiliary.util as util
 import argparse
 
 def create_dictionary(combs,sub_elem): 

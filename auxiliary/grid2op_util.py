@@ -6,117 +6,122 @@ Created on Thu Jan 27 09:27:46 2022
 @author: matthijs
 """
 import numpy as np
-from typing import Sequence, Tuple, List
+from typing import Sequence, Tuple, List, Optional
 import grid2op
 from grid2op.dtypes import dt_int
 import math
 
+
 def extract_gen_features(obs_dict: dict) -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
+    """
+    Given the grid2op observation in dictionary form,
     return the generator features.
 
     Parameters
     ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
+    obs_dict : dict
+        Dictionary representation of the grid2op observation. Can be obtained
         with obs.to_dict().
 
     Returns
     -------
     X : np.array
-        Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v' features.
-    '''
+        Array representation of the features; rows correspond to the different
+        objects. Columns represent the 'p', 'q', 'v' features.
+    """
     X = np.array(list(obs_dict['gens'].values())).T
     return X
 
+
 def extract_load_features(obs_dict: dict) -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
+    """
+    Given the grid2op observation in dictionary form,
     return the generator features.
 
     Parameters
     ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
+    obs_dict : dict
+        Dictionary representation of the grid2op observation. Can be obtained
         with obs.to_dict().
 
     Returns
     -------
     X : np.array
-        Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v' features.
-    '''
+        Array representation of the features; rows correspond to the different
+        objects. Columns represent the 'p', 'q', 'v' features.
+    """
     X = np.array(list(obs_dict['loads'].values())).T
     return X
 
+
 def extract_or_features(obs_dict: dict, thermal_limits: Sequence[int]) \
-    -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
+                        -> np.array:
+    """
+    Given the grid2op observation in dictionary form,
     return the load features.
 
     Parameters
     ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
+    obs_dict : dict
+        Dictionary representation of the grid2op observation. Can be obtained
         with obs.to_dict().
     thermal_limits : Sequence[int]
         Sequence with the thermal limits of the lines.
-        
+
     Returns
     -------
     X : np.array
-        Array representation of the features;  rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho', 
+        Array representation of the features;  rows correspond to the different
+        objects. Columns represent the 'p', 'q', 'v', 'a', 'line_rho',
         'line_capacity' features.
-    '''
+    """
     X = np.array(list(obs_dict['lines_or'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
         X = np.concatenate((X,
-                            np.reshape(np.array(obs_dict['rho']),(-1,1)),
-                            np.reshape(np.array(thermal_limits),(-1,1))),
-                         axis=1)
+                            np.reshape(np.array(obs_dict['rho']), (-1, 1)),
+                            np.reshape(np.array(thermal_limits), (-1, 1))),
+                           axis=1)
     return X
 
+
 def extract_ex_features(obs_dict: dict, thermal_limits: Sequence[int]) \
-    -> np.array:
-    '''
-    Given the grid2op observation in dictionary form, 
+                        -> np.array:
+    """
+    Given the grid2op observation in dictionary form,
     return the generator features.
 
     Parameters
     ----------
-    obs : dict
-        Dictionary epresentation of the grid2op observation. Can be obtained 
+    obs_dict : dict
+        Dictionary representation of the grid2op observation. Can be obtained
         with obs.to_dict().
     thermal_limits : Sequence[int]
         Sequence with the thermal limits of the lines.
     Returns
     -------
     X : np.array
-        Array representation of the features; rows correspond to the different 
-        objects. Colums represent the 'p', 'q', 'v', 'a', 'line_rho', 
+        Array representation of the features; rows correspond to the different
+        objects. Columns represent the 'p', 'q', 'v', 'a', 'line_rho',
         'line_capacity' features.
-    '''
+    """
     X = np.array(list(obs_dict['lines_ex'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
         X = np.concatenate((X,
-                            np.reshape(np.array(obs_dict['rho']),(-1,1)),
-                            np.reshape(np.array(thermal_limits),(-1,1))),
+                            np.reshape(np.array(obs_dict['rho']), (-1, 1)),
+                            np.reshape(np.array(thermal_limits), (-1, 1))),
                            axis=1)
     return X
+
 
 def connectivity_matrices(sub_info: Sequence[int], 
                           topo_vect: Sequence[int], 
                           line_or_pos_topo_vect: Sequence[int], 
                           line_ex_pos_topo_vect: Sequence[int]
-                          ) -> Tuple[np.array,np.array,np.array]:
-    '''
-    Computes and return three connectivity matrices, based on three possible 
-    relations between objects. Matrices are returned as sparse matrices, 
-    represented by the indices of the edges. All relations are bidirectional, 
+                          ) -> Tuple[np.array, np.array, np.array]:
+    """
+    Computes and return three connectivity matrices, based on three possible
+    relations between objects. Matrices are returned as sparse matrices,
+    represented by the indices of the edges. All relations are bidirectional,
     i.e. duplicated.
 
     Parameters
@@ -134,14 +139,14 @@ def connectivity_matrices(sub_info: Sequence[int],
     Returns
     -------
     connectivity_matrix_samebus: np.array
-        The sparse connectivity matrix between objects connected to the same bus 
+        The sparse connectivity matrix between objects connected to the same bus
         of their substation.
     connectivity_matrix_otherbus = np.array
-        The sparse connectivity matrix between objects connected to the other bus 
+        The sparse connectivity matrix between objects connected to the other bus
         of their substation.
     connectivity_matrix_line = np.array
         The sparse connectivity matrix between objects connected by lines.
-    '''
+    """
 
     beg_ = 0
     end_ = 0
@@ -193,8 +198,8 @@ def connectivity_matrices(sub_info: Sequence[int],
 
     # both ends of a line are connected together (if line is connected)
     for q_id in range(len(line_or_pos_topo_vect)):
-        if topo_vect[line_or_pos_topo_vect][q_id]!=-1:
-            # if powerline is connected connect both its side
+        if topo_vect[line_or_pos_topo_vect][q_id] != -1:
+            # if powerline is connected, connect both its side
             row_ind_line.append(line_or_pos_topo_vect[q_id])
             col_ind_line.append(line_ex_pos_topo_vect[q_id])
             row_ind_line.append(line_ex_pos_topo_vect[q_id])
@@ -207,17 +212,18 @@ def connectivity_matrices(sub_info: Sequence[int],
     row_ind_line = np.array(row_ind_line).astype(dt_int)
     col_ind_line = np.array(col_ind_line).astype(dt_int)
            
-    connectivity_matrix_samebus = np.stack((row_ind_samebus,col_ind_samebus))
-    connectivity_matrix_otherbus = np.stack((row_ind_otherbus,col_ind_otherbus))
-    connectivity_matrix_line = np.stack((row_ind_line,col_ind_line))
+    connectivity_matrix_samebus = np.stack((row_ind_samebus, col_ind_samebus))
+    connectivity_matrix_otherbus = np.stack((row_ind_otherbus, col_ind_otherbus))
+    connectivity_matrix_line = np.stack((row_ind_line, col_ind_line))
 
-    return connectivity_matrix_samebus,  \
-           connectivity_matrix_otherbus, \
-           connectivity_matrix_line
+    return connectivity_matrix_samebus, \
+        connectivity_matrix_otherbus, \
+        connectivity_matrix_line
+
 
 def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
         List[Sequence]:
-    '''
+    """
     Group a sequence the shape of the topology vector by the substations.
 
     Parameters
@@ -225,7 +231,7 @@ def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
     tv : Sequence
         Sequence the shape of the topology vector.
     sub_info : Sequence[int]
-        Sequence with elements containing the number of object connected to 
+        Sequence with elements containing the number of object connected to
         each substation.
 
     Returns
@@ -233,18 +239,19 @@ def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
     List[Sequence]
         List, each element corresponding to a Sequence of objects in tv that
         belong to a particular substation.
-    '''
+    """
     i = 0
     gs = []
     for ss in sub_info:
         gs.append(tv[i:i+ss])
-        i+=ss
+        i += ss
     return gs
+
 
 def init_env(config: dict,
              gamerules_class: grid2op.Rules.BaseRules,
-             ) ->  grid2op.Environment.Environment:
-    '''
+             ) -> grid2op.Environment.Environment:
+    """
     Prepares the Grid2Op environment from a dictionary containing configuration
     setting.
 
@@ -259,8 +266,7 @@ def init_env(config: dict,
     -------
     env : TYPE
         The Grid2Op environment.
-
-    '''
+    """
     data_path = config['paths']['rte_case14_realistic']
     scenario_path = config['paths']['rte_case14_realistic_chronics']
 
@@ -271,25 +277,26 @@ def init_env(config: dict,
         env = grid2op.make(dataset=data_path, 
                            chronics_path=scenario_path, 
                            backend=backend,
-                           gamerules_class = gamerules_class,
+                           gamerules_class=gamerules_class,
                            test=True)
-    except:
+    except ImportError:
         env = grid2op.make(dataset=data_path, 
                            chronics_path=scenario_path,
-                           gamerules_class = gamerules_class, 
+                           gamerules_class=gamerules_class,
                            test=True)
         
     # for reproducible experiments
     env.seed(config['tutor_generated_data']['seed'])  
 
-    #Set custom thermal limits
+    # Set custom thermal limits
     thermal_limits = config['rte_case14_realistic']['thermal_limits']
     env.set_thermal_limit(thermal_limits)
     
     return env
 
+
 def ts_to_day(ts: int, ts_in_day: int) -> int:
-    '''
+    """
     Calculate what day (as a number) a timestep is in.
 
     Parameters
@@ -303,20 +310,21 @@ def ts_to_day(ts: int, ts_in_day: int) -> int:
     -------
     int
         The day.
-    '''
+    """
     return math.floor(ts/ts_in_day)
+
 
 def skip_to_next_day(env: grid2op.Environment.Environment,
                      ts_in_day: int,
                      chronic_id: int,
-                     disable_line: int) -> dict:
-    '''
+                     disable_line: int) -> Optional[dict]:
+    """
     Skip the environment to the next day.
 
     Parameters
     ----------
     env : grid2op.Environment.Environment
-        The environment to fast forward to the next day in.
+        The environment to fast-forward to the next day in.
     ts_in_day : int
         The number of timesteps in a day.
     chronic_id : int
@@ -327,9 +335,9 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
     Returns
     -------
     info : dict
-        Grid2op dict given out as the fourth otuput of env.step(). Contains 
-        the info about whether an error has occured.
-    '''
+        Grid2op dict given out as the fourth output of env.step(). Contains
+        the info about whether an error has occurred.
+    """
 
     ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step,
                                          ts_in_day))
@@ -339,8 +347,8 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
     if disable_line != -1:
         env.fast_forward_chronics(ts_next_day-1)
         _, _, _, info = env.step(env.action_space(
-            {"set_line_status":(disable_line,-1) }))
+            {"set_line_status": (disable_line, -1)}))
+        return info
     else:
         env.fast_forward_chronics(ts_next_day)
-
-    return info
+        return None
