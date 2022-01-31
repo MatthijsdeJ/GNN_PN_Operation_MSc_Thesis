@@ -28,6 +28,6 @@ if __name__ == '__main__':
     
     config = util.load_config()
     gnr.generate(config,
-                 args.disable_line,
                  args.do_nothing_capacity_threshold,
+                 args.disable_line,
                  args.start_chronic_id)

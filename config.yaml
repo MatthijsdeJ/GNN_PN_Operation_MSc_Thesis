@@ -12,7 +12,9 @@ paths:
 tutor_generated_data:
   n_chronics: 50
   seed: 1
-  
+  line_idxs_to_consider_N-1: [0, 1, 2, 3, 4, 5, 6, 10, 12, 13, 15, 16, 19] # The indices of the lines to disable
+  # for evaluating N-1 scenarios
+
 rte_case14_realistic:
   thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
   ts_in_day: 288 #Number of timesteps in a grid2op day

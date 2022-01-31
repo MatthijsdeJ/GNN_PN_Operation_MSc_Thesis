@@ -9,7 +9,7 @@ Created on Fri Jan 28 13:51:31 2022
 import os
 import grid2op
 import numpy as np
-from imitation_generation.tutor import Tutor
+from imitation_generation.tutor import Tutor, CheckNMinOneStrategy
 from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
 
@@ -126,9 +126,12 @@ def generate(config: dict,
     env.set_id(start_chronic_id)
     
     # Prepare tutor and record objects
-    tutor = Tutor(env.action_space, 
+    strategy = CheckNMinOneStrategy(env.action_space,
+                                    config['tutor_generated_data']['line_idxs_to_consider_N-1'])
+    tutor = Tutor(env.action_space,
                   get_env_actions(disable_line=disable_line),
-                  do_nothing_capacity_threshold)
+                  do_nothing_capacity_threshold,
+                  strategy)
     obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
     
