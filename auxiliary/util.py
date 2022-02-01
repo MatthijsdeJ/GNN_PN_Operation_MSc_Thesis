@@ -12,6 +12,8 @@ import os
 from typing import List, Sequence, Callable
 import json
 
+import training.models
+
 
 def load_config():
     """
@@ -30,9 +32,13 @@ def load_config():
     """
     with open('config.yaml') as stream:
         try:
-            return yaml.safe_load(stream)
+            config = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             raise exc
+    config['training']['GCN']['hyperparams']['network_type'] = training.models.GCN.NetworkType(
+        config['training']['GCN']['hyperparams']['network_type']
+    )
+    return config
 
 
 def set_wd_to_package_root():

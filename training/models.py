@@ -8,10 +8,8 @@ Created on Fri Jan 14 12:11:43 2022
 import torch
 from torch_geometric.nn import SAGEConv, Linear, HeteroConv
 from typing import Dict, List
+from enum import Enum, unique
 
-
-# These indices are required from transferring from the order where different objects appear first \
-# (gens, loads, ors, exs) to the order in the adjacency matrix
 
 class GCN(torch.nn.Module):
     """
@@ -19,6 +17,11 @@ class GCN(torch.nn.Module):
     Consists of: two embedding layers that should embed the different object
     features into a common embedding; and a number of GNN layers.
     """
+
+    @unique
+    class NetworkType(Enum):
+        HETERO = 'heterogeneous'
+        HOMO = 'homogeneous'
 
     def __init__(self,
                  LReLu_neg_slope: float,
@@ -29,7 +32,7 @@ class GCN(torch.nn.Module):
                  N_GNN_layers: int,
                  N_node_hidden: int,
                  aggr: str,
-                 network_type: str):
+                 network_type: NetworkType) -> object:
         """
         Parameters
         ----------
@@ -50,11 +53,13 @@ class GCN(torch.nn.Module):
             The number of hidden nodes in the hidden layers.
         aggr : str
             The aggregation function for GNN layers. Should be 'add' or 'mean'.
-        network_type : str
-            The type of network. Should be 'homogeneous' or 'heterogeneous'.
+        network_type : NetworkType
+            The type of network.
         """
         super().__init__()
         self.network_type = network_type
+        HOMO = GCN.NetworkType.HOMO
+        HETERO = GCN.NetworkType.HETERO
 
         # The activation function. Inplace helps make it work for both
         # network types.
@@ -77,9 +82,9 @@ class GCN(torch.nn.Module):
 
         # Factory function that creates GNN layers.
         def GNN_layer(n_in, n_out, aggr_f='add'):
-            if network_type == 'homogeneous':
+            if network_type == HOMO:
                 return SAGEConv(n_in, n_out, root_weight=True, aggr=aggr_f)
-            elif network_type == 'heterogeneous':
+            elif network_type == HETERO:
                 return HeteroConv({
                     ('object', 'line', 'object'):
                         SAGEConv(n_in, n_out, root_weight=False, aggr=aggr_f, bias=False),
@@ -135,6 +140,8 @@ class GCN(torch.nn.Module):
         x : torch.Tensor
             The output vector. Values should be in range (0,1).
         """
+        HOMO = GCN.NetworkType.HOMO
+        HETERO = GCN.NetworkType.HETERO
 
         # Passing the object features through their respective
         # embedding layers
@@ -160,17 +167,17 @@ class GCN(torch.nn.Module):
         x = torch.cat([x_gen, x_load, x_or, x_ex], axis=0)
         x = x[object_ptv]
 
-        if self.network_type == 'heterogeneous':
+        if self.network_type == HETERO:
             x = {'object': x}
 
         # Pass through the GNN layers
         for l in self.GNN_layers[:-1]:
             x = l(x, edge_index)
-            self.activation_f(x if self.network_type == 'homogeneous' else x['object'])
+            self.activation_f(x if self.network_type == HOMO else x['object'])
 
         # Pass through the final layer and the sigmoid activation function
         x = self.GNN_layers[-1](x, edge_index)
-        x = torch.sigmoid(x if self.network_type == 'homogeneous' else x['object'])
+        x = torch.sigmoid(x if self.network_type == HOMO else x['object'])
 
         return x
 
@@ -239,7 +246,7 @@ class GCN(torch.nn.Module):
             return abs(layer.weight).sum().item()
 
         diffs = {}
-        if self.network_type == 'heterogeneous':
+        if self.network_type == GCN.NetworkType.HETERO:
 
             diffs['self_line_neigh'] = []
             diffs['self_sb_neigh'] = []
@@ -258,7 +265,8 @@ class GCN(torch.nn.Module):
                 diffs['self_line_neigh'].append(norm_w_self - norm_w_line)
                 diffs['self_sb_neigh'].append(norm_w_self - norm_w_sb)
                 diffs['self_ob_neigh'].append(norm_w_self - norm_w_ob)
-        else:
+
+        elif self.network_type == GCN.NetworkType.HOMO:
 
             diffs['self_neigh'] = []
 
@@ -268,3 +276,99 @@ class GCN(torch.nn.Module):
                 diffs['self_neigh'].append(norm_w_self - norm_w_neigh)
 
         return diffs
+
+
+class FCNN(torch.nn.Module):
+    """
+    Fully connected neural network. Consists of multiple feedforward layers.
+    """
+
+    def __init__(self,
+                 LReLu_neg_slope: float,
+                 weight_init_std: float,
+                 size_in: int,
+                 size_out: int,
+                 N_layers: int,
+                 N_node_hidden: int):
+        """
+        Parameters
+        ----------
+        LReLu_neg_slope : float
+            The negative slope of the LReLu activation function.
+        weight_init_std: float,
+            The standard deviation of the normal distribution according to which the weights are initialized.
+        N_layers : int
+            The number of layers.
+        N_node_hidden : int
+            The number of nodes in the hidden layers.
+        """
+        super().__init__()
+
+        # The activation function.
+        self.LReLu_neg_slope = LReLu_neg_slope
+        self.activation_f = torch.nn.LeakyReLU(LReLu_neg_slope)
+
+        # The first layer
+        self.lin_first = Linear(size_in, N_node_hidden)
+
+        # Create the middle layers
+        self.lin_middle_layers = torch.nn.ModuleList([Linear(N_node_hidden, N_node_hidden)
+                                                      for _ in range(N_layers - 2)])
+
+        # The last layer
+        self.lin_last = Linear(N_node_hidden, size_out)
+
+        # Initialize weights according to normal distribution
+        self.init_weights_normalized_normal(weight_init_std)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Passes the datapoint through the network.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            The input of the model (i.e. the features).
+        Returns
+        -------
+        x : torch.Tensor
+            The output vector. Values should be in range (0,1).
+        """
+        # Passing the states through the consecutive linear (i.e. fully connected) layers
+        x = self.lin_first(x)
+        x = self.activation_f(x)
+
+        for l in self.lin_middle_layers:
+            x = l(x)
+            x = self.activation_f(x)
+
+        x = self.lin_last(x)
+        x = torch.sigmoid(x)
+
+        return x
+
+    def init_weights_normalized_normal(self, weight_init_std: float):
+        """
+        Initialize the weights of this network according to the normal
+        distribution, but with the std divided by the number of in channels.
+        The biases are initialized to zero.
+
+        Parameters
+        ----------
+        weight_init_std : float
+            The standard deviation of the normal distribution.
+        """
+
+        def layer_weights_normal(m):
+            """
+            Apply initialization to a single layer.
+            """
+            classname = m.__class__.__name__
+            # for every Linear layer in a model.
+            if classname.find('Linear') != -1:
+                std = weight_init_std / m.in_channels
+                torch.nn.init.normal_(m.weight, std=std)
+                if m.bias is not None:
+                    m.bias.data.fill_(0)
+
+        self.apply(layer_weights_normal)

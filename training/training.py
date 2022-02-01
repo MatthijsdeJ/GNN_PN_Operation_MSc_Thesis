@@ -7,10 +7,10 @@ Created on Wed Jan  5 15:47:34 2022
 """
 from typing import Tuple, Optional
 import torch
-import GCN.metrics as metrics
 import wandb
-from GCN.model import GCN
-from GCN.dataloader import TutorDataLoader
+import training.metrics as metrics
+from training.models import GCN
+from training.dataloader import TutorDataLoader
 from tqdm import tqdm
 import collections
 import numpy as np
@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
 import auxiliary.grid2op_util as g2o_util
-from GCN.postprocessing import get_P_one_sub, ActSpaceCache
+from training.postprocessing import get_P_one_sub, ActSpaceCache
 
 
 def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
@@ -101,7 +101,7 @@ def label_weights(mask: torch.Tensor, w: float) \
 
 class Run:
     """
-    Class that specifies the running of the GCN model.
+    Class that specifies the running of a model.
     """
 
     def __init__(self,
@@ -129,13 +129,13 @@ class Run:
         # Init model
         self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
                          train_config['hyperparams']['weight_init_std'],
-                         train_config['constants']['N_f_gen'],
-                         train_config['constants']['N_f_load'],
-                         train_config['constants']['N_f_endpoint'],
-                         train_config['hyperparams']['N_GNN_layers'],
+                         train_config['GCN']['constants']['N_f_gen'],
+                         train_config['GCN']['constants']['N_f_load'],
+                         train_config['GCN']['constants']['N_f_endpoint'],
+                         train_config['GCN']['hyperparams']['N_GNN_layers'],
                          train_config['hyperparams']['N_node_hidden'],
-                         train_config['hyperparams']['aggr'],
-                         train_config['hyperparams']['network_type'])
+                         train_config['GCN']['hyperparams']['aggr'],
+                         train_config['GCN']['hyperparams']['network_type'])
         self.model.to(self.device)
 
         # Init optimizer
@@ -145,13 +145,14 @@ class Run:
                                           weight_decay=w_decay)
 
         # Initialize dataloaders
-        network_type = train_config['hyperparams']['network_type']
+        network_type = train_config['GCN']['hyperparams']['network_type']
         af_th = train_config['hyperparams']['action_frequency_threshold']
         self.train_dl = TutorDataLoader(processed_data_path + '/train',
                                         matrix_cache_path,
                                         feature_statistics_path,
                                         action_counter_path,
                                         device=self.device,
+                                        model_type=GCN,
                                         network_type=network_type,
                                         train=True,
                                         action_frequency_threshold=af_th)
@@ -160,6 +161,7 @@ class Run:
                                       feature_statistics_path,
                                       action_counter_path,
                                       device=self.device,
+                                      model_type=GCN,
                                       network_type=network_type,
                                       train=False,
                                       action_frequency_threshold=af_th)

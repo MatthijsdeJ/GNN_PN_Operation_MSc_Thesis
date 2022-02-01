@@ -6,10 +6,10 @@ Created on Wed Jan 19 13:01:28 2022
 @author: matthijs
 """
 
-from GCN.training import Run
+from training.training import Run
 import argparse
 import auxiliary.util as util
-
+import training.models
 
 def main():
     
@@ -58,7 +58,7 @@ def main():
         config['paths']['processed_tutor_imitation'] = \
             args.processed_tutor_imitation
     if args.GNN_layers is not None:
-        config['training']['hyperparams']['GNN_layers'] = \
+        config['training']['GCN']['hyperparams']['GNN_layers'] = \
             args.GNN_layers
     if args.N_node_hidden is not None:
         config['training']['hyperparams']['N_node_hidden'] = \
@@ -75,7 +75,7 @@ def main():
         config['training']['hyperparams']['weight_decay'] = \
             args.weight_decay
     if args.aggr is not None:
-        config['training']['hyperparams']['aggr'] = \
+        config['training']['GCN']['hyperparams']['aggr'] = \
             args.aggr
     if args.non_sub_label_weight is not None:
         config['training']['hyperparams']['non_sub_label_weight'] = \
@@ -84,9 +84,9 @@ def main():
         config['training']['hyperparams']['label_smoothing_alpha'] = \
             args.label_smoothing_alpha
     if args.network_type is not None:
-        config['training']['hyperparams']['network_type'] = \
+        config['training']['GCN']['hyperparams']['network_type'] = training.models.GCN.NetworkType(
             args.network_type
-            
+        )
     # Start the run
     r = Run(config)
     r.start()
