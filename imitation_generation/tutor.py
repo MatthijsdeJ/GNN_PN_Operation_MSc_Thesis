@@ -17,7 +17,6 @@ import grid2op
 from grid2op.Agent import BaseAgent
 from typing import Tuple, Optional, Sequence
 from abc import ABC, abstractmethod
-from statistics import mean
 import numpy as np
 
 
@@ -71,6 +70,28 @@ class Strategy(ABC):
         """
         return all(np.logical_or(set_bus == 0, set_bus == topo_vect))
 
+    @staticmethod
+    def get_max_rho_simulated(observation: grid2op.Observation.CompleteObservation,
+                              action: grid2op.Action.BaseAction) -> float:
+        """
+        Simulates an action, and gets the max. rho. Returns infinity in case of a game-over.
+
+        Parameters
+        ----------
+        observation: grid2op.Observation.CompleteObservation
+            The observation to simulate the action in.
+        action: grid2op.Action.BaseAction
+            The action to simulate.
+
+        Returns
+        -------
+        float
+            The max. rho of the observation resulting from the simulation of the action. Infinity in case of a
+            game-over.
+        """
+        obs, _, done, _ = observation.simulate(action)
+        return obs.rho.max() if not done else float('Inf')
+
 
 class GreedyStrategy(Strategy):
     """
@@ -113,24 +134,17 @@ class GreedyStrategy(Strategy):
         """
         # default action is do nothing
         action_chosen = self.do_nothing_action
-        obs, _, _, _ = observation.simulate(action_chosen)
-        sel_rho = obs.rho.max()
+        sel_rho = self.get_max_rho_simulated(observation, action_chosen)
         action_idx = -1
-        # TODO: there is no check to ensure that the default action does not lead to a game-over. Since a game-over
-        #   leads to max. rhos of zero, which is always the minimum, any actions that would not lead to a game-over
-        #   would not be selected.
 
         # simulate each action
         for idx, a in enumerate(action_space):
-            obs, _, done, _ = observation.simulate(a)
-
-            # if an action leads to a game-over, skip it
-            if done:
-                continue
+            # obtain the max. rho of the observation resulting from the simulated action
+            act_rho = self.get_max_rho_simulated(observation, a)
 
             # if an action results in the lowest max. rho so far, store it as the best action so far
-            if obs.rho.max() < sel_rho:
-                sel_rho = obs.rho.max()
+            if act_rho < sel_rho:
+                sel_rho = act_rho
                 action_chosen = a
                 action_idx = idx
 
@@ -145,7 +159,7 @@ class CheckNMinOneStrategy(Strategy):
     def __init__(self,
                  env_action_space: grid2op.Action.ActionSpace,
                  line_outages_to_consider: Sequence[int],
-                 N0_max_rho: float = 1.0):
+                 N0_rho_threshold: float = 1.0):
         """
         Parameters
         ----------
@@ -154,7 +168,7 @@ class CheckNMinOneStrategy(Strategy):
             an empty action.
         line_outages_to_consider : Sequence[int]
             The indices of the lines whose outages to check with.
-        N0_max_rho : float
+        N0_rho_threshold : float
             Actions that lead to a bad N0 scenario (i.e. a scenario where no line outages are considered) are
             not further evaluated. This value determines the max. rho threshold: if an action causes the max. rho in
             the N0 scenario to exceed it, that action is not further evaluated and not selected.
@@ -162,13 +176,13 @@ class CheckNMinOneStrategy(Strategy):
         super()
         self.env_action_space = env_action_space
         self.line_outages_to_consider = line_outages_to_consider
-        self.N0_max_rho = N0_max_rho
+        self.N0_rho_threshold = N0_rho_threshold
 
-    def mean_max_rho_over_NMinOne(self,
-                                  a: grid2op.Action.BaseAction,
-                                  observation: grid2op.Observation.CompleteObservation) -> float:
+    def max_max_rho_NMinOne(self,
+                            a: grid2op.Action.BaseAction,
+                            observation: grid2op.Observation.CompleteObservation) -> float:
         """
-        Given an action, calculate the mean (over multiple N-1 scenarios) of the max. rho (over the power lines)
+        Given an action, calculate the max. (over multiple N-1 scenarios) of the max. rho (over the power lines)
         of the observations produced by simulating that action.
 
         Parameters
@@ -181,7 +195,7 @@ class CheckNMinOneStrategy(Strategy):
         Returns
         -------
         float
-            The mean over the max. rhos, as described above.
+            The max over the max. rhos, as described above.
         """
         set_bus = a.set_bus
 
@@ -193,11 +207,9 @@ class CheckNMinOneStrategy(Strategy):
                                                      "set_bus": set_bus})
 
             # Simulate the action to obtain the max. rho, add it to the list
-            obs, _, done, _ = observation.simulate(combined_action)
-            max_rhos.append(obs.rho.max())
-            # TODO: what if one of the line outages causes a game-over or diverging powerflow?
+            max_rhos.append(self.get_max_rho_simulated(observation, combined_action))
 
-        return mean(max_rhos)
+        return max(max_rhos)
 
     def select_act(self,
                    action_space: Sequence[grid2op.Action.TopologyAction],
@@ -205,9 +217,9 @@ class CheckNMinOneStrategy(Strategy):
             -> Tuple[grid2op.Action.BaseAction, int, float]:
         """
         Selects an action based on the performance of the action under N-1 scenarios. The action is selected based on:
-            1) it minimizes the mean max. rho over the different N-1 scenarios obtained by disabling the lines in
+            1) it minimizes the max. max. rho over the different N-1 scenarios obtained by disabling the lines in
             line_outage_to_consider.
-            2) given that in the N0 scenario, the max. rho does not exceed N0_max_rho.
+            2) given that, in the N0 scenario the max. rho does not exceed N0_max_rho.
 
         Parameters
         ----------
@@ -225,38 +237,65 @@ class CheckNMinOneStrategy(Strategy):
         sel_rho : float
             The rho value resulting from the selected action.
         """
-        # default action is do nothing
+        # Default action is do nothing
         action_chosen = self.env_action_space()
-        obs, _, done, _ = observation.simulate(action_chosen)
-        sel_rho = obs.rho.max()
-        min_mean_max_rho_over_NMinOne = self.mean_max_rho_over_NMinOne(action_chosen,
-                                                                       observation)
+        sel_rho = dn_rho = self.get_max_rho_simulated(observation, action_chosen)
+        lowest_max_max_rho_NMinOne = self.max_max_rho_NMinOne(action_chosen,
+                                                              observation)
         action_idx = -1
-        # TODO: there is no check to ensure that the default action does not lead to a game-over or a diverging power-
-        #  flow. Since a game-over leads to max. rho of zero, which is always the minimum, any actions that would not
-        #  lead to a game-over would not be selected.
 
-        # simulate each action
-        for idx, a in enumerate(action_space):
-            # If the action is a do-nothing action, skip it
-            if self.is_do_nothing_set_bus(observation.topo_vect, a.set_bus):
-                continue
+        # Select the do-something actions
+        ds_actions = [(idx, a) for idx, a in enumerate(action_space)
+                      if not self.is_do_nothing_set_bus(observation.topo_vect, a.set_bus)]
+        # Calculate N-0 max. rho per do-something action
+        action_max_rho_tuples = [(idx, a, self.get_max_rho_simulated(observation, a)) for idx, a in ds_actions]
+        # Select the actions with a N-0 max. rho below the N-0. max. rho threshold
+        action_max_rho_tuples_below_threshold = [(idx, a, max_rho) for idx, a, max_rho in action_max_rho_tuples
+                                                 if max_rho < self.N0_rho_threshold]
 
-            # Simulate the action
-            obs, _, done, _ = observation.simulate(a)
+        # If there are actions with a N-0 rho below the N-0 rho threshold,
+        # select the one among them with the best N-1 max. max. rho
+        if action_max_rho_tuples_below_threshold:
+            for idx, a, max_rho in action_max_rho_tuples_below_threshold:
+                # Calculate the N-1 max. max. rho
+                max_max_rho_NMinOne = self.max_max_rho_NMinOne(a, observation)
 
-            # if an action leads to a game-over or causes max. rho to exceed the N0 max. rho threshold, skip it
-            if done or obs.rho.max() > self.N0_max_rho:
-                continue
+                # Set action as best action if it has the lowest N-1 max. max. rho so far
+                if lowest_max_max_rho_NMinOne > max_max_rho_NMinOne:
+                    action_chosen = a
+                    action_idx = idx
+                    sel_rho = max_rho
+                    lowest_max_max_rho_NMinOne = max_max_rho_NMinOne
+        # If there are no actions with a N-0 rho below the N-0 rho threshold,
+        # select, among the actions with a N-0 max. rho below the do-nothing action,
+        # the action with the best N-1 max. max. rho
+        else:
+            for idx, a, max_rho in [(idx, a, max_rho) for idx, a, max_rho in action_max_rho_tuples
+                                    if max_rho < dn_rho]:
+                # Calculate the N-1 max. max. rho
+                max_max_rho_NMinOne = self.max_max_rho_NMinOne(a, observation)
 
-            # if an action decreases the mean (over the N-1 scenarios) max. (over the power lines) further than any
-            # action so far, store the action and its information
-            mean_max_rho_over_NMinOne = self.mean_max_rho_over_NMinOne(a, observation)
-            if mean_max_rho_over_NMinOne < min_mean_max_rho_over_NMinOne:
-                min_mean_max_rho_over_NMinOne = mean_max_rho_over_NMinOne
-                action_chosen = a
-                action_idx = idx
-                sel_rho = obs.rho.max()
+                # Set as best action if lowest N-1 max. max. rho so far
+                if lowest_max_max_rho_NMinOne > max_max_rho_NMinOne:
+                    action_chosen = a
+                    action_idx = idx
+                    sel_rho = max_rho
+                    lowest_max_max_rho_NMinOne = max_max_rho_NMinOne
+
+        # If the best action so far still has one scenario that fails in the N-1 max. max. rho calculation,
+        # i.e. if the best N-1 max. max. rho is still infinite, then select the action with the best N-0 max. rho
+        if lowest_max_max_rho_NMinOne == float('inf'):
+            # Reset default action to do-nothing action
+            action_chosen = self.env_action_space()
+            sel_rho = dn_rho
+            action_idx = -1
+
+            # Select action with best N-0 max. rho
+            for idx, a, max_rho in action_max_rho_tuples:
+                if sel_rho > max_rho:
+                    action_chosen = a
+                    action_idx = idx
+                    sel_rho = max_rho
 
         return action_chosen, action_idx, sel_rho
 
