@@ -12,7 +12,7 @@ import random
 import data_preprocessing_analysis.imitation_data_preprocessing as idp
 from typing import List, Optional, Type
 import numpy as np
-from training.models import GCN
+from training.models import GCN, FCNN
 from abc import ABC, abstractmethod
 
 
@@ -72,6 +72,10 @@ class TutorDataLoader:
                                                            feature_statistics,
                                                            network_type,
                                                            matrix_cache)
+        elif model_type == FCNN:
+            self.process_dp_strategy = ProcessDataPointFCNN(device,
+                                                            train,
+                                                            feature_statistics)
 
     def get_file_datapoints(self, idx: int) -> List[dict]:
         """
@@ -325,6 +329,77 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
                                torch.tensor(other_busbar_e,
                                             device=self.device,
                                             dtype=torch.long)}
+
+        # If the data is not for training, add information used in
+        # validation analysis
+        if not self.train:
+            dp = self.add_val_info(raw_dp, dp)
+
+        return dp
+
+class ProcessDataPointFCNN(ProcessDataPointStrategy):
+    """
+    Process a datapoint to obtain the information used by, and in the format used by, a FCNN.
+    """
+
+    def __init__(self,
+                 device: torch.device,
+                 train: bool,
+                 feature_statistics: dict):
+        """
+        Parameters
+        ----------
+        device : torch.device
+            The device to set torch tensors to.
+        train : bool
+            Whether to process the datapoint for training or not. More information is included for validation/testing.
+        feature_statistics : dict
+            Dictionary with information (mean, std) used to normalize features.
+        """
+        super().__init__(device, train, feature_statistics)
+
+    def process_datapoint(self, raw_dp: dict):
+        """
+        Process a single datapoint, from raw_dp to dp, with the information and formatting for a FCNN model.
+
+        Parameters
+        ----------
+        raw_dp : dict
+            The 'raw' datapoint (not fully true; these raw datapoints should be preprocessed already) from
+            which information is extracted.
+
+        Returns
+        -------
+        dp : dict
+            The resulting datapoint.
+        """
+        dp = {}
+
+        # Add the label
+        dp = self.add_processed_label(raw_dp, dp)
+
+        # Load the sub info array, which contains info about to which
+        # substation each object belongs
+        dp['sub_info'] = raw_dp['sub_info']
+
+        # Load, normalize features (including the topology vector), turn them into a single tensor
+        fstats = self.feature_statistics
+        norm_gen_features = (np.array(raw_dp['gen_features'])
+                             - fstats['gen']['mean']) / fstats['gen']['std']
+        norm_load_features = (np.array(raw_dp['load_features'])
+                              - fstats['load']['mean']) / fstats['load']['std']
+        norm_or_features = (np.array(raw_dp['or_features'])
+                            - fstats['or']['mean']) / fstats['or']['std']
+        norm_ex_features = (np.array(raw_dp['ex_features'])
+                            - fstats['ex']['mean']) / fstats['ex']['std']
+        topo_vect = raw_dp['topo_vect']
+        dp['features'] = torch.tensor(np.concatenate((norm_gen_features.flatten(),
+                                                      norm_load_features.flatten(),
+                                                      norm_or_features.flatten(),
+                                                      norm_ex_features.flatten(),
+                                                      topo_vect)),
+                                     device=self.device,
+                                     dtype=torch.float)
 
         # If the data is not for training, add information used in
         # validation analysis

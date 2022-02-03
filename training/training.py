@@ -9,7 +9,7 @@ from typing import Tuple, Optional
 import torch
 import wandb
 import training.metrics as metrics
-from training.models import GCN
+from training.models import GCN, FCNN
 from training.dataloader import TutorDataLoader
 from tqdm import tqdm
 import collections
@@ -127,15 +127,25 @@ class Run:
                                    else 'cpu')
 
         # Init model
-        self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
-                         train_config['hyperparams']['weight_init_std'],
-                         train_config['GCN']['constants']['N_f_gen'],
-                         train_config['GCN']['constants']['N_f_load'],
-                         train_config['GCN']['constants']['N_f_endpoint'],
-                         train_config['GCN']['hyperparams']['N_GNN_layers'],
-                         train_config['hyperparams']['N_node_hidden'],
-                         train_config['GCN']['hyperparams']['aggr'],
-                         train_config['GCN']['hyperparams']['network_type'])
+        if train_config['hyperparams']['model_type'] == 'GNN':
+            self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
+                             train_config['hyperparams']['weight_init_std'],
+                             train_config['GCN']['constants']['N_f_gen'],
+                             train_config['GCN']['constants']['N_f_load'],
+                             train_config['GCN']['constants']['N_f_endpoint'],
+                             train_config['GCN']['hyperparams']['N_GNN_layers'],
+                             train_config['hyperparams']['N_node_hidden'],
+                             train_config['GCN']['hyperparams']['aggr'],
+                             train_config['GCN']['hyperparams']['network_type'])
+        elif train_config['hyperparams']['model_type'] == 'FCNN':
+            self.model = FCNN(train_config['hyperparams']['LReLu_neg_slope'],
+                              train_config['hyperparams']['weight_init_std'],
+                              train_config['FCNN']['constants']['size_in'],
+                              train_config['FCNN']['constants']['size_out'],
+                              train_config['FCNN']['hyperparams']['N_layers'],
+                              train_config['hyperparams']['N_node_hidden'])
+        else:
+            raise ValueError("Invalid model_type name.")
         self.model.to(self.device)
 
         # Init optimizer
@@ -152,7 +162,7 @@ class Run:
                                         feature_statistics_path,
                                         action_counter_path,
                                         device=self.device,
-                                        model_type=GCN,
+                                        model_type=type(self.model),
                                         network_type=network_type,
                                         train=True,
                                         action_frequency_threshold=af_th)
@@ -161,7 +171,7 @@ class Run:
                                       feature_statistics_path,
                                       action_counter_path,
                                       device=self.device,
-                                      model_type=GCN,
+                                      model_type=type(self.model),
                                       network_type=network_type,
                                       train=False,
                                       action_frequency_threshold=af_th)
@@ -232,22 +242,25 @@ class Run:
             the number of objects in the environment. All elements should be in
             range (0,1).
         """
-        # Extract features
-        X_gen = dp['gen_features']
-        X_load = dp['load_features']
-        X_or = dp['or_features']
-        X_ex = dp['ex_features']
+        if type(self.model) == GCN:
+            # Extract features
+            X_gen = dp['gen_features']
+            X_load = dp['load_features']
+            X_or = dp['or_features']
+            X_ex = dp['ex_features']
 
-        # Extract the position topology vector, which relates the
-        # objects ordered by type to their position in the topology vector
-        object_ptv = dp['object_ptv']
+            # Extract the position topology vector, which relates the
+            # objects ordered by type to their position in the topology vector
+            object_ptv = dp['object_ptv']
 
-        # Extract the edges
-        E = dp['edges']
+            # Extract the edges
+            E = dp['edges']
 
-        # Pass through the model
-        P = self.model(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape((-1))
-
+            # Pass through the model
+            P = self.model(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape((-1))
+        elif type(self.model) == FCNN:
+            # Pass through the model
+            P = self.model(dp['features']).reshape((-1))
         return P
 
     def process_single_train_dp(self, dp: dict, step: int):
@@ -475,10 +488,11 @@ class Run:
                      wandb.Histogram(Y_rank_in_nearest_v_acts)}, step=step)
 
             # Logging difference between the self weights and the other weights
-            diffs = self.model.compute_difference_weights()
-            diffs = dict([('diffs_weights_' + k, v) for k, v in diffs.items()])
-            run.log(dict([(k, wandb.Histogram(v)) for k, v in diffs.items()]),
-                    step)
+            if type(self.model) == GCN:
+                diffs = self.model.compute_difference_weights()
+                diffs = dict([('diffs_weights_' + k, v) for k, v in diffs.items()])
+                run.log(dict([(k, wandb.Histogram(v)) for k, v in diffs.items()]),
+                        step)
 
             # Logging action counters as stacked histogram
             comb_counter_mc = (correct_counter + wrong_counter).most_common()

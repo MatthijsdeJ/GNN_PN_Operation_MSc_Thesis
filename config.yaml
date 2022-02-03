@@ -31,6 +31,7 @@ training:
     val_log_freq: 6000 #How often to evaluate the validation set
     advanced_val_analysis: true
   hyperparams:
+    model_type: FCNN #Should be GNN or FCNN
     n_epoch: 100
     lr: 1.5E-3
     N_node_hidden: 120 #Size of hidden layers in model
@@ -60,8 +61,8 @@ training:
     hyperparams:
       N_layers: 4
     constants:
-      size_in: 0
-      size_out: 52
+      size_in: 344
+      size_out: 56
   wandb:
     model_name: tuned_hetero_model
     model_tags: [tuned, hetero]
