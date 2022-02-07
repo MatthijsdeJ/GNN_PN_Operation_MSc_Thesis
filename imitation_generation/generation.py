@@ -109,12 +109,12 @@ def generate(config: dict,
         indicates no line disabled.
     start_chronic_id : int, optional
         The chronic to start generating data from. The default is 0.
-
-    Returns
-    -------
-    None.
-
     """
+    # Assert preconditions
+    assert do_nothing_capacity_threshold >= 0.0, "Do nothing capacity threshold cannot be below zero."
+    assert disable_line >= -1, "The line to be disabled cannot be below -1."
+    assert start_chronic_id >= 0, "The ID of the chronic to start with cannot be below zero."
+
     # Load constants, settings, hyperparameters, arguments
     save_path = config['paths']['tutor_imitation']
     num_chronics = config['tutor_generated_data']['n_chronics']
