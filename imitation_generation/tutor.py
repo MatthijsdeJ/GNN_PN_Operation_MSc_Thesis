@@ -169,9 +169,9 @@ class CheckNMinOneStrategy(Strategy):
         line_outages_to_consider : Sequence[int]
             The indices of the lines whose outages to check with.
         N0_rho_threshold : float
-            Actions that lead to a bad N0 scenario (i.e. a scenario where no line outages are considered) are
-            not further evaluated. This value determines the max. rho threshold: if an action causes the max. rho in
-            the N0 scenario to exceed it, that action is not further evaluated and not selected.
+            Actions that lead to a good N0 scenario (i.e. a scenario where no line outages are considered) are
+            first evaluated on their N-1 performance. This value determines what counts as 'good' N0 performance:
+            if an action has a N0 max. rho that exceeds it, that actions' N-1 max. max. rho is not evaluated.
         """
         super()
         self.env_action_space = env_action_space
@@ -217,9 +217,12 @@ class CheckNMinOneStrategy(Strategy):
             -> Tuple[grid2op.Action.BaseAction, int, float]:
         """
         Selects an action based on the performance of the action under N-1 scenarios. The action is selected based on:
-            1) it minimizes the max. max. rho over the different N-1 scenarios obtained by disabling the lines in
-            line_outage_to_consider.
-            2) given that, in the N0 scenario the max. rho does not exceed N0_max_rho.
+            1) if there are any actions that result in a N0 max. rho under the N0 rho threshold, select the among the
+            actions satisfying that condition, the one with the lowest N-1 max. max. rho threshold, provided that
+            this is not infinity.
+            2) if no actions has a N0 max. rho under the N0 threshold, OR all actions satisfying that condition
+            have a N-1 max. max. rho threshold of infinity, then select the action that minimizes the N0 max. rho
+            threshold.
 
         Parameters
         ----------
@@ -237,25 +240,25 @@ class CheckNMinOneStrategy(Strategy):
         sel_rho : float
             The rho value resulting from the selected action.
         """
-        # Default action is do nothing
-        action_chosen = self.env_action_space()
-        sel_rho = dn_rho = self.get_max_rho_simulated(observation, action_chosen)
-        lowest_max_max_rho_NMinOne = self.max_max_rho_NMinOne(action_chosen,
-                                                              observation)
-        action_idx = -1
+        action_chosen = sel_rho = action_idx = None
 
         # Select the do-something actions
-        ds_actions = [(idx, a) for idx, a in enumerate(action_space)
-                      if not self.is_do_nothing_set_bus(observation.topo_vect, a.set_bus)]
-        # Calculate N-0 max. rho per do-something action
-        action_max_rho_tuples = [(idx, a, self.get_max_rho_simulated(observation, a)) for idx, a in ds_actions]
+        actions = [(idx, a) for idx, a in enumerate(action_space)
+                   if not self.is_do_nothing_set_bus(observation.topo_vect, a.set_bus)]
+        # Add back singular do-nothing action at the start
+        actions.insert(0, (-1, self.env_action_space()))
+        # Calculate N-0 max. rho per action
+        action_max_rho_tuples = [(idx, a, self.get_max_rho_simulated(observation, a)) for idx, a in actions]
         # Select the actions with a N-0 max. rho below the N-0. max. rho threshold
         action_max_rho_tuples_below_threshold = [(idx, a, max_rho) for idx, a, max_rho in action_max_rho_tuples
                                                  if max_rho < self.N0_rho_threshold]
 
         # If there are actions with a N-0 rho below the N-0 rho threshold,
         # select the one among them with the best N-1 max. max. rho
+        # provided that this is not infinity
         if action_max_rho_tuples_below_threshold:
+            lowest_max_max_rho_NMinOne = float('inf')
+
             for idx, a, max_rho in action_max_rho_tuples_below_threshold:
                 # Calculate the N-1 max. max. rho
                 max_max_rho_NMinOne = self.max_max_rho_NMinOne(a, observation)
@@ -266,36 +269,39 @@ class CheckNMinOneStrategy(Strategy):
                     action_idx = idx
                     sel_rho = max_rho
                     lowest_max_max_rho_NMinOne = max_max_rho_NMinOne
-        # If there are no actions with a N-0 rho below the N-0 rho threshold,
-        # select, among the actions with a N-0 max. rho below the do-nothing action,
-        # the action with the best N-1 max. max. rho
-        else:
-            for idx, a, max_rho in [(idx, a, max_rho) for idx, a, max_rho in action_max_rho_tuples
-                                    if max_rho < dn_rho]:
-                # Calculate the N-1 max. max. rho
-                max_max_rho_NMinOne = self.max_max_rho_NMinOne(a, observation)
 
-                # Set as best action if lowest N-1 max. max. rho so far
-                if lowest_max_max_rho_NMinOne > max_max_rho_NMinOne:
-                    action_chosen = a
-                    action_idx = idx
-                    sel_rho = max_rho
-                    lowest_max_max_rho_NMinOne = max_max_rho_NMinOne
+            assert lowest_max_max_rho_NMinOne == float('inf') if action_chosen is None else True, \
+                   "If no action is selected, then the lowest N-1 max. max. rho must be infinity."
+
+        # At this point, either no action is selected or this action has a N0 max. rho below the N0 threshold.
+        assert action_chosen is None or sel_rho < self.N0_rho_threshold, "At this point, action chosen should be" \
+                                                                         "None or the the sel_rho below the threshold."
 
         # If the best action so far still has one scenario that fails in the N-1 max. max. rho calculation,
         # i.e. if the best N-1 max. max. rho is still infinite, then select the action with the best N-0 max. rho
-        if lowest_max_max_rho_NMinOne == float('inf'):
-            # Reset default action to do-nothing action
-            action_chosen = self.env_action_space()
-            sel_rho = dn_rho
-            action_idx = -1
+        if action_chosen is None:
+            assert sel_rho is None and action_idx is None, "Action chosen is none, but other variables not."
 
             # Select action with best N-0 max. rho
             for idx, a, max_rho in action_max_rho_tuples:
+
+                # Set the do-nothing action as the default: this works because the first entry in the action list
+                # is the do-nothing action
+                if action_chosen is None:
+                    assert idx == -1, "First action should be the do-nothing action."
+                    action_idx, action_chosen, sel_rho = idx, a, max_rho
+
+                # If the N0 max. rho is lower than that for any action before, set the action to the current
                 if sel_rho > max_rho:
-                    action_chosen = a
-                    action_idx = idx
-                    sel_rho = max_rho
+                    action_idx, action_chosen, sel_rho = idx, a, max_rho
+
+        # Assert postconditions
+        assert not (action_chosen is None or sel_rho is None or action_idx is None), "One of the output variables is" \
+                                                                                     "None."
+        assert sel_rho >= 0, "Sel_rho cannot be negative"
+        assert len(action_space) > action_idx >= -1, "Action idx is outside of it's possible range."
+        assert action_idx == -1 if sel_rho == np.float("inf") else True,\
+               "If sel_rho is infinite, the action should be do_nothing."
 
         return action_chosen, action_idx, sel_rho
 
