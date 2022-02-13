@@ -127,13 +127,13 @@ class Run:
                                    else 'cpu')
 
         # Init model
-        if train_config['hyperparams']['model_type'] == 'GNN':
+        if train_config['hyperparams']['model_type'] == 'GCN':
             self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
                              train_config['hyperparams']['weight_init_std'],
                              train_config['GCN']['constants']['N_f_gen'],
                              train_config['GCN']['constants']['N_f_load'],
                              train_config['GCN']['constants']['N_f_endpoint'],
-                             train_config['GCN']['hyperparams']['N_GNN_layers'],
+                             train_config['GCN']['hyperparams']['N_GCN_layers'],
                              train_config['hyperparams']['N_node_hidden'],
                              train_config['GCN']['hyperparams']['aggr'],
                              train_config['GCN']['hyperparams']['network_type'])

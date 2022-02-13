@@ -31,7 +31,7 @@ training:
     val_log_freq: 6000 #How often to evaluate the validation set
     advanced_val_analysis: true
   hyperparams:
-    model_type: FCNN #Should be GNN or FCNN
+    model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100
     lr: 1.5E-3
     N_node_hidden: 120 #Size of hidden layers in model
@@ -51,7 +51,7 @@ training:
   GCN:
     hyperparams:
       network_type: heterogeneous #Should be a str as defined in training.models.GCN.NetworkType
-      N_GNN_layers: 5
+      N_GCN_layers: 5
       aggr: add #Aggregation function: should be 'add' or 'mean'
     constants:
       N_f_gen: 3 #Number of generator features
@@ -64,7 +64,7 @@ training:
       size_in: 344
       size_out: 56
   wandb:
-    model_name: tuned_hetero_model
-    model_tags: [tuned, hetero]
+    model_name: FCNN_test
+    model_tags: [FCNN, feature_analysis]
     project: msc_thesis_gnn_power
     entity: mattholomew

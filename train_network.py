@@ -24,15 +24,15 @@ def main():
 #                        "perform a more advanced analysis on the val set")
     
     # specify hyperparameter arguments
-    parser.add_argument("-mt", "--model_type", help="The model type. Should be GNN or FCNN.", type=str)
-    parser.add_argument("-ngl", "--GNN_layers", help="Number of GNN layers in the model", type=int)
+    parser.add_argument("-mt", "--model_type", help="The model type. Should be GCN or FCNN.", type=str)
+    parser.add_argument("-ngl", "--GCN_layers", help="Number of GCN layers in the model", type=int)
     parser.add_argument("-nh", "--N_node_hidden", help="Number of nodes in the hidden layers.", type=int)
     parser.add_argument("-lr", "--lr", help="Learning rate of the optimizer", type=float)
     parser.add_argument("-bs", "--batch_size", help="Batch size. ", type=int)
     parser.add_argument("-wstd", "--weight_init_std", help="Std of the normal from which to sample the weights.",
                         type=float)
     parser.add_argument("-wd", "--weight_decay", help="Weight decay of the optimizer", type=float)
-    parser.add_argument("-a", "--aggr", help="Aggregation function of the GNN layers.", type=str)
+    parser.add_argument("-a", "--aggr", help="Aggregation function of the GCN layers.", type=str)
     parser.add_argument("-nslw", "--non_sub_label_weight", help="Label weights for the objects on the substation not " +
                         "affected in the action.", type=float)   
     parser.add_argument("-lsa", "--label_smoothing_alpha", help="Label smoothing coefficient.", type=float)
@@ -51,8 +51,8 @@ def main():
         config['paths']['processed_tutor_imitation'] = args.processed_tutor_imitation
     if args.model_type is not None:
         config['training']['hyperparams']['model_type'] = args.model_type
-    if args.GNN_layers is not None:
-        config['training']['GCN']['hyperparams']['GNN_layers'] = args.GNN_layers
+    if args.GCN_layers is not None:
+        config['training']['GCN']['hyperparams']['GCN_layers'] = args.GCN_layers
     if args.N_node_hidden is not None:
         config['training']['hyperparams']['N_node_hidden'] = args.N_node_hidden
     if args.lr is not None:

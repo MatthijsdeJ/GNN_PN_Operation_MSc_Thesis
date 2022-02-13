@@ -15,7 +15,7 @@ class GCN(torch.nn.Module):
     """
     Graph convolutional network model.
     Consists of: two embedding layers that should embed the different object
-    features into a common embedding; and a number of GNN layers.
+    features into a common embedding; and a number of GCN layers.
     """
 
     @unique
@@ -29,7 +29,7 @@ class GCN(torch.nn.Module):
                  N_f_gen: int,
                  N_f_load: int,
                  N_f_endpoint: int,
-                 N_GNN_layers: int,
+                 N_GCN_layers: int,
                  N_node_hidden: int,
                  aggr: str,
                  network_type: NetworkType) -> object:
@@ -47,12 +47,12 @@ class GCN(torch.nn.Module):
             The number of features per load object.
         N_f_endpoint : int
             The number of features per endpoint object.
-        N_GNN_layers : int
-            The number of GNN layers.
+        N_GCN_layers : int
+            The number of GCN layers.
         N_node_hidden : int
             The number of hidden nodes in the hidden layers.
         aggr : str
-            The aggregation function for GNN layers. Should be 'add' or 'mean'.
+            The aggregation function for GCN layers. Should be 'add' or 'mean'.
         network_type : NetworkType
             The type of network.
         """
@@ -80,8 +80,8 @@ class GCN(torch.nn.Module):
         self.lin_ex_1 = Linear(N_f_endpoint, N_node_hidden)
         self.lin_ex_2 = Linear(N_node_hidden, N_node_hidden)
 
-        # Factory function that creates GNN layers.
-        def GNN_layer(n_in, n_out, aggr_f='add'):
+        # Factory function that creates GCN layers.
+        def GCN_layer(n_in, n_out, aggr_f='add'):
             if network_type == HOMO:
                 return SAGEConv(n_in, n_out, root_weight=True, aggr=aggr_f)
             elif network_type == HETERO:
@@ -94,11 +94,11 @@ class GCN(torch.nn.Module):
                         SAGEConv(n_in, n_out, root_weight=False, aggr=aggr_f, bias=False),
                 }, aggr='sum' if aggr_f == 'add' else aggr_f)
 
-        # Create the GNN layers
-        self.GNN_layers = torch.nn.ModuleList([GNN_layer(N_node_hidden, N_node_hidden, aggr)
-                                               for _ in range(N_GNN_layers - 1)])
+        # Create the GCN layers
+        self.GCN_layers = torch.nn.ModuleList([GCN_layer(N_node_hidden, N_node_hidden, aggr)
+                                               for _ in range(N_GCN_layers - 1)])
         # Create the final layer
-        self.GNN_layers.append(GNN_layer(N_node_hidden, 1, aggr))
+        self.GCN_layers.append(GCN_layer(N_node_hidden, 1, aggr))
 
         # Initialize weights according to normal distribution
         self.init_weights_normalized_normal(weight_init_std)
@@ -170,13 +170,13 @@ class GCN(torch.nn.Module):
         if self.network_type == HETERO:
             x = {'object': x}
 
-        # Pass through the GNN layers
-        for l in self.GNN_layers[:-1]:
+        # Pass through the GCN layers
+        for l in self.GCN_layers[:-1]:
             x = l(x, edge_index)
             self.activation_f(x if self.network_type == HOMO else x['object'])
 
         # Pass through the final layer and the sigmoid activation function
-        x = self.GNN_layers[-1](x, edge_index)
+        x = self.GCN_layers[-1](x, edge_index)
         x = torch.sigmoid(x if self.network_type == HOMO else x['object'])
 
         return x
@@ -252,7 +252,7 @@ class GCN(torch.nn.Module):
             diffs['self_sb_neigh'] = []
             diffs['self_ob_neigh'] = []
 
-            for l in self.GNN_layers:
+            for l in self.GCN_layers:
                 l_key = 'object__line__object'
                 sb_key = 'object__same_busbar__object'
                 ob_key = 'object__other_busbar__object'
@@ -270,7 +270,7 @@ class GCN(torch.nn.Module):
 
             diffs['self_neigh'] = []
 
-            for l in self.GNN_layers:
+            for l in self.GCN_layers:
                 norm_w_self = l_w_norm(l.lin_r)
                 norm_w_neigh = l_w_norm(l.lin_l)
                 diffs['self_neigh'].append(norm_w_self - norm_w_neigh)

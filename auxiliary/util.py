@@ -57,7 +57,7 @@ def load_config():
                    (config['training']['hyperparams']['early_stopping_patience'], 'early_stopping_patience'),
                    (config['training']['hyperparams']['action_frequency_threshold'], 'action_frequency_threshold'),
                    (config['training']['constants']['estimated_train_size'], 'estimated_train_size'),
-                   (config['training']['GCN']['hyperparams']['N_GNN_layers'], 'N_GNN_layers'),
+                   (config['training']['GCN']['hyperparams']['N_GCN_layers'], 'N_GCN_layers'),
                    (config['training']['GCN']['constants']['N_f_gen'], 'N_f_gen'),
                    (config['training']['GCN']['constants']['N_f_load'], 'N_f_load'),
                    (config['training']['GCN']['constants']['N_f_endpoint'], 'N_f_endpoint'),
@@ -74,7 +74,7 @@ def load_config():
            " the number of lines."
     assert 0 <= config['dataset']['train_perc'] <= 1, "Train. perc. should be in percentage range."
     assert 0 <= config['dataset']['val_perc'] <= 1, "Val. perc. should be in percentage range."
-    assert config['training']['hyperparams']['model_type'] in ['GGN', 'FCNN'], \
+    assert config['training']['hyperparams']['model_type'] in ['GCN', 'FCNN'], \
            "Model_type should be value GCN or FCNN."
     assert config['training']['GCN']['hyperparams']['aggr'] in ['add', 'mean'], \
            "Aggr. should be mean or add."
