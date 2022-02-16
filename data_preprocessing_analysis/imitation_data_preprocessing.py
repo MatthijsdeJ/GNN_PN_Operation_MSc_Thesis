@@ -489,6 +489,8 @@ def process_raw_tutor_data(config: dict):
 
             # Update action counter
             # TODO: Change this for scenarios with different topologies
+            if line_disabled != -1:
+                raise NotImplementedError
             act_hash = util.hash_nparray(dp['change_topo_vect'])
             action_counter[act_hash] += 1
             dp['act_hash'] = act_hash
