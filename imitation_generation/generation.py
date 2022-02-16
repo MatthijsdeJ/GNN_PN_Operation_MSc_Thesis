@@ -150,13 +150,14 @@ def generate(config: dict,
             obs, _, _, info = env.step(env.action_space(
                             {"set_line_status": (disable_line, -1)}))
         else:
-            info = {'exception': []}
+            obs, _, _, info = env.step(env.action_space())
 
         print('current chronic: %s' % env.chronics_handler.get_name())
         reference_topo_vect = obs.topo_vect.copy()
 
         while env.nb_time_step < env.chronics_handler.max_timestep():
-            # Check for diverging powerflow exceptions, which happen sporadically
+            # Sporadically, when fast-forwarding, a diverging powerflow exception occurs. We check for that condition
+            # here. If that exception has occurred, we skip the day.
             if grid2op.Exceptions.PowerflowExceptions.DivergingPowerFlow in \
                         [type(e) for e in info['exception']]: 
                 print(f'Powerflow exception at step {env.nb_time_step} ' +

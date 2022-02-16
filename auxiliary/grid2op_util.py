@@ -317,7 +317,7 @@ def ts_to_day(ts: int, ts_in_day: int) -> int:
 def skip_to_next_day(env: grid2op.Environment.Environment,
                      ts_in_day: int,
                      chronic_id: int,
-                     disable_line: int) -> Optional[dict]:
+                     disable_line: int) -> dict:
     """
     Skip the environment to the next day.
 
@@ -338,17 +338,16 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
         Grid2op dict given out as the fourth output of env.step(). Contains
         the info about whether an error has occurred.
     """
-
     ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step,
                                          ts_in_day))
     env.set_id(chronic_id)
     _ = env.reset()
-    
+
+    env.fast_forward_chronics(ts_next_day - 1)
     if disable_line != -1:
-        env.fast_forward_chronics(ts_next_day-1)
         _, _, _, info = env.step(env.action_space(
             {"set_line_status": (disable_line, -1)}))
-        return info
     else:
-        env.fast_forward_chronics(ts_next_day)
-        return None
+        _, _, _, info = env.step(env.action_space())
+
+    return info
