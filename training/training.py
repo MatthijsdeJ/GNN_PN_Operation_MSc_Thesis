@@ -332,6 +332,8 @@ class Run:
         y : torch.Tensor[int]
             The label. Should have the length equal to the number of objects in
             the network. Elements should be in {0,1}.
+        P : torch.Tensor[int]
+            The prediction of the model.
         nearest_valid_P : torch.Tensor[int]
             The valid action nearest to the prediction. Should have the length
             equal to the number of objects in the network. Elements should be
@@ -388,7 +390,7 @@ class Run:
                              nearest_valid_P=nearest_valid_P)
 
         # Return statistics used in further analysis
-        return Y, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
+        return Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
             nearest_valid_actions
 
     def evaluate_val_set(self, step: int, run: wandb.sdk.wandb_run.Run):
@@ -415,6 +417,9 @@ class Run:
         Y_subs = []
         P_subs = []
 
+        # Initializing distributions for tracking the true/predicted/postprocessed predicted objects
+        Y_obs = P_obs = nearest_valid_P_obs = None
+
         # Initializing lists for tracking the ranks of the true actions in
         # the list of valid actions sorted by nearness to the predicted actions
         Y_rank_in_nearest_v_acts = []
@@ -426,7 +431,7 @@ class Run:
 
         with torch.no_grad():
             for dp in self.val_dl:
-                Y, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
+                Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                     nearest_valid_actions = self.process_single_val_dp(dp)
 
                 if not self.config['training']['settings']['advanced_val_analysis']:
@@ -443,6 +448,18 @@ class Run:
                 # Update lists for tracking the predicted/true substations
                 Y_subs.append(Y_sub_idx)
                 P_subs.append(P_subchanged_idx)
+
+                # Update distributions for the true/predicted/postprocessed-predicted objects
+                if dp['line_disabled'] != -1:
+                    raise NotImplementedError
+                if Y_obs is None:
+                    Y_obs = Y
+                    P_obs = P
+                    nearest_valid_P_obs = nearest_valid_P
+                else:
+                    Y_obs += Y
+                    P_obs += P > 0.5
+                    nearest_valid_P_obs += nearest_valid_P
 
                 # Update lists for tracking the ranks of the true actions in
                 # the list of valid actions sorted by nearness to the predicted
@@ -480,6 +497,19 @@ class Run:
             fig = disp.figure_
             fig.set_size_inches(12, 12)
             run.log({"sub_conf_mat": fig}, step=step)
+            plt.close(fig)
+
+            # Plotting distributions for the true/predicted/postprocessed-predicted objects
+            fig, ax = plt.subplots(3, 1, sharex=True)
+            n_obs = len(Y_obs)
+            ax[0].bar(range(n_obs), Y_obs)
+            ax[0].title.set_text('True object action distribution')
+            ax[1].bar(range(n_obs), nearest_valid_P_obs)
+            ax[1].title.set_text('Postprocessed predicted object action distribution')
+            ax[2].bar(range(n_obs), P_obs)
+            ax[2].title.set_text('Predicted object action distribution')
+            plt.tight_layout()
+            run.log({"object_pred_bars": fig}, step=step)
             plt.close(fig)
 
             # Logging histogram of the ranks of the true actions in the list of
