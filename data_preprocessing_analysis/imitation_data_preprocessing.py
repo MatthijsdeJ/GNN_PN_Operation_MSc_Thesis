@@ -5,6 +5,8 @@ Created on Thu Oct 28 16:30:55 2021
 
 @author: matthijs
 """
+import shutil
+
 import grid2op
 import numpy as np
 from typing import List, Tuple, Callable, Sequence
@@ -17,6 +19,9 @@ from auxiliary.util import NumpyEncoder
 from tqdm import tqdm
 from auxiliary.generate_action_space import action_identificator
 from collections import Counter
+import os
+from random import shuffle
+import shutil
 
 
 def get_filepaths(tutor_data_path: str) -> List[Path]:
@@ -517,6 +522,7 @@ def process_raw_tutor_data(config: dict):
                                                line_disabled,
                                                env_info_dict['sub_info'],
                                                env_info_dict['line_or_pos_topo_vect'],
+
                                                env_info_dict['line_ex_pos_topo_vect'])
             dp['cm_index'] = cm_index
             assert dp['cm_index'] in cmc.con_matrices
@@ -535,53 +541,53 @@ def process_raw_tutor_data(config: dict):
                   outfile,
                   cls=NumpyEncoder)
 
-# =============================================================================
-#     def update_datapoint(self, data):
-#         self.N +=1
-#         self.action_hash_counter[data['']] +=1 
-#         self.topo_vect_hash_counter[data['']] +=1 
-#         self.timestep_counter[data['timestep']] +=1 
-# =============================================================================
 
+def divide_files_train_val_test():
+    """
+    Divide the processed data files over train, val, and test subdirectories. If these subdirectories already exist,
+    then they are first removed.
 
-# =============================================================================
-# def extract_features_zero_impunement(obs: grid2op.Observation.CompleteObservation):
-#     '''
-#     TODO: before use, needs updating, testing, and documentation.
-# 
-#     Parameters
-#     ----------
-#     obs : grid2op.Observation.CompleteObservation
-#         DESCRIPTION.
-# 
-#     Returns
-#     -------
-#     X : TYPE
-#         DESCRIPTION.
-#     T : TYPE
-#         DESCRIPTION.
-# 
-#     '''
-#     N_features = 3+5
-#     n=obs.n_gen+obs.n_load+2*obs.n_line
-#     
-#     X=np.zeros((n,N_features))
-#     T=np.zeros(n)
-#     for t,f in enumerate([extract_gen_features,extract_load_features,extract_or_features,extract_ex_features]):
-#         if t < 2:
-#             for i,x in zip(*f(obs)):
-#                 X[i,:3]=x
-#                 T[i]=t
-#         else:
-#             for i,x in zip(*f(obs)):
-#                 X[i,3:]=x   
-#                 T[i]=t
-#     return X,T
-# =============================================================================
+    Raises
+    ------
+    RuntimeError
+        Whenever there are files in the existing train/val/test folders which are not .json files.
+    """
+    config = util.load_config()
+    processed_path = config['paths']['processed_tutor_imitation']
 
+    # Remove directories including existing processed datapoints
+    if os.path.exists(processed_path + 'train'):
+        if not all([file.endswith('.json') for file in os.listdir(processed_path + 'train')]):
+            raise RuntimeError('All files in the train folder to be overwritten must be .json files.')
+        shutil.rmtree(processed_path + 'train')
+    if os.path.exists(processed_path + 'val'):
+        if not all([file.endswith('.json') for file in os.listdir(processed_path + 'val')]):
+            raise RuntimeError('All files in the val folder to be overwritten must be .json files.')
+        shutil.rmtree(processed_path + 'val')
+    if os.path.exists(processed_path + 'test'):
+        if not all([file.endswith('.json') for file in os.listdir(processed_path + 'test')]):
+            raise RuntimeError('All files in the test folder to be overwritten must be .json files.')
+        shutil.rmtree(processed_path + 'test')
 
-# =============================================================================
-# i = obs.gen_pos_topo_vect
-# i = obs.load_pos_topo_vect
-# i = obs.line_ex_pos_topo_vect
-# =============================================================================
+    # List data files, shuffle them
+    data_files = os.listdir(processed_path)
+    assert all([file.endswith('.json') for file in data_files]), "All files in the directory of" \
+                                                                 "processed files must be .json files."
+    assert data_files, "The directory with processed files cannot be empty."
+    shuffle(data_files)
+
+    # Create the train, val, test directories
+    os.mkdir(processed_path + 'train')
+    os.mkdir(processed_path + 'val')
+    os.mkdir(processed_path + 'test')
+
+    # Divide shuffled files over the three subdirectories
+    train_range = config['dataset']['train_perc'] * len(data_files)
+    val_range = train_range + config['dataset']['val_perc'] * len(data_files)
+    for i, f in enumerate(data_files):
+        if i > val_range:
+            os.rename(processed_path + f, processed_path + 'test/' + f)
+        elif i > train_range:
+            os.rename(processed_path + f, processed_path + 'val/' + f)
+        else:
+            os.rename(processed_path + f, processed_path + 'train/' + f)
