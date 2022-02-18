@@ -14,6 +14,8 @@ from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
 
 # =============================================================================
+# This is half-finished code for returning to the reference topology without requiring 'different' Grid2Op Rule.
+#
 # An alternative way to return to the reference topology is to simply take
 # regular actions to get there. However, this is not trivial, as the most
 # straightforward path towards the reference topology might be 'unsafe'
@@ -44,7 +46,7 @@ def save_records(records: np.array,
                  save_path: str, 
                  days_completed: int,
                  do_nothing_capacity_threshold: float, 
-                 lout: int = -1,):
+                 lout: int = -1):
     """
     Saves records of a chronic to disk and prints a message that they are saved.
 
@@ -86,7 +88,8 @@ def empty_records(obs_vect_size: int):
         The records numpy array.
 
     """
-    # first col for label, remaining OBS_VECT_SIZE cols for environment features
+    # The first five columns concern information about the selected action, the remaining OBS_VECT_SIZE columns
+    # represent the environment state.
     return np.zeros((0, 5+obs_vect_size), dtype=np.float32)
 
         
@@ -102,11 +105,9 @@ def generate(config: dict,
     config : dict
         The config file with parameters and setting.
     do_nothing_capacity_threshold : float, optional
-        The threshold max. line rho at which the tutor takes actions.
-        The default is .97.
+        The threshold max. line rho at which the tutor takes actions. The default is .97.
     disable_line : int, optional
-        The index of the line to be disabled. The default is -1, which
-        indicates no line disabled.
+        The index of the line to be disabled. The default is -1, which indicates no line disabled.
     start_chronic_id : int, optional
         The chronic to start generating data from. The default is 0.
     """
@@ -126,8 +127,7 @@ def generate(config: dict,
     env.set_id(start_chronic_id)
     
     # Prepare tutor and record objects
-    strategy = CheckNMinOneStrategy(env.action_space,
-                                    config['tutor_generated_data']['line_idxs_to_consider_N-1'])
+    strategy = CheckNMinOneStrategy(env.action_space, config['tutor_generated_data']['line_idxs_to_consider_N-1'])
     tutor = Tutor(env.action_space,
                   get_env_actions(disable_line=disable_line),
                   do_nothing_capacity_threshold,
@@ -135,31 +135,31 @@ def generate(config: dict,
     obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
     
-    # Auxiliary ts_to_day function
+    # Auxiliary ts_to_day function for finding the day in which a given timestep is
     ts_to_day = lambda ts: g2o_util.ts_to_day(ts, ts_in_day)
-    
+
+    # Loop over chronics
     for num in range(start_chronic_id, start_chronic_id+num_chronics):
-        
+
         # (Re)set variables
         obs = env.reset()
-        done, days_completed = False, 0
+        days_completed = 0
         day_records = empty_records(obs_vect_size)
-        
+        fast_forward_divergingpowerflow_exception = False
+        print('current chronic: %s' % env.chronics_handler.get_name())
+
         # Disable lines, if any
         if disable_line != -1:
-            obs, _, _, info = env.step(env.action_space(
-                            {"set_line_status": (disable_line, -1)}))
-        else:
-            obs, _, _, info = env.step(env.action_space())
+            obs, _, _, _ = env.step(env.action_space({"set_line_status": (disable_line, -1)}))
 
-        print('current chronic: %s' % env.chronics_handler.get_name())
+        # Save reference topology
         reference_topo_vect = obs.topo_vect.copy()
 
+        # Loop over timesteps until exhausted
         while env.nb_time_step < env.chronics_handler.max_timestep():
-            # Sporadically, when fast-forwarding, a diverging powerflow exception occurs. We check for that condition
-            # here. If that exception has occurred, we skip the day.
-            if grid2op.Exceptions.PowerflowExceptions.DivergingPowerFlow in \
-                        [type(e) for e in info['exception']]: 
+            # Sporadically, when fast-forwarding, a diverging powerflow exception can occur.  If that exception
+            # has occurred, we skip to the next day.
+            if fast_forward_divergingpowerflow_exception:
                 print(f'Powerflow exception at step {env.nb_time_step} ' +
                       f'on day {ts_to_day(env.nb_time_step)}')
                 info = g2o_util.skip_to_next_day(env, ts_in_day,
@@ -167,43 +167,40 @@ def generate(config: dict,
                 day_records = empty_records(obs_vect_size)
                 continue
                 
-            obs = env.get_obs()
-            
-            # reset topology at midnight, store days' records, reset days' records
+            # At midnight, reset the topology to the reference, store days' records, reset days' records
             if env.nb_time_step % ts_in_day == ts_in_day-1:
                 print(f'Day {ts_to_day(env.nb_time_step)} completed.')
-                obs, _, _, _ = env.step(env.action_space({'set_bus': 
+                obs, _, _, _ = env.step(env.action_space({'set_bus':
                                                           reference_topo_vect}))
                 records = np.concatenate((records, day_records), axis=0)
                 day_records = empty_records(obs_vect_size)
                 days_completed += 1
                 continue
                 
-            # if not midnight, find a normal action
-            action, idx, dn_rho, min_rho, time = tutor.act(obs)
-            
-            # don't store the action if the max. capacity is below the threshold
+            # If neither of above holds, the tutor takes an action
+            obs = env.get_obs()
+            action, idx, do_nothing_rho, selected_rho, time = tutor.act(obs)
+
+            # If an action should be stored (i.e. it does not have an action index of -2), store that action.
+            # This is typically used for do-nothing actions below the max. rho threshold
             if idx != -2:
-                # save a record
-                day_records = np.concatenate((day_records, np.concatenate((
-                                [idx, dn_rho, min_rho, time, env.nb_time_step], 
-                                obs.to_vect())).astype(np.float32)[None, :]), axis=0)
-                
-            obs, _, done, info = env.step(action)
+                action_record = np.concatenate(([idx, do_nothing_rho, selected_rho, time, env.nb_time_step],
+                                                obs.to_vect()))
+                action_record = np.reshape(action_record, (1, -1)).astype(np.float32)
+                day_records = np.concatenate((day_records, action_record), axis=0)
+
+            # Take the selected action in the environment
+            obs, _, _, _ = env.step(action)
             
-            # If the game is done at this point, this indicated a (failed) game over
+            # If the game is done at this point, this indicated a (failed) game over.
             # If so, reset the environment to the start of next day and discard the records
             if env.done:
-                print(f'Failure at step {env.nb_time_step} ' +
-                      f'on day {ts_to_day(env.nb_time_step)}')
-                info = g2o_util.skip_to_next_day(env,  ts_in_day, 
-                                                 num, disable_line)
+                print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step)}')
+                fast_forward_divergingpowerflow_exception = g2o_util.skip_to_next_day(env,  ts_in_day,
+                                                                                      num, disable_line)
                 day_records = empty_records(obs_vect_size)
-         
-        # print whether game was completed successfully, save days' records if so
+
+        # At the end of a chronic, print a message, and store and reset the corresponding records
         print('Chronic exhausted! \n\n\n')
-            
-        # save chronic records
-        save_records(records, num, save_path, days_completed,
-                     do_nothing_capacity_threshold, disable_line)
+        save_records(records, num, save_path, days_completed, do_nothing_capacity_threshold, disable_line)
         records = empty_records(obs_vect_size)

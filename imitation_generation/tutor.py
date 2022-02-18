@@ -132,23 +132,24 @@ class GreedyStrategy(Strategy):
         sel_rho : float
             The rho value resulting from the selected action.
         """
-        # default action is do nothing
+        # The default action is do-nothing
         action_chosen = self.do_nothing_action
-        sel_rho = self.get_max_rho_simulated(observation, action_chosen)
+        selected_rho = self.get_max_rho_simulated(observation, action_chosen)
         action_idx = -1
 
-        # simulate each action
+        # Simulate each action
+        # TODO: This could be sped up by skipping implicit do nothing actions
         for idx, a in enumerate(action_space):
-            # obtain the max. rho of the observation resulting from the simulated action
-            act_rho = self.get_max_rho_simulated(observation, a)
+            # Obtain the max. rho of the observation resulting from the simulated action
+            action_rho = self.get_max_rho_simulated(observation, a)
 
-            # if an action results in the lowest max. rho so far, store it as the best action so far
-            if act_rho < sel_rho:
-                sel_rho = act_rho
+            # If an action results in the lowest max. rho so far, store it as the best action so far
+            if action_rho < selected_rho:
+                selected_rho = action_rho
                 action_chosen = a
                 action_idx = idx
 
-        return action_chosen, action_idx, sel_rho
+        return action_chosen, action_idx, selected_rho
 
 
 class CheckNMinOneStrategy(Strategy):
@@ -220,7 +221,7 @@ class CheckNMinOneStrategy(Strategy):
             1) if there are any actions that result in a N0 max. rho under the N0 rho threshold, select the among the
             actions satisfying that condition, the one with the lowest N-1 max. max. rho threshold, provided that
             this is not infinity.
-            2) if no actions has a N0 max. rho under the N0 threshold, OR all actions satisfying that condition
+            2) if no action has a N0 max. rho under the N0 threshold, OR all actions satisfying that condition
             have a N-1 max. max. rho threshold of infinity, then select the action that minimizes the N0 max. rho
             threshold.
 
@@ -384,9 +385,7 @@ class Tutor(BaseAgent):
             -> Tuple[grid2op.Action.BaseAction, int, Optional[float],
                      Optional[float], Optional[float]]:
         """
-        For a particular observation, searches through the action space with 
-        a greedy strategy to find the action that minimizes the max. 
-        (over the power lines) capacity in simulation.
+        For a particular observation, select an action according to its strategy.
 
         Parameters
         ----------
@@ -395,19 +394,19 @@ class Tutor(BaseAgent):
 
         Returns
         -------
-        action : grid2op.Action.BaseAction
+        selected_action : grid2op.Action.BaseAction
             The selected action.
-        action_idx : int
+        selected_action_idx : int
             The index of the selected action.
             In case that the max. line capacity is below self.do_nothing_capacity_threshold,
             no action is selected, and the index is -2.
             In case that the max. line capacity is above self.do_nothing_capacity_threshold,
             but no set action is selected, the selected action is do-nothing
             and the index is -1.
-        dn_rho : float
+        do-nothing rho : float
             The rho obtained from simulating a do-nothing action.
             None if the max. line capacity is below self.do_nothing_capacity_threshold.
-        sel_rho : float
+        selected_rho : float
             The rho obtained by the selected action.
             None if the max. line capacity is below self.do_nothing_capacity_threshold.
         time : float
@@ -416,24 +415,23 @@ class Tutor(BaseAgent):
         """
         tick = time.time()
 
+        # Do nothing if the max. rho is below the max. rho threshold
         if observation.rho.max() < self.do_nothing_capacity_threshold:
-            # secure, return "do nothing" in bus switches.
             return self.action_space(), -2, None, None, None
 
-        # not secure, do a greedy search
+        # If above that max. rho threshold, display a message
         print('%s: close to overload! line-%d has a max. rho of %.2f' %
               (str(observation.get_time_stamp()), observation.rho.argmax(), observation.rho.max()))
 
-        # calculate the max. rho of the do-nothing action
+        # Calculate the max. rho of the do-nothing action
         do_nothing_action = self.action_space()
         obs, _, _, _ = observation.simulate(do_nothing_action)
-        dn_rho = obs.rho.max()
+        do_nothing_rho = obs.rho.max()
 
-        # select an action based on the strategy
-        action_chosen, action_idx, sel_rho = self.strategy.select_act(self.actions,
-                                                                      observation)
+        # Select an action based on the strategy
+        selected_action, selected_action_idx, selected_rho = self.strategy.select_act(self.actions, observation)
 
-        # print the selected action, return the results
+        # Print the selected action, return the results
         print('Action %d results in a forecasted max. rho of %.2f, search duration is %.2fs'
-              % (action_idx, sel_rho, time.time() - tick))
-        return action_chosen, action_idx, dn_rho, sel_rho, time.time() - tick
+              % (selected_action_idx, selected_rho, time.time() - tick))
+        return selected_action, selected_action_idx, do_nothing_rho, selected_rho, time.time() - tick

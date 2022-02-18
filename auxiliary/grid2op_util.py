@@ -252,8 +252,7 @@ def init_env(config: dict,
              gamerules_class: grid2op.Rules.BaseRules,
              ) -> grid2op.Environment.Environment:
     """
-    Prepares the Grid2Op environment from a dictionary containing configuration
-    setting.
+    Prepares the Grid2Op environment from a dictionary containing configuration setting.
 
     Parameters
     ----------
@@ -317,7 +316,7 @@ def ts_to_day(ts: int, ts_in_day: int) -> int:
 def skip_to_next_day(env: grid2op.Environment.Environment,
                      ts_in_day: int,
                      chronic_id: int,
-                     disable_line: int) -> dict:
+                     disable_line: int) -> bool:
     """
     Skip the environment to the next day.
 
@@ -334,15 +333,15 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
 
     Returns
     -------
-    info : dict
-        Grid2op dict given out as the fourth output of env.step(). Contains
-        the info about whether an error has occurred.
+    fast_forward_divergingpowerflow_exception : bool
+        Whether a DivergingPowerFlowException occurred while fast-forwarding.
     """
-    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step,
-                                         ts_in_day))
+    # Reset environment
     env.set_id(chronic_id)
-    _ = env.reset()
+    env.reset()
 
+    # Fast forward to the day, disable lines if necessary
+    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step, ts_in_day))
     env.fast_forward_chronics(ts_next_day - 1)
     if disable_line != -1:
         _, _, _, info = env.step(env.action_space(
@@ -350,4 +349,7 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
     else:
         _, _, _, info = env.step(env.action_space())
 
-    return info
+    # Return whether a DivergingPowerFlowException has occured while fast forwarding
+    fast_forward_divergingpowerflow_exception = (grid2op.Exceptions.PowerflowExceptions.DivergingPowerFlow in
+                                                 [type(e) for e in info['exception']])
+    return fast_forward_divergingpowerflow_exception
