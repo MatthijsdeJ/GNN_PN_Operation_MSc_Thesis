@@ -293,7 +293,9 @@ class Run:
         # Compute the weights for the loss
         non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y, dp['sub_info'])
-        weights = label_weights(1 - Y_sub_mask, non_sub_label_weight)
+        one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
+        P_sub_mask = one_sub_P > 0
+        weights = label_weights(~torch.logical_or(Y_sub_mask, P_sub_mask), non_sub_label_weight)
 
         # Compute the loss, update gradients
         l = BCELoss_labels_weighted(P, Y_smth, weights)
@@ -306,7 +308,6 @@ class Run:
             self.model.zero_grad()
 
         # Update metrics
-        one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
         self.train_metrics.log(P=P, Y=Y, one_sub_P=one_sub_P, l=l,
                                P_subchanged_idx=P_subchanged_idx,
                                Y_subchanged_idx=Y_sub_idx)
@@ -366,14 +367,14 @@ class Run:
         # Compute the weights for the loss
         non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y, dp['sub_info'])
-        weights = label_weights(1 - Y_sub_mask, non_sub_label_weight)
+        one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
+        P_sub_mask = one_sub_P > 0
+        weights = label_weights(~torch.logical_or(Y_sub_mask, P_sub_mask), non_sub_label_weight)
 
-        # Compute the loss, update gradients
+        # Compute the loss
         l = BCELoss_labels_weighted(P, Y_smth, weights)
 
         # Calculate statistics for metrics
-        one_sub_P, _ = get_P_one_sub(P, dp['sub_info'])
-
         get_cabnp = self.as_cache.get_change_actspace_by_nearness_pred
         nearest_valid_actions = get_cabnp(dp['line_disabled'],
                                           dp['topo_vect'],
@@ -424,26 +425,32 @@ class Run:
         # the list of valid actions sorted by nearness to the predicted actions
         Y_rank_in_nearest_v_acts = []
 
-        # Initializing counters for counting the number of (in)correct
-        # classifications of each label
-        correct_counter = collections.Counter()
-        wrong_counter = collections.Counter()
+        # Initializing counters for counting the number of (in)correct classifications of each label
+        correct_counter_label = collections.Counter()
+        wrong_counter_label = collections.Counter()
+
+        # Initializing counters for counting the number of (in)correct classifications of each topology vector
+        correct_counter_topovect = collections.Counter()
+        wrong_counter_topovect = collections.Counter()
 
         with torch.no_grad():
             for dp in self.val_dl:
+
                 Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                     nearest_valid_actions = self.process_single_val_dp(dp)
 
                 if not self.config['training']['settings']['advanced_val_analysis']:
                     continue
 
-                # Increment the counters for counting the number of (in)correct
-                # classifications of each label
+                # Increment the counters for counting the number of (in)correct classifications of each label
+                # and topology vector
                 sub_Y = tuple(Y[Y_sub_mask.bool()].cpu().tolist())
                 if torch.equal(nearest_valid_P, torch.round(Y)):
-                    correct_counter[(Y_sub_idx, sub_Y)] += 1
+                    correct_counter_label[(Y_sub_idx, sub_Y)] += 1
+                    correct_counter_topovect[tuple(dp['topo_vect'].tolist())] += 1
                 else:
-                    wrong_counter[(Y_sub_idx, sub_Y)] += 1
+                    wrong_counter_label[(Y_sub_idx, sub_Y)] += 1
+                    wrong_counter_topovect[tuple(dp['topo_vect'].tolist())] += 1
 
                 # Update lists for tracking the predicted/true substations
                 Y_subs.append(Y_sub_idx)
@@ -524,11 +531,11 @@ class Run:
                 run.log(dict([(k, wandb.Histogram(v)) for k, v in diffs.items()]),
                         step)
 
-            # Logging action counters as stacked histogram
-            comb_counter_mc = (correct_counter + wrong_counter).most_common()
-            correct_indices = util.flatten([correct_counter[a] * [i] for i, (a, _)
+            # Logging label counters as stacked histogram
+            comb_counter_mc = (correct_counter_label + wrong_counter_label).most_common()
+            correct_indices = util.flatten([correct_counter_label[a] * [i] for i, (a, _)
                                             in enumerate(comb_counter_mc)])
-            wrong_indices = util.flatten([wrong_counter[a] * [i] for i, (a, _)
+            wrong_indices = util.flatten([wrong_counter_label[a] * [i] for i, (a, _)
                                           in enumerate(comb_counter_mc)])
             fig, ax = plt.subplots()
             n_bins = max(correct_indices + wrong_indices) + 1
@@ -536,7 +543,22 @@ class Run:
                     color=['lime', 'red'],
                     bins=n_bins,
                     stacked=True)
-            run.log({"action_correct_dist": fig}, step=step)
+            run.log({"label_correct_dist": fig}, step=step)
+            plt.close(fig)
+
+            # Logging topoly vector counters as stacked histogram
+            comb_counter_mc = (correct_counter_topovect + wrong_counter_topovect).most_common()
+            correct_indices = util.flatten([correct_counter_topovect[a] * [i] for i, (a, _)
+                                            in enumerate(comb_counter_mc)])
+            wrong_indices = util.flatten([wrong_counter_topovect[a] * [i] for i, (a, _)
+                                          in enumerate(comb_counter_mc)])
+            fig, ax = plt.subplots()
+            n_bins = max(correct_indices + wrong_indices) + 1
+            ax.hist([correct_indices, wrong_indices],
+                    color=['lime', 'red'],
+                    bins=n_bins,
+                    stacked=True)
+            run.log({"topovect_correct_dist": fig}, step=step)
             plt.close(fig)
 
     def start(self):
