@@ -28,7 +28,7 @@ dataset:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 6000 #How often to evaluate the validation set
+    val_log_freq: 18000 #How often to evaluate the validation set
     advanced_val_analysis: true
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
@@ -39,19 +39,19 @@ training:
     batch_size: 32
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
     weight_init_std: 3
-    weight_decay: 3.0E-3
+    weight_decay: 3.0E-4
     non_sub_label_weight: 0.1
-    early_stopping_patience: 15 #stop training when max. val. macro accuracy 
+    early_stopping_patience: 50 #stop training when max. val. macro accuracy
     #valid hasn't improved
-    action_frequency_threshold: 1000 #min. frequency of an action in the 
+    action_frequency_threshold: 0 #min. frequency of an action in the
     #dataset in order to be used during training. Can be used to filter 
     #infrequent actions
   constants:
-    estimated_train_size: 18195 #Used for estimating tqdm duration
+    estimated_train_size: 36497 #Used for estimating tqdm duration
   GCN:
     hyperparams:
       network_type: heterogeneous #Should be a str as defined in training.models.GCN.NetworkType
-      N_GCN_layers: 5
+      N_GCN_layers: 8
       aggr: add #Aggregation function: should be 'add' or 'mean'
     constants:
       N_f_gen: 3 #Number of generator features
@@ -64,7 +64,7 @@ training:
       size_in: 344
       size_out: 56
   wandb:
-    model_name: FCNN_test
-    model_tags: [FCNN, feature_analysis]
+    model_name: GCN_test_diff_label_weights
+    model_tags: [GCN, different_label_weights]
     project: msc_thesis_gnn_power
     entity: mattholomew
