@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
 import auxiliary.grid2op_util as g2o_util
-from training.postprocessing import get_P_one_sub, ActSpaceCache
+from training.postprocessing import ActSpaceCache
 
 
 def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
@@ -44,36 +44,6 @@ def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
     bce = W * (- Y * torch.log(P) - (1 - Y) * torch.log(1 - P))
     loss = torch.mean(bce)
     return loss
-
-
-def get_Y_subchanged(Y: torch.Tensor, sub_info: torch.Tensor) \
-        -> Tuple[torch.Tensor, Optional[int]]:
-    """
-    Find the substation at which the 'true' actions(i.e. the label) were taken.
-
-    Parameters
-    ----------
-    Y : torch.Tensor
-        The labels.
-    sub_info : torch.Tensor
-        Tensor with the elements representing the number of object connected to
-        each substation.
-
-    Returns
-    -------
-    torch.Tensor
-        The mask of the substation where the true actions are taken are
-        in the topology vector. Fully zeros if the 'true' action is a do-nothing action.
-    Optional[int]
-        Index of the substation. None if the 'true' action is a do-nothing action.
-    """
-    if all(Y < 0.5):
-        return torch.zeros_like(Y), None
-
-    Y_grouped = g2o_util.tv_groupby_subst(Y, sub_info)
-    idx = util.argmax_f(Y_grouped, lambda x: torch.sum(x))
-    return torch.cat([torch.ones_like(sub) if i == idx else torch.zeros_like(sub)
-                      for i, sub in enumerate(Y_grouped)]), idx
 
 
 def get_label_weights(Y_sub_mask : torch.Tensor,
@@ -295,9 +265,10 @@ class Run:
 
         # Compute the weights for the loss
         non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
-        Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y, dp['sub_info'])
-        one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
-        P_sub_mask = one_sub_P > 0
+        Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
+        P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
+                                                                                f=lambda x:
+                                                                                torch.sum(torch.clamp(x - 0.5, min=0)))
         weights = get_label_weights(Y_sub_mask, P_sub_mask, non_sub_label_weight)
 
         # Compute the loss, update gradients
@@ -311,8 +282,10 @@ class Run:
             self.model.zero_grad()
 
         # Update metrics
+        one_sub_P = torch.zeros_like(P)
+        one_sub_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
         self.train_metrics.log(P=P, Y=Y, one_sub_P=one_sub_P, l=l,
-                               P_subchanged_idx=P_subchanged_idx,
+                               P_subchanged_idx=P_sub_idx,
                                Y_subchanged_idx=Y_sub_idx)
 
     def process_single_val_dp(self, dp: dict) \
@@ -369,32 +342,33 @@ class Run:
 
         # Compute the weights for the loss
         non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
-        Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y, dp['sub_info'])
-        one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
-        P_sub_mask = one_sub_P > 0
+        Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
+        P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
+                                                                                f=lambda x:
+                                                                                torch.sum(torch.clamp(x - 0.5, min=0)))
         weights = get_label_weights(Y_sub_mask, P_sub_mask, non_sub_label_weight)
 
         # Compute the loss
         l = BCELoss_labels_weighted(P, Y_smth, weights)
 
         # Calculate statistics for metrics
+        one_sub_P = torch.zeros_like(P)
+        one_sub_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
         get_cabnp = self.as_cache.get_change_actspace_by_nearness_pred
         nearest_valid_actions = get_cabnp(dp['line_disabled'],
                                           dp['topo_vect'],
                                           P,
                                           self.device)
         nearest_valid_P = nearest_valid_actions[0]
-        _, P_subchanged_idx = get_P_one_sub(nearest_valid_P,
-                                            dp['sub_info'])
 
         # Update metrics
         self.val_metrics.log(P=P, Y=Y, one_sub_P=one_sub_P, l=l,
-                             P_subchanged_idx=P_subchanged_idx,
+                             P_subchanged_idx=P_sub_idx,
                              Y_subchanged_idx=Y_sub_idx,
                              nearest_valid_P=nearest_valid_P)
 
         # Return statistics used in further analysis
-        return Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
+        return Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_sub_idx, \
             nearest_valid_actions
 
     def evaluate_val_set(self, step: int, run: wandb.sdk.wandb_run.Run):

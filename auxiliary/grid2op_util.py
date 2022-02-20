@@ -6,10 +6,12 @@ Created on Thu Jan 27 09:27:46 2022
 @author: matthijs
 """
 import numpy as np
-from typing import Sequence, Tuple, List, Optional
+from typing import Sequence, Tuple, List, Optional, Callable
 import grid2op
+import torch
 from grid2op.dtypes import dt_int
 import math
+import auxiliary.util as util
 
 
 def extract_gen_features(obs_dict: dict) -> np.array:
@@ -247,6 +249,50 @@ def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
         i += ss
     return gs
 
+def select_single_substation_from_topovect(topo_vect : torch.Tensor,
+                                           sub_info : torch.Tensor,
+                                           f : Callable = torch.sum,
+                                           select_nothing_condition : Callable = lambda tv: all(tv < 0.5)) \
+                                           -> Tuple[torch.Tensor, Optional[int]]:
+    """
+    Given a topology vector, select the substation which object' maximize some function. From this substation, the mask
+    in the topology vector and the index are returned. If a certain condition is met, the function can also select
+    no substation, returning a zeroed array and an index of None.
+
+    Parameters
+    ----------
+    topo_vect : torch.Tensor
+        The vector based on which select a substation.
+    sub_info : torch.Tensor
+        Vector describing the number of objects per substation. Used to group topo_vect into objects of separate
+        substations.
+    f : Callable
+        Function, based on the argmax of which the substation is selected.
+    select_nothing_condition : Callable
+        A condition on the topo_vect, which, if it holds true, will select no substation.
+
+    Returns
+    -------
+    torch.Tensor
+        The mask of the selected substation (one at the substation, zero everywhere else). Fully zeroed if 
+        select_nothing_condition evaluates to true.
+    Optional[int]
+        Index of the substation. None if select_nothing_condition evaluates to true.
+    """
+    assert len(topo_vect) == sum(sub_info), "Lenght of topo vect should correspond to the sum of the " \
+                                            "substation objects."
+
+    if select_nothing_condition(topo_vect):
+        return torch.zeros_like(topo_vect), None
+
+    topo_vect_grouped = tv_groupby_subst(topo_vect, sub_info)
+    selected_substation_idx = util.argmax_f(topo_vect_grouped, f)
+    selected_substation_mask = torch.cat([(torch.ones_like(sub)
+                                           if i == selected_substation_idx
+                                           else torch.zeros_like(sub))
+                                          for i, sub in enumerate(topo_vect_grouped)]).bool()
+
+    return selected_substation_mask, selected_substation_idx
 
 def init_env(config: dict,
              gamerules_class: grid2op.Rules.BaseRules,

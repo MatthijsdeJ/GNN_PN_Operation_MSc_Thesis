@@ -6,11 +6,9 @@ Created on Thu Jan 27 10:04:10 2022
 @author: matthijs
 """
 
-from typing import Sequence, Tuple, Optional
+from typing import Sequence
 import torch
 from auxiliary.generate_action_space import get_env_actions
-import auxiliary.grid2op_util as g2o_util
-import auxiliary.util as util
 
 
 class ActSpaceCache:
@@ -22,7 +20,7 @@ class ActSpaceCache:
     predicted action.
     """
 
-    def __init__(self, line_outages_considered: Sequence[int] = [-1]):
+    def __init__(self, line_outages_considered: Sequence[int] = None):
         """
         Parameters
         ----------
@@ -30,6 +28,9 @@ class ActSpaceCache:
             For which lines removed to store the action space.
             -1 in this list represent no line removed. The default is [-1].
         """
+        if line_outages_considered is None:
+            line_outages_considered = [-1]
+
         self.set_act_space_per_lo = {}
         for lo in line_outages_considered:
             self.set_act_space_per_lo[lo] = torch.tensor(
@@ -96,39 +97,3 @@ class ActSpaceCache:
         change_act_space = change_act_space[P_diff_ind_sorted]
 
         return change_act_space
-
-
-def get_P_one_sub(P: torch.Tensor, sub_info: torch.Tensor) \
-        -> Tuple[torch.Tensor, Optional[int]]:
-    """
-    Selects the action only at the substation for which the predictions
-    where the most extreme. Does NOT produce a one hot vector.
-
-    Parameters
-    ----------
-    P : torch.Tensor
-        The predictions.
-    sub_info : torch.Tensor
-        Sequence with elements representing the number of object connected to
-        each substation.
-
-    Returns
-    -------
-    torch.Tensor
-        The tensor representing the predictions, but with zero except
-        for at the most extreme substation. If all elements are below the 0.5
-        threshold, zero everywhere.
-
-    Optional[int]
-        Index of the substation. None if all elements are below the 0.5
-        threshold.
-
-    """
-    if all(P < 0.5):
-        return torch.zeros_like(P), None
-
-    P_grouped = g2o_util.tv_groupby_subst(P, sub_info)
-    max_substation_idx = util.argmax_f(P_grouped,
-                                       lambda x: torch.sum(torch.clamp(x - 0.5, min=0)))
-    return torch.cat([sub if i == max_substation_idx else torch.zeros_like(sub)
-                      for i, sub in enumerate(P_grouped)]), max_substation_idx
