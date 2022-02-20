@@ -76,27 +76,30 @@ def get_Y_subchanged(Y: torch.Tensor, sub_info: torch.Tensor) \
                       for i, sub in enumerate(Y_grouped)]), idx
 
 
-def label_weights(mask: torch.Tensor, w: float) \
-        -> torch.Tensor:
+def get_label_weights(Y_sub_mask : torch.Tensor,
+                      P_sub_mask : torch.Tensor,
+                      non_mask_label_weights : float) -> torch.Tensor:
     """
     Give the masked labels a specific weight value, and the other weights value 1.
 
     Parameters
     ----------
-    mask : torch.Tensor[bool]
-        Mask indicating which labels to give a special weight.
-    w : float
-        The 'special' weight value.
+    Y_sub_mask : torch.Tensor
+        The mask indicating the true selected substation.
+    P_sub_mask : torch.Tensor
+        The mask indicating the predicted selected substation.
+    non_mask_label_weights : float
+        The weights to give to the labels that are masked by neither of above masks.
 
     Returns
     -------
     weights : torch.Tensor[float]
-        The resulting label weights, consisting of the values '1' and
-        'w_when_zero'.
+        The resulting label weights, consisting of the values '1' and 'w_when_zero'.
     """
-    weights = torch.ones_like(mask)
-    weights[mask.detach().bool()] = w
-    return weights
+    mask = torch.logical_or(Y_sub_mask, P_sub_mask)
+    label_weights = torch.ones_like(mask)
+    label_weights[~mask.detach().bool()] = non_mask_label_weights
+    return label_weights
 
 
 class Run:
@@ -295,7 +298,7 @@ class Run:
         Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y, dp['sub_info'])
         one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
         P_sub_mask = one_sub_P > 0
-        weights = label_weights(~torch.logical_or(Y_sub_mask, P_sub_mask), non_sub_label_weight)
+        weights = get_label_weights(Y_sub_mask, P_sub_mask, non_sub_label_weight)
 
         # Compute the loss, update gradients
         l = BCELoss_labels_weighted(P, Y_smth, weights)
@@ -369,7 +372,7 @@ class Run:
         Y_sub_mask, Y_sub_idx = get_Y_subchanged(Y, dp['sub_info'])
         one_sub_P, P_subchanged_idx = get_P_one_sub(P, dp['sub_info'])
         P_sub_mask = one_sub_P > 0
-        weights = label_weights(~torch.logical_or(Y_sub_mask, P_sub_mask), non_sub_label_weight)
+        weights = get_label_weights(Y_sub_mask, P_sub_mask, non_sub_label_weight)
 
         # Compute the loss
         l = BCELoss_labels_weighted(P, Y_smth, weights)
