@@ -12,8 +12,6 @@ import os
 from typing import List, Sequence, Callable
 import json
 
-import training.models
-
 
 def load_config():
     """
@@ -35,9 +33,6 @@ def load_config():
             config = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             raise exc
-    config['training']['GCN']['hyperparams']['network_type'] = training.models.GCN.NetworkType(
-        config['training']['GCN']['hyperparams']['network_type']
-    )
 
     # Perform some assertions
     for prm, n in [(config['tutor_generated_data']['n_chronics'], 'n_chronics'),
@@ -76,6 +71,8 @@ def load_config():
     assert 0 <= config['dataset']['val_perc'] <= 1, "Val. perc. should be in percentage range."
     assert config['training']['hyperparams']['model_type'] in ['GCN', 'FCNN'], \
            "Model_type should be value GCN or FCNN."
+    assert config['training']['GCN']['hyperparams']['network_type'] in ['heterogeneous', 'homogeneous'], \
+        "Network_type should be value homogeneous or heterogeneous."
     assert config['training']['GCN']['hyperparams']['aggr'] in ['add', 'mean'], \
            "Aggr. should be mean or add."
 

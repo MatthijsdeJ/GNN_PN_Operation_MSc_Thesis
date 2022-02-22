@@ -89,6 +89,9 @@ class Run:
 
         # Save some configurations
         self.config = config
+        config['training']['GCN']['hyperparams']['network_type'] = GCN.NetworkType(
+            config['training']['GCN']['hyperparams']['network_type']
+        )
         self.train_config = train_config = config['training']
         processed_data_path = config['paths']['processed_tutor_imitation']
         matrix_cache_path = config['paths']['con_matrix_cache']
