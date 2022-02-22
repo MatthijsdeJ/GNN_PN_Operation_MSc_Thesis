@@ -381,7 +381,7 @@ class Tutor(BaseAgent):
     #         return True
     # ====================s=========================================================
 
-    def act(self, observation: grid2op.Observation.CompleteObservation) \
+    def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, int, Optional[float],
                      Optional[float], Optional[float]]:
         """
@@ -435,3 +435,26 @@ class Tutor(BaseAgent):
         print('Action %d results in a forecasted max. rho of %.2f, search duration is %.2fs'
               % (selected_action_idx, selected_rho, time.time() - tick))
         return selected_action, selected_action_idx, do_nothing_rho, selected_rho, time.time() - tick
+
+    def act(self, observation, reward, done=False):
+        """
+        Adapt the output of select_action method to override the abstract 'act' function of the Agent superclass.
+
+        Parameters
+        ----------
+        observation: :class:`grid2op.Observation.BaseObservation`
+            The current observation of the :class:`grid2op.Environment.Environment`
+
+        reward: ``float``
+            The current reward. This is the reward obtained by the previous action
+
+        done: ``bool``
+            Whether the episode has ended or not. Used to maintain gym compatibility
+
+        Returns
+        -------
+        res: :class:`grid2op.Action.PlaybleAction`
+            The action chosen by the agent.
+        """
+        action, _, _, _, _ = self.select_action(observation)
+        return action

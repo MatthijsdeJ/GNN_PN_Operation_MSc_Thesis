@@ -187,7 +187,7 @@ def generate(config: dict,
                 
             # If neither of above holds, the tutor takes an action
             obs = env.get_obs()
-            action, idx, do_nothing_rho, selected_rho, time = tutor.act(obs)
+            action, idx, do_nothing_rho, selected_rho, time = tutor.select_action(obs)
 
             # If an action should be stored (i.e. it does not have an action index of -2), store that action.
             # This is typically used for do-nothing actions below the max. rho threshold
