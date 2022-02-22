@@ -114,12 +114,7 @@ class Strategy(ABC):
             Whether the agent should get active.
         """
         obs, _, done, _ = observation.simulate(action)
-        if obs.rho.max() > self.do_nothing_capacity_threshold:
-            return True
-        elseif done:
-            return True
-        else:
-            return False
+return obs.rho.max() > self.do_nothing_capacity_threshold or done
 
 
 class GreedyStrategy(Strategy):
