@@ -93,7 +93,7 @@ class Strategy(ABC):
         return obs.rho.max() if not done else float('Inf')
     
     @staticmethod
-    def activity_criterion1(observation: grid2op.Observation.CompleteObservation,
+    def activity_criterion_current(observation: grid2op.Observation.CompleteObservation,
                               do_nothing_capacity_threshold: float) -> bool:
         """
         Evaluates activity criterion 1. Returns if agent should get active.
@@ -113,7 +113,7 @@ class Strategy(ABC):
         return observation.rho.max() > do_nothing_capacity_threshold
 
     @staticmethod
-    def activity_criterion2(observation: grid2op.Observation.CompleteObservation,
+    def activity_criterion_simulate(observation: grid2op.Observation.CompleteObservation,
                              do_nothing_action: grid2op.Action.BaseAction
                              do_nothing_capacity_threshold: float) -> bool:
         """
