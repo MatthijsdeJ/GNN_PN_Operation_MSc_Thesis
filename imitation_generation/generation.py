@@ -137,7 +137,7 @@ def generate(config: dict,
     else:
         raise ValueError("Invalid value for strategy_name.")
     tutor = Tutor(env.action_space,
-                  get_env_actions(disable_line=disable_line),
+                  get_env_actions(env, disable_line=disable_line),
                   do_nothing_capacity_threshold,
                   strategy)
     obs_vect_size = len(env.get_obs().to_vect())

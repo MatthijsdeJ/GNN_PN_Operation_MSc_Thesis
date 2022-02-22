@@ -60,6 +60,7 @@ import itertools as it
 from typing import Tuple, List
 import auxiliary.util as util
 import argparse
+import auxiliary.grid2op_util as g2o_util
 
 def create_dictionary(combs,sub_elem): 
     """ To create action in the form of dictionary for this particular 
@@ -439,9 +440,10 @@ class action_identificator():
     A class to reduce overhead.
     '''
     
-    def __init__(self,line_disabled: int=-1):
-
-        self.all_actions = get_env_actions(line_disabled)
+    def __init__(self,
+                 env: grid2op.Environment.Environment,
+                 line_disabled: int = -1):
+        self.all_actions = get_env_actions(env, line_disabled)
         
     def get_set_topo_vect(self, action_id: int):
         '''
@@ -462,24 +464,24 @@ class action_identificator():
         '''
         return self.all_actions[action_id]._set_topo_vect
     
-def get_env_actions(disable_line: int =-1) -> List[grid2op.Action.TopologyAction]:
+def get_env_actions(env: grid2op.Environment.Environment,
+                    disable_line: int =-1) -> List[grid2op.Action.TopologyAction]:
     '''
-    For the rte_case14_realistic environment, find the 'set' busbar actions that are
-    legal.
+    For a given Grid2Op environment, find the 'set' busbar actions that are legal.
 
     Parameters
     ----------
+    env : grid2op.Environment.Environment
+        The environment to get the actions for.
     disable_line : int, optional
-        The index of a line form the environment to be disabled. 
-        The default is -1, i.e no line.
+        The index of a line form the environment to be disabled. The default is -1, i.e no line.
         
     Returns
     -------
     all_actions : List[grid2op.Action.TopologyAction]
         The list of legal actions.
     '''
-    env = grid2op.make("rte_case14_realistic") #making the environment
-    actions=create_action_space(env,disable_line=disable_line) #default subset is all 14 substations
+    actions=create_action_space(env, disable_line=disable_line) #default subset is all 14 substations
     return actions
   
 def generate_action_space(action_space_path: str, disable_line: int =-1):
@@ -495,7 +497,8 @@ def generate_action_space(action_space_path: str, disable_line: int =-1):
         The index of a line form the environment to be disabled. 
         The default is -1, i.e no line.
     '''
-    set_actions = np.array([a._set_topo_vect for a in get_env_actions(disable_line=disable_line)])
+    env = g2o_util.init_env(util.load_config(), grid2op.Rules.AlwaysLegal)
+    set_actions = np.array([a._set_topo_vect for a in get_env_actions(env, disable_line=disable_line)])
     n_actions = len(set_actions)
     print(f'Nr. of actions foud: {n_actions}')
     

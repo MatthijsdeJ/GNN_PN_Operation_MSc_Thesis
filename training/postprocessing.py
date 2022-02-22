@@ -6,9 +6,12 @@ Created on Thu Jan 27 10:04:10 2022
 @author: matthijs
 """
 
-from typing import Sequence
+from typing import Sequence, Optional
 import torch
 from auxiliary.generate_action_space import get_env_actions
+import auxiliary.grid2op_util as g2o_util
+import auxiliary.util as util
+import grid2op
 
 
 class ActSpaceCache:
@@ -20,21 +23,27 @@ class ActSpaceCache:
     predicted action.
     """
 
-    def __init__(self, line_outages_considered: Sequence[int] = None):
+    def __init__(self,
+                 env: Optional[grid2op.Environment.Environment] = None,
+                 line_outages_considered: Sequence[int] = None):
         """
         Parameters
         ----------
+        env : Optional[grid2op.Environment.Environment]
+            The environment to make the actions for. If None, a new environment will be initialized.
         line_outages_considered : Sequence[int], optional
             For which lines removed to store the action space.
             -1 in this list represent no line removed. The default is [-1].
         """
+        if env is None:
+            env = g2o_util.init_env(util.load_config(), grid2op.Rules.AlwaysLegal)
         if line_outages_considered is None:
             line_outages_considered = [-1]
 
         self.set_act_space_per_lo = {}
         for lo in line_outages_considered:
             self.set_act_space_per_lo[lo] = torch.tensor(
-                [a._set_topo_vect for a in get_env_actions(lo)])
+                [a._set_topo_vect for a in get_env_actions(env, lo)])
 
     def get_change_actspace_by_nearness_pred(self,
                                              line_disabled: int,

@@ -442,7 +442,7 @@ def process_raw_tutor_data(config: dict):
         # particular line disabled
         # Action identificator give the action corresponding to an action index
         if line_disabled not in action_iders:
-            action_iders[line_disabled] = action_identificator(line_disabled)
+            action_iders[line_disabled] = action_identificator(env, line_disabled)
 
         # Create a list wherein to store the processed datapoints for this
         # particular file
