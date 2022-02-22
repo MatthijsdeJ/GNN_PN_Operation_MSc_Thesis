@@ -91,7 +91,50 @@ class Strategy(ABC):
         """
         obs, _, done, _ = observation.simulate(action)
         return obs.rho.max() if not done else float('Inf')
+    
+    @staticmethod
+    def activity_criterion_current(observation: grid2op.Observation.CompleteObservation,
+                              do_nothing_capacity_threshold: float) -> bool:
+        """
+        Evaluates activity criterion 1. Returns if agent should get active.
+        
+        Parameters
+        ----------
+        observation: grid2op.Observation.CompleteObservation
+            The observation to simulate the action in.
+        do_nothing_capacity_threshold: float
+            The rho value, so that if exceeded by any line the agent gets active.
 
+        Returns
+        -------
+        bool
+            Whether the agent should get active.
+        """
+        return observation.rho.max() > do_nothing_capacity_threshold
+
+    @staticmethod
+    def activity_criterion_simulate(observation: grid2op.Observation.CompleteObservation,
+                             do_nothing_action: grid2op.Action.BaseAction
+                             do_nothing_capacity_threshold: float) -> bool:
+        """
+        Simulates the do-nothing action, evaluates activity criterion 2. Returns if agent should get active.
+        
+        Parameters
+        ----------
+        observation: grid2op.Observation.CompleteObservation
+            The observation to simulate the action in.
+        do_nothing_action: grid2op.Action.BaseAction
+            The do nothing action that will be simulated.
+        do_nothing_capacity_threshold: float
+            The rho value, so that if exceeded by any line the agent gets active.
+
+        Returns
+        -------
+        bool
+            Whether the agent should get active.
+        """
+        obs, _, done, _ = observation.simulate(do_nothing_action)
+        return obs.rho.max() > self.do_nothing_capacity_threshold or done
 
 class GreedyStrategy(Strategy):
     """
