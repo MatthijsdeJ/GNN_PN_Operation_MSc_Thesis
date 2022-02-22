@@ -92,6 +92,35 @@ class Strategy(ABC):
         obs, _, done, _ = observation.simulate(action)
         return obs.rho.max() if not done else float('Inf')
 
+    @staticmethod
+    def activity_criterion1(observation: grid2op.Observation.CompleteObservation,
+                              action: grid2op.Action.BaseAction
+                              do_nothing_capacity_threshold: float) -> bool:
+        """
+        Simulates an action, evaluates activity criterion 1. Returns if agent should get active.
+
+        Parameters
+        ----------
+        observation: grid2op.Observation.CompleteObservation
+            The observation to simulate the action in.
+        action: grid2op.Action.BaseAction
+            The action to simulate.
+        do_nothing_capacity_threshold: float
+            The rho value, so that if exceeded by any line the agent gets active.
+
+        Returns
+        -------
+        bool
+            Whether the agent should get active.
+        """
+        obs, _, done, _ = observation.simulate(action)
+        if obs.rho.max() > self.do_nothing_capacity_threshold:
+            return True
+        elseif done:
+            return True
+        else:
+            return False
+
 
 class GreedyStrategy(Strategy):
     """
