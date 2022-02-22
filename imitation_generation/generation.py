@@ -9,7 +9,7 @@ Created on Fri Jan 28 13:51:31 2022
 import os
 import grid2op
 import numpy as np
-from imitation_generation.tutor import Tutor, CheckNMinOneStrategy
+from imitation_generation.tutor import Tutor, CheckNMinOneStrategy, GreedyStrategy
 from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
 
@@ -94,6 +94,7 @@ def empty_records(obs_vect_size: int):
 
         
 def generate(config: dict,
+             strategy_name: str,
              do_nothing_capacity_threshold: float = 0.97,
              disable_line: int = -1,
              start_chronic_id: int = 0):
@@ -104,6 +105,8 @@ def generate(config: dict,
     ----------
     config : dict
         The config file with parameters and setting.
+    strategy_name : str
+        String indicated the strategy to select. Should be 'Greedy' or 'CheckNMinOne'.
     do_nothing_capacity_threshold : float, optional
         The threshold max. line rho at which the tutor takes actions. The default is .97.
     disable_line : int, optional
@@ -126,8 +129,13 @@ def generate(config: dict,
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     env.set_id(start_chronic_id)
     
-    # Prepare tutor and record objects
-    strategy = CheckNMinOneStrategy(env.action_space, config['tutor_generated_data']['line_idxs_to_consider_N-1'])
+    # Prepare strategy, tutor and record objects
+    if strategy_name == "Greedy":
+        strategy = GreedyStrategy(env.action_space())
+    elif strategy_name == "CheckNMinOne":
+        strategy = CheckNMinOneStrategy(env.action_space, config['tutor_generated_data']['line_idxs_to_consider_N-1'])
+    else:
+        raise ValueError("Invalid value for strategy_name.")
     tutor = Tutor(env.action_space,
                   get_env_actions(disable_line=disable_line),
                   do_nothing_capacity_threshold,

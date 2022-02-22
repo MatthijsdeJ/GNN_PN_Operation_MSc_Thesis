@@ -24,10 +24,13 @@ if __name__ == '__main__':
                         required=False, default=-1, type=int)
     parser.add_argument("--start_chronic_id",  help="The chronic to start with.",
                         required=False, default=0, type=int)
+    parser.add_argument("--strategy", help="The strategy to select. Should be 'Greedy' or 'CheckNMinOne'.",
+                        required=False, default="CheckNMinOne")
     args = parser.parse_args()
     
     config = util.load_config()
     gnr.generate(config,
+                 args.strategy,
                  args.do_nothing_capacity_threshold,
                  args.disable_line,
                  args.start_chronic_id)
