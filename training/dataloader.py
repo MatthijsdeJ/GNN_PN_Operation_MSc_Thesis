@@ -61,9 +61,6 @@ class TutorDataLoader:
         self._file_paths = [os.path.join(root, fn) for fn in self._file_names]
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
-        with open(action_counter_path, 'r') as file:
-            self._action_counter = json.loads(file.read())
-        self.action_frequency_threshold = action_frequency_threshold
 
         if model_type == GCN:
             assert isinstance(network_type, GCN.NetworkType), 'Invalid network type'
@@ -77,6 +74,7 @@ class TutorDataLoader:
             self.process_dp_strategy = ProcessDataPointFCNN(device,
                                                             train,
                                                             feature_statistics)
+
 
     def get_file_datapoints(self, idx: int) -> List[dict]:
         """
@@ -102,9 +100,10 @@ class TutorDataLoader:
         for raw_dp in raw_datapoints:
 
             # skip datapoints that occur too infrequently in the dataset
-            act_freq = self._action_counter[str(raw_dp['act_hash'])]
-            if act_freq < self.action_frequency_threshold:
-                continue
+            # TODO: decide whether to keep this frequency check in
+            # act_freq = self._action_counter[str(raw_dp['act_hash'])]
+            # if act_freq < self.action_frequency_threshold:
+            #    continue
 
             # process datapoint
             dp = self.process_dp_strategy.process_datapoint(raw_dp)
@@ -164,6 +163,13 @@ class ProcessDataPointStrategy(ABC):
         self.device = device
         self.train = train
         self.feature_statistics = feature_statistics
+        self.class_weight_assigner = ClassWeightAssigner(config['paths']['action_counter'],
+                                                         config['training']['hyperparams']['class_weights']
+                                                               ['max_adapt_weight'],
+                                                         config['training']['hyperparams']['class_weights']
+                                                               ['min_adapt_weight'],
+                                                         config['training']['hyperparams']['class_weights']
+                                                               ['min_weight_zero'])
 
     @abstractmethod
     def process_datapoint(self, raw_dp: int):
@@ -185,7 +191,7 @@ class ProcessDataPointStrategy(ABC):
 
     def add_processed_label(self, raw_dp: dict, dp: dict):
         """
-        Extract the label from raw_dp, process it, and store it in dp.
+        Extract the label from raw_dp, process it, and store it in dp. Includes the class weight too.
 
         Parameters
         ----------
@@ -202,6 +208,7 @@ class ProcessDataPointStrategy(ABC):
         dp['change_topo_vect'] = torch.tensor(raw_dp['change_topo_vect'],
                                               device=self.device,
                                               dtype=torch.float)
+        dp['class_weight'] = self.class_weight_assigner.assign(raw_dp['act_hash'])
         return dp
 
     def add_val_info(self, raw_dp: dict, dp: dict):
@@ -408,3 +415,89 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
             dp = self.add_val_info(raw_dp, dp)
 
         return dp
+
+
+class ClassWeightAssigner:
+    """
+    Class for assigning weights to samples based on their class (i.e. action). Us
+    """
+    def __init__(self,
+                 class_counter_path: str,
+                 max_adapt_weight: int,
+                 min_adapt_weight: int,
+                 min_weight_zero):
+        """
+
+        Parameters
+        ----------
+        class_counter_path : str
+            Path of the .json file storing the data structure that stores the frequency of each class in the
+            entire (train+val+test) dataset.
+        max_adapt_weight : int
+            The max threshold for transforming the weight of a class, above which classes are assigned a weight of 1.
+        min_adapt_weight : int
+            The min threshold for transforming the weight of a class, below which classes are assigned a weight of 1 or
+             0.
+        min_weight_zero : int
+            The max threshold, below which classes are assigned a weight of 0. Used to exclude infrequent classes.
+        """
+        assert max_adapt_weight >= min_adapt_weight, "Max adapt weight cannot be smaller than the min adapt weight."
+        assert min_adapt_weight >= min_weight_zero, "Min adapt weight cannot be smaller than min_weight_zero."
+        # Open action counter data structure
+        with open(class_counter_path, 'r') as file:
+            self._class_counter = json.loads(file.read())
+
+        # Save parameters
+        self.max_adapt_weight = max_adapt_weight
+        self.min_adapt_weight = min_adapt_weight
+        self.min_weight_zero = min_weight_zero
+
+        # Compute relevant numbers
+        values = self._class_counter.values()
+        self.N_datapoints = sum(values)
+        self.N_classes = len(values)
+        self.max_class_size = max(values)
+
+    def assign(self, class_hash: int) -> float:
+        """
+        Given an action/class hash, return the class weights.
+
+        Parameters
+        ----------
+        class_hash : int
+            The hash of the class.
+
+        Returns
+        -------
+        weight : float
+            The weight.
+
+        Raises
+        ------
+        ValueError : When the action hash isn't stored in the action counter, i.e. it is not in the train/val/test
+        data.
+        """
+        class_count = self._class_counter[str(class_hash)]
+
+        if class_count < self.min_weight_zero:
+            return 0
+        elif self.min_adapt_weight < class_count < self.max_adapt_weight:
+            return self._get_adapted_class_weight(class_count)
+        else:
+            return 1
+
+    def _get_adapted_class_weight(self, class_count: int) -> float:
+        """
+        Get the adapted class weight for a class given the class count.
+
+        Parameters
+        ----------
+        class_count : int
+            The class count.
+
+        Returns
+        -------
+        float
+            The adapted class weight.
+        """
+        return (self.N_datapoints/self.N_classes)/class_count
