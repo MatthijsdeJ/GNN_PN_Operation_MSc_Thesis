@@ -68,3 +68,4 @@ training:
     model_tags: [GCN, different_label_weights]
     project: msc_thesis_gnn_power
     entity: mattholomew
+    mode: disabled

@@ -190,11 +190,13 @@ class Run:
                                   entity=train_parameters['wandb']["entity"],
                                   name=train_parameters['wandb']['model_name'],
                                   tags=train_parameters['wandb']['model_tags'],
+                                  mode=train_parameters['wandb']['mode'],
                                   config=train_parameters)
         else:
             self.run = wandb.init(project=train_parameters['wandb']["project"],
                                   entity=train_parameters['wandb']["entity"],
                                   tags=train_parameters['wandb']['model_tags'],
+                                  mode=train_parameters['wandb']['mode'],
                                   config=train_parameters)
         self.run.watch(self.model,
                        log_freq=train_parameters['settings']['train_log_freq'],
