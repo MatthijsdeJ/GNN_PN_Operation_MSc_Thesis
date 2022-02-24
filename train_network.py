@@ -10,6 +10,9 @@ from training.training import Run
 import argparse
 import auxiliary.util as util
 import training.models
+from auxiliary.config import config
+import copy
+
 
 def main():
     
@@ -43,40 +46,38 @@ def main():
     args = parser.parse_args()
     
     # If an argument is given, overwrite the config file
-    config = util.load_config()
-    
+    train_parameters = copy.deepcopy(config['training'])
+
     if args.model_name is not None:
-        config['training']['wandb']['model_name'] = args.model_name
-    if args.processed_tutor_imitation is not None:
-        config['paths']['processed_tutor_imitation'] = args.processed_tutor_imitation
+        train_parameters['wandb']['model_name'] = args.model_name
     if args.model_type is not None:
-        config['training']['hyperparams']['model_type'] = args.model_type
+        train_parameters['hyperparams']['model_type'] = args.model_type
     if args.GCN_layers is not None:
-        config['training']['GCN']['hyperparams']['GCN_layers'] = args.GCN_layers
+        train_parameters['GCN']['hyperparams']['GCN_layers'] = args.GCN_layers
     if args.N_node_hidden is not None:
-        config['training']['hyperparams']['N_node_hidden'] = args.N_node_hidden
+        train_parameters['hyperparams']['N_node_hidden'] = args.N_node_hidden
     if args.lr is not None:
-        config['training']['hyperparams']['lr'] = args.lr
+        train_parameters['hyperparams']['lr'] = args.lr
     if args.batch_size is not None:
-        config['training']['hyperparams']['batch_size'] = args.batch_size
+        train_parameters['hyperparams']['batch_size'] = args.batch_size
     if args.weight_init_std is not None:
-        config['training']['hyperparams']['weight_init_std'] = args.weight_init_std
+        train_parameters['hyperparams']['weight_init_std'] = args.weight_init_std
     if args.weight_decay is not None:
-        config['training']['hyperparams']['weight_decay'] = args.weight_decay
+        train_parameters['hyperparams']['weight_decay'] = args.weight_decay
     if args.aggr is not None:
-        config['training']['GCN']['hyperparams']['aggr'] = args.aggr
+        train_parameters['GCN']['hyperparams']['aggr'] = args.aggr
     if args.non_sub_label_weight is not None:
-        config['training']['hyperparams']['non_sub_label_weight'] = args.non_sub_label_weight
+        train_parameters['hyperparams']['non_sub_label_weight'] = args.non_sub_label_weight
     if args.label_smoothing_alpha is not None:
-        config['training']['hyperparams']['label_smoothing_alpha'] = args.label_smoothing_alpha
+        train_parameters['hyperparams']['label_smoothing_alpha'] = args.label_smoothing_alpha
     if args.network_type is not None:
-        config['training']['GCN']['hyperparams']['network_type'] = training.models.GCN.NetworkType(
+        train_parameters['GCN']['hyperparams']['network_type'] = training.models.GCN.NetworkType(
             args.network_type
         )
     if args.N_layers is not None:
-        config['training']['FCNN']['hyperparams']['N_layers'] = args.N_layers
+        train_parameters['FCNN']['hyperparams']['N_layers'] = args.N_layers
     # Start the run
-    r = Run(config)
+    r = Run(train_parameters)
     r.start()
 
 

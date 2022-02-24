@@ -12,8 +12,7 @@ from data_preprocessing_analysis.imitation_data_preprocessing import process_raw
 
 def main():
     # Preprocess data
-    config = util.load_config()
-    process_raw_tutor_data(config)
+    process_raw_tutor_data()
 
     # Divide preprocessed data files over train, val, and test folders
     divide_files_train_val_test()
