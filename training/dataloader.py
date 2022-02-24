@@ -14,6 +14,7 @@ from typing import List, Optional, Type
 import numpy as np
 from training.models import GCN, FCNN
 from abc import ABC, abstractmethod
+from auxiliary.config import config
 
 
 class TutorDataLoader:

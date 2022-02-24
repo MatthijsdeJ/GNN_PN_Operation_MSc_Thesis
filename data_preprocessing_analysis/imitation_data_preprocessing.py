@@ -5,8 +5,6 @@ Created on Thu Oct 28 16:30:55 2021
 
 @author: matthijs
 """
-import shutil
-
 import grid2op
 import numpy as np
 from typing import List, Tuple, Callable, Sequence
@@ -16,6 +14,7 @@ import json
 import auxiliary.grid2op_util as g2o_util
 import auxiliary.util as util
 from auxiliary.util import NumpyEncoder
+from auxiliary.config import config
 from tqdm import tqdm
 from auxiliary.generate_action_space import action_identificator
 from collections import Counter
@@ -398,14 +397,9 @@ class FeatureStatistics:
             json.dump(stats, outfile, cls=NumpyEncoder)
 
 
-def process_raw_tutor_data(config: dict):
+def process_raw_tutor_data():
     """
     Process the raw datapoints and store the processed datapoints.
-
-    Parameters
-    ----------
-    config : dict
-        Config dict with information such as file paths and constants.
     """
 
     # Specify paths
@@ -416,8 +410,7 @@ def process_raw_tutor_data(config: dict):
     ac_path = config['paths']['action_counter']
 
     # Initialize environment and environment variables
-    env = g2o_util.init_env(config,
-                            grid2op.Rules.AlwaysLegal)
+    env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
     grid2op_vect_size = len(env.get_obs().to_vect())
     thermal_limits = config['rte_case14_realistic']['thermal_limits']
 
@@ -552,7 +545,6 @@ def divide_files_train_val_test():
     RuntimeError
         Whenever there are files in the existing train/val/test folders which are not .json files.
     """
-    config = util.load_config()
     processed_path = config['paths']['processed_tutor_imitation']
 
     # Remove directories including existing processed datapoints

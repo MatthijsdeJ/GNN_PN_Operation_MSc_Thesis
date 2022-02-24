@@ -12,6 +12,7 @@ import torch
 from grid2op.dtypes import dt_int
 import math
 import auxiliary.util as util
+from auxiliary.config import config
 
 
 def extract_gen_features(obs_dict: dict) -> np.array:
@@ -294,9 +295,7 @@ def select_single_substation_from_topovect(topo_vect : torch.Tensor,
 
     return selected_substation_mask, selected_substation_idx
 
-def init_env(config: dict,
-             gamerules_class: grid2op.Rules.BaseRules,
-             ) -> grid2op.Environment.Environment:
+def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.Environment:
     """
     Prepares the Grid2Op environment from a dictionary containing configuration setting.
 

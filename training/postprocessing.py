@@ -36,7 +36,7 @@ class ActSpaceCache:
             -1 in this list represent no line removed. The default is [-1].
         """
         if env is None:
-            env = g2o_util.init_env(util.load_config(), grid2op.Rules.AlwaysLegal)
+            env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
         if line_outages_considered is None:
             line_outages_considered = [-1]
 

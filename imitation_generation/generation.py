@@ -12,6 +12,7 @@ import numpy as np
 from imitation_generation.tutor import Tutor, CheckNMinOneStrategy, GreedyStrategy
 from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
+from auxiliary.config import config
 
 # =============================================================================
 # This is half-finished code for returning to the reference topology without requiring 'different' Grid2Op Rule.
@@ -93,8 +94,7 @@ def empty_records(obs_vect_size: int):
     return np.zeros((0, 5+obs_vect_size), dtype=np.float32)
 
         
-def generate(config: dict,
-             strategy_name: str,
+def generate(strategy_name: str,
              do_nothing_capacity_threshold: float = 0.97,
              disable_line: int = -1,
              start_chronic_id: int = 0):
@@ -103,8 +103,6 @@ def generate(config: dict,
 
     Parameters
     ----------
-    config : dict
-        The config file with parameters and setting.
     strategy_name : str
         String indicated the strategy to select. Should be 'Greedy' or 'CheckNMinOne'.
     do_nothing_capacity_threshold : float, optional
@@ -125,7 +123,7 @@ def generate(config: dict,
     ts_in_day = int(config['rte_case14_realistic']['ts_in_day'])
     
     # Initialize environment
-    env = g2o_util.init_env(config, grid2op.Rules.AlwaysLegal)
+    env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
     print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
     env.set_id(start_chronic_id)
     

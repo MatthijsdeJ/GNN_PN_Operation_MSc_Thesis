@@ -12,7 +12,6 @@ author: chen binbin
 mail: cbb@cbb1996.com
 """
 import argparse
-import auxiliary.util as util
 import imitation_generation.generation as gnr
                 
 if __name__ == '__main__':
@@ -28,9 +27,7 @@ if __name__ == '__main__':
                         required=False, default="CheckNMinOne")
     args = parser.parse_args()
     
-    config = util.load_config()
-    gnr.generate(config,
-                 args.strategy,
+    gnr.generate(args.strategy,
                  args.do_nothing_capacity_threshold,
                  args.disable_line,
                  args.start_chronic_id)
