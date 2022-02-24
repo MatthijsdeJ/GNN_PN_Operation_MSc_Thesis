@@ -268,7 +268,7 @@ class Run:
         Y_smth = (1 - label_smth_alpha) * dp['change_topo_vect'] + \
                  label_smth_alpha * 0.5 * torch.ones_like(Y, device=self.device)
 
-        # Compute the weights for the loss
+        # Compute the label weights for the loss
         non_sub_label_weight = self.train_parameters['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
         P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
@@ -278,6 +278,7 @@ class Run:
 
         # Compute the loss, update gradients
         l = BCELoss_labels_weighted(P, Y_smth, weights)
+        l = dp['class_weight']*l
         l.backward()
 
         # If the batch is filled, update the model, reset gradients
@@ -355,6 +356,7 @@ class Run:
 
         # Compute the loss
         l = BCELoss_labels_weighted(P, Y_smth, weights)
+        l = dp['class_weight']*l
 
         # Calculate statistics for metrics
         one_sub_P = torch.zeros_like(P)
