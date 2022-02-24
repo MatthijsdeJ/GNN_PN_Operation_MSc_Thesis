@@ -50,3 +50,5 @@ assert config['training']['GCN']['hyperparams']['network_type'] in ['heterogeneo
     "Network_type should be value homogeneous or heterogeneous."
 assert config['training']['GCN']['hyperparams']['aggr'] in ['add', 'mean'], \
     "Aggr. should be mean or add."
+assert config['training']['wandb']['mode'] in ['online', 'offline', 'disabled'], \
+    "WandB mode should be online, offline, or disabled."
