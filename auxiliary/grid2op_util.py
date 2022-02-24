@@ -6,7 +6,7 @@ Created on Thu Jan 27 09:27:46 2022
 @author: matthijs
 """
 import numpy as np
-from typing import Sequence, Tuple, List, Optional, Callable
+from typing import Sequence, Tuple, List, Optional, Callable, Dict
 import grid2op
 import torch
 from grid2op.dtypes import dt_int
@@ -214,7 +214,14 @@ def connectivity_matrices(sub_info: Sequence[int],
     col_ind_otherbus = np.array(col_ind_otherbus).astype(dt_int)
     row_ind_line = np.array(row_ind_line).astype(dt_int)
     col_ind_line = np.array(col_ind_line).astype(dt_int)
-           
+
+    assert all([i!=j for i,j in list(zip(row_ind_samebus,col_ind_samebus))]), \
+        "No object should be connected to itself."
+    assert all([i!=j for i,j in list(zip(row_ind_otherbus,col_ind_otherbus))]), \
+        "No object should be connected to itself."
+    assert all([i!=j for i,j in list(zip(row_ind_line,col_ind_line))]), \
+        "No object should be connected to itself."
+
     connectivity_matrix_samebus = np.stack((row_ind_samebus, col_ind_samebus))
     connectivity_matrix_otherbus = np.stack((row_ind_otherbus, col_ind_otherbus))
     connectivity_matrix_line = np.stack((row_ind_line, col_ind_line))
@@ -222,6 +229,66 @@ def connectivity_matrices(sub_info: Sequence[int],
     return connectivity_matrix_samebus, \
         connectivity_matrix_otherbus, \
         connectivity_matrix_line
+
+
+def connectivity_matrices_to_hetero_connectivity_matrices(edges_dict: Dict[str, Tuple[List, List]]) \
+        -> List[Tuple[int, int]]:
+    """
+    Given a dictionary of edge types and their corresponding edges, split these edges into edges based on
+    the edge type and the endpoint types. The point of this class is to store the data in such a way that makes
+    it easy to initialize a Pytorch Geometric HeteroData class from it.
+
+    Parameters
+    ----------
+    edges_dict: Dict[str. Tuple(List, List)]
+        The dictionary of edges types and their corresponding edges.
+
+    Returns
+    -------
+    hetero_edge_dict: Dict[Tuple(str, str, str), List(Tuple(int, int)]
+    """
+
+    hetero_edges_dict = {}
+    gen_pos_topo_vect = config['rte_case14_realistic']['gen_pos_topo_vect']
+    load_pos_topo_vect = config['rte_case14_realistic']['load_pos_topo_vect']
+    line_or_pos_topo_vect = config['rte_case14_realistic']['line_or_pos_topo_vect']
+    line_ex_pos_topo_vect = config['rte_case14_realistic']['line_ex_pos_topo_vect']
+
+    # For each edge type
+    for edge_type, edges in edges_dict.items():
+        # For each edge of that type
+        for incident1, incident2 in list(zip(*edges)):
+            incident1_type = None
+            incident1_pos = None
+            incident2_type = None
+            incident2_pos = None
+
+            # Find out the types and positions of the connected nodes
+            for node_type, pos_topo_vect in [('gen', gen_pos_topo_vect),
+                                             ('load', load_pos_topo_vect),
+                                             ('or', line_or_pos_topo_vect),
+                                             ('ex', line_ex_pos_topo_vect)]:
+                if incident1 in pos_topo_vect:
+                    incident1_type = node_type
+                    incident1_pos = pos_topo_vect.index(incident1)
+                if incident2 in pos_topo_vect:
+                    incident2_type = node_type
+                    incident2_pos = pos_topo_vect.index(incident2)
+
+            assert incident1_pos is not None and incident2_pos is not None, \
+                "Incidents positions should have been found among the pos topo vects."
+
+            # Combine information into hetero edge type and node incidences
+            hetero_edge_type = (incident1_type, edge_type, incident2_type)
+            hetero_edge_pos = (incident1_pos, incident2_pos)
+
+            # Append to the dict
+            if hetero_edge_type in hetero_edges_dict:
+                hetero_edges_dict[hetero_edge_type].append(hetero_edge_pos)
+            else:
+                hetero_edges_dict[hetero_edge_type] = [hetero_edge_pos]
+
+    return hetero_edges_dict
 
 
 def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
@@ -249,6 +316,7 @@ def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
         gs.append(tv[i:i+ss])
         i += ss
     return gs
+
 
 def select_single_substation_from_topovect(topo_vect : torch.Tensor,
                                            sub_info : torch.Tensor,
@@ -295,14 +363,13 @@ def select_single_substation_from_topovect(topo_vect : torch.Tensor,
 
     return selected_substation_mask, selected_substation_idx
 
+
 def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.Environment:
     """
     Prepares the Grid2Op environment from a dictionary containing configuration setting.
 
     Parameters
     ----------
-    config : dict
-        Dictionary containing configuration variables.
     gamerules_class : grid2op.Rules.BaseRules
         The rules of the game.
 

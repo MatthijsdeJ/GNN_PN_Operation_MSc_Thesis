@@ -267,10 +267,21 @@ class ConMatrixCache:
                                                           topo_vect.astype(int),
                                                           line_or_pos_topo_vect.astype(int),
                                                           line_ex_pos_topo_vect.astype(int))
+            if line_disabled != -1:
+                raise NotImplementedError("Next function needs to be adapted to use the adapted env variables for"
+                                          "lines disabled.")
+            hetero_con_matrices = g2o_util.connectivity_matrices_to_hetero_connectivity_matrices(
+                {'same_busbar': con_matrices[0],
+                 'other_busbar': con_matrices[1],
+                 'line': con_matrices[2]}
+            )
 
-            self.con_matrices[h_topo_vect] = (topo_vect, con_matrices)
+            # Convert hetero_con_matrices keys from tuples to strings, because of json
+            hetero_con_matrices = dict([(",".join(k), v) for k, v in hetero_con_matrices.items()])
+            self.con_matrices[h_topo_vect] = (topo_vect, con_matrices, hetero_con_matrices)
 
         return h_topo_vect
+
 
     def save(self, fpath: str = ''):
         """
@@ -298,6 +309,9 @@ class ConMatrixCache:
         cmc = cls()
         with open(fpath, 'r') as file:
             cmc.con_matrices = json.loads(file.read())
+
+        # Change the hetero_con_matrices back from strings to tuples
+        cmc[2] = dict([(tuple(k.split(',')), v) for k, v in cmc[2].items()])
         return cmc
 
 
@@ -515,7 +529,6 @@ def process_raw_tutor_data():
                                                line_disabled,
                                                env_info_dict['sub_info'],
                                                env_info_dict['line_or_pos_topo_vect'],
-
                                                env_info_dict['line_ex_pos_topo_vect'])
             dp['cm_index'] = cm_index
             assert dp['cm_index'] in cmc.con_matrices
