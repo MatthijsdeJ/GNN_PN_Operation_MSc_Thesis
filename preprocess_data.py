@@ -6,7 +6,6 @@ Created on Thu Jan 27 12:27:45 2022
 @author: matthijs
 """
 
-import auxiliary.util as util
 from data_preprocessing_analysis.imitation_data_preprocessing import process_raw_tutor_data, divide_files_train_val_test
 
 

@@ -12,7 +12,7 @@ import torch
 from grid2op.dtypes import dt_int
 import math
 import auxiliary.util as util
-from auxiliary.config import config
+from auxiliary.config import get_config
 
 
 def extract_gen_features(obs_dict: dict) -> np.array:
@@ -249,6 +249,7 @@ def connectivity_matrices_to_hetero_connectivity_matrices(edges_dict: Dict[str, 
     """
 
     hetero_edges_dict = {}
+    config = get_config()
     gen_pos_topo_vect = config['rte_case14_realistic']['gen_pos_topo_vect']
     load_pos_topo_vect = config['rte_case14_realistic']['load_pos_topo_vect']
     line_or_pos_topo_vect = config['rte_case14_realistic']['line_or_pos_topo_vect']
@@ -378,6 +379,7 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
     env : TYPE
         The Grid2Op environment.
     """
+    config = get_config()
     data_path = config['paths']['rte_case14_realistic']
     scenario_path = config['paths']['rte_case14_realistic_chronics']
 

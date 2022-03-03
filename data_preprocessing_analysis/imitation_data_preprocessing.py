@@ -14,7 +14,7 @@ import json
 import auxiliary.grid2op_util as g2o_util
 import auxiliary.util as util
 from auxiliary.util import NumpyEncoder
-from auxiliary.config import config
+from auxiliary.config import get_config
 from tqdm import tqdm
 from auxiliary.generate_action_space import action_identificator
 from collections import Counter
@@ -311,7 +311,8 @@ class ConMatrixCache:
             cmc.con_matrices = json.loads(file.read())
 
         # Change the hetero_con_matrices back from strings to tuples
-        cmc[2] = dict([(tuple(k.split(',')), v) for k, v in cmc[2].items()])
+        for cm in cmc.con_matrices.values():
+            cm[2] = dict([(tuple(k.split(',')), v) for k, v in cm[2].items()])
         return cmc
 
 
@@ -417,6 +418,7 @@ def process_raw_tutor_data():
     """
 
     # Specify paths
+    config = get_config()
     tutor_data_path = config['paths']['tutor_imitation']
     output_data_path = config['paths']['processed_tutor_imitation']
     con_matrix_path = config['paths']['con_matrix_cache']
@@ -558,6 +560,7 @@ def divide_files_train_val_test():
     RuntimeError
         Whenever there are files in the existing train/val/test folders which are not .json files.
     """
+    config = get_config()
     processed_path = config['paths']['processed_tutor_imitation']
 
     # Remove directories including existing processed datapoints

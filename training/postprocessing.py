@@ -10,7 +10,6 @@ from typing import Sequence, Optional
 import torch
 from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
-import auxiliary.util as util
 import grid2op
 
 

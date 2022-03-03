@@ -6,8 +6,6 @@ Created on Tue Oct 26 12:04:42 2021
 @author: matthijs
 """
 import numpy as np
-
-import yaml
 import os
 from typing import List, Sequence, Callable
 import json

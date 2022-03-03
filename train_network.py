@@ -8,14 +8,11 @@ Created on Wed Jan 19 13:01:28 2022
 
 from training.training import Run
 import argparse
-import auxiliary.util as util
-import training.models
-from auxiliary.config import config
-import copy
+from auxiliary.config import overwrite_config
 
 
 def main():
-    
+
     # Specify arguments
     parser = argparse.ArgumentParser(description='Train the network.')
     parser.add_argument("-n", "--model_name", help="The name of the model to " +
@@ -44,40 +41,36 @@ def main():
     
     # Parse
     args = parser.parse_args()
-    
-    # If an argument is given, overwrite the config file
-    train_parameters = copy.deepcopy(config['training'])
 
     if args.model_name is not None:
-        train_parameters['wandb']['model_name'] = args.model_name
+        overwrite_config(['training', 'wandb', 'model_name'], args.model_name)
     if args.model_type is not None:
-        train_parameters['hyperparams']['model_type'] = args.model_type
+        overwrite_config(['training', 'hyperparams', 'model_type'], args.model_type)
     if args.GCN_layers is not None:
-        train_parameters['GCN']['hyperparams']['GCN_layers'] = args.GCN_layers
+        overwrite_config(['training', 'GCN', 'hyperparams', 'GCN_layers'], args.GCN_layers)
     if args.N_node_hidden is not None:
-        train_parameters['hyperparams']['N_node_hidden'] = args.N_node_hidden
+        overwrite_config(['training', 'hyperparams', 'N_node_hidden'], args.N_node_hidden)
     if args.lr is not None:
-        train_parameters['hyperparams']['lr'] = args.lr
+        overwrite_config(['training', 'hyperparams', 'lr'], args.lr)
     if args.batch_size is not None:
-        train_parameters['hyperparams']['batch_size'] = args.batch_size
+        overwrite_config(['training', 'hyperparams', 'batch_size'], args.batch_size)
     if args.weight_init_std is not None:
-        train_parameters['hyperparams']['weight_init_std'] = args.weight_init_std
+        overwrite_config(['training', 'hyperparams', 'weight_init_std'], args.weight_init_std)
     if args.weight_decay is not None:
-        train_parameters['hyperparams']['weight_decay'] = args.weight_decay
+        overwrite_config(['training', 'hyperparams', 'weight_decay'], args.weight_decay)
     if args.aggr is not None:
-        train_parameters['GCN']['hyperparams']['aggr'] = args.aggr
+        overwrite_config(['training', 'GCN', 'hyperparams', 'aggr'], args.aggr)
     if args.non_sub_label_weight is not None:
-        train_parameters['hyperparams']['non_sub_label_weight'] = args.non_sub_label_weight
+        overwrite_config(['training', 'hyperparams', 'non_sub_label_weight'], args.non_sub_label_weight)
     if args.label_smoothing_alpha is not None:
-        train_parameters['hyperparams']['label_smoothing_alpha'] = args.label_smoothing_alpha
+        overwrite_config(['training', 'hyperparams', 'label_smoothing_alpha'], args.label_smoothing_alpha)
     if args.network_type is not None:
-        train_parameters['GCN']['hyperparams']['network_type'] = training.models.GCN.NetworkType(
-            args.network_type
-        )
+        overwrite_config(['training', 'GCN', 'hyperparams', 'network_type'], args.network_type)
     if args.N_layers is not None:
-        train_parameters['FCNN']['hyperparams']['N_layers'] = args.N_layers
+        overwrite_config(['training', 'FCNN', 'hyperparameters', 'N_layers'], args.N_layers)
+
     # Start the run
-    r = Run(train_parameters)
+    r = Run()
     r.start()
 
 

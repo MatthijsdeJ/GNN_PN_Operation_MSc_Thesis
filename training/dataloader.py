@@ -14,7 +14,7 @@ from typing import List, Optional, Type
 import numpy as np
 from training.models import GCN, FCNN
 from abc import ABC, abstractmethod
-from auxiliary.config import config
+from auxiliary.config import get_config
 
 
 class TutorDataLoader:
@@ -163,6 +163,7 @@ class ProcessDataPointStrategy(ABC):
         self.device = device
         self.train = train
         self.feature_statistics = feature_statistics
+        config = get_config()
         self.class_weight_assigner = ClassWeightAssigner(config['paths']['action_counter'],
                                                          config['training']['hyperparams']['class_weights']
                                                                ['max_adapt_weight'],

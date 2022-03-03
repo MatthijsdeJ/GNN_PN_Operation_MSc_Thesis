@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
-from auxiliary.config import config
+from auxiliary.config import get_config
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
 
@@ -78,21 +78,13 @@ class Run:
     Class that specifies the running of a model.
     """
 
-    def __init__(self, train_parameters: dict):
-        """
-        Parameters
-        ----------
-        train_parameters : dict
-            Dictionary functioning as the config for the train parameters.
-            MAY DIFFER FROM config['training']; DO NOT USE THE LATTER.
-        """
-
+    def __init__(self):
         # Save some configurations
-
-        train_parameters['GCN']['hyperparams']['network_type'] = GCN.NetworkType(
-            train_parameters['GCN']['hyperparams']['network_type']
+        config = get_config()
+        self.train_config = train_config = config['training']
+        train_config['GCN']['hyperparams']['network_type'] = GCN.NetworkType(
+            train_config['GCN']['hyperparams']['network_type']
         )
-        self.train_parameters = train_parameters
         processed_data_path = config['paths']['processed_tutor_imitation']
         matrix_cache_path = config['paths']['con_matrix_cache']
         feature_statistics_path = config['paths']['feature_statistics']
@@ -103,36 +95,36 @@ class Run:
                                    else 'cpu')
 
         # Init model
-        if train_parameters['hyperparams']['model_type'] == 'GCN':
-            self.model = GCN(train_parameters['hyperparams']['LReLu_neg_slope'],
-                             train_parameters['hyperparams']['weight_init_std'],
-                             train_parameters['GCN']['constants']['N_f_gen'],
-                             train_parameters['GCN']['constants']['N_f_load'],
-                             train_parameters['GCN']['constants']['N_f_endpoint'],
-                             train_parameters['GCN']['hyperparams']['N_GCN_layers'],
-                             train_parameters['hyperparams']['N_node_hidden'],
-                             train_parameters['GCN']['hyperparams']['aggr'],
-                             train_parameters['GCN']['hyperparams']['network_type'])
-        elif train_parameters['hyperparams']['model_type'] == 'FCNN':
-            self.model = FCNN(train_parameters['hyperparams']['LReLu_neg_slope'],
-                              train_parameters['hyperparams']['weight_init_std'],
-                              train_parameters['FCNN']['constants']['size_in'],
-                              train_parameters['FCNN']['constants']['size_out'],
-                              train_parameters['FCNN']['hyperparams']['N_layers'],
-                              train_parameters['hyperparams']['N_node_hidden'])
+        if train_config['hyperparams']['model_type'] == 'GCN':
+            self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
+                             train_config['hyperparams']['weight_init_std'],
+                             train_config['GCN']['constants']['N_f_gen'],
+                             train_config['GCN']['constants']['N_f_load'],
+                             train_config['GCN']['constants']['N_f_endpoint'],
+                             train_config['GCN']['hyperparams']['N_GCN_layers'],
+                             train_config['hyperparams']['N_node_hidden'],
+                             train_config['GCN']['hyperparams']['aggr'],
+                             train_config['GCN']['hyperparams']['network_type'])
+        elif train_config['hyperparams']['model_type'] == 'FCNN':
+            self.model = FCNN(train_config['hyperparams']['LReLu_neg_slope'],
+                              train_config['hyperparams']['weight_init_std'],
+                              train_config['FCNN']['constants']['size_in'],
+                              train_config['FCNN']['constants']['size_out'],
+                              train_config['FCNN']['hyperparams']['N_layers'],
+                              train_config['hyperparams']['N_node_hidden'])
         else:
             raise ValueError("Invalid model_type name.")
         self.model.to(self.device)
 
         # Init optimizer
-        w_decay = train_parameters['hyperparams']['weight_decay']
+        w_decay = train_config['hyperparams']['weight_decay']
         self.optimizer = torch.optim.Adam(self.model.parameters(),
-                                          lr=train_parameters['hyperparams']['lr'],
+                                          lr=train_config['hyperparams']['lr'],
                                           weight_decay=w_decay)
 
         # Initialize dataloaders
-        network_type = train_parameters['GCN']['hyperparams']['network_type']
-        af_th = train_parameters['hyperparams']['action_frequency_threshold']
+        network_type = train_config['GCN']['hyperparams']['network_type']
+        af_th = train_config['hyperparams']['action_frequency_threshold']
         self.train_dl = TutorDataLoader(processed_data_path + '/train',
                                         matrix_cache_path,
                                         feature_statistics_path,
@@ -181,25 +173,25 @@ class Run:
         self.as_cache = ActSpaceCache()
 
         # Early stopping parameter
-        self.stop_countdown = train_parameters['hyperparams']['early_stopping_patience']
+        self.stop_countdown = train_config['hyperparams']['early_stopping_patience']
         self.best_score = 0
 
         # Start wandb run
-        if 'model_name' in train_parameters['wandb']:
-            self.run = wandb.init(project=train_parameters['wandb']["project"],
-                                  entity=train_parameters['wandb']["entity"],
-                                  name=train_parameters['wandb']['model_name'],
-                                  tags=train_parameters['wandb']['model_tags'],
-                                  mode=train_parameters['wandb']['mode'],
-                                  config=train_parameters)
+        if 'model_name' in train_config['wandb']:
+            self.run = wandb.init(project=train_config['wandb']["project"],
+                                  entity=train_config['wandb']["entity"],
+                                  name=train_config['wandb']['model_name'],
+                                  tags=train_config['wandb']['model_tags'],
+                                  mode=train_config['wandb']['mode'],
+                                  config=train_config)
         else:
-            self.run = wandb.init(project=train_parameters['wandb']["project"],
-                                  entity=train_parameters['wandb']["entity"],
-                                  tags=train_parameters['wandb']['model_tags'],
-                                  mode=train_parameters['wandb']['mode'],
-                                  config=train_parameters)
+            self.run = wandb.init(project=train_config['wandb']["project"],
+                                  entity=train_config['wandb']["entity"],
+                                  tags=train_config['wandb']['model_tags'],
+                                  mode=train_config['wandb']['mode'],
+                                  config=train_config)
         self.run.watch(self.model,
-                       log_freq=train_parameters['settings']['train_log_freq'],
+                       log_freq=train_config['settings']['train_log_freq'],
                        log='all',
                        log_graph=True)
 
@@ -264,12 +256,12 @@ class Run:
 
         # Extract the label, apply label smoothing
         Y = dp['change_topo_vect']
-        label_smth_alpha = self.train_parameters['hyperparams']['label_smoothing_alpha']
+        label_smth_alpha = self.train_config['hyperparams']['label_smoothing_alpha']
         Y_smth = (1 - label_smth_alpha) * dp['change_topo_vect'] + \
                  label_smth_alpha * 0.5 * torch.ones_like(Y, device=self.device)
 
         # Compute the label weights for the loss
-        non_sub_label_weight = self.train_parameters['hyperparams']['non_sub_label_weight']
+        non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
         P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
                                                                                 f=lambda x:
@@ -282,7 +274,7 @@ class Run:
         l.backward()
 
         # If the batch is filled, update the model, reset gradients
-        batch_size = self.train_parameters['hyperparams']['batch_size']
+        batch_size = self.train_config['hyperparams']['batch_size']
         if (not step % batch_size) and (step != 0):
             self.optimizer.step()
             self.model.zero_grad()
@@ -342,12 +334,12 @@ class Run:
 
         # Extract the label, apply label smoothing
         Y = dp['change_topo_vect']
-        label_smth_alpha = self.train_parameters['hyperparams']['label_smoothing_alpha']
+        label_smth_alpha = self.train_config['hyperparams']['label_smoothing_alpha']
         Y_smth = (1 - label_smth_alpha) * dp['change_topo_vect'] + \
                  label_smth_alpha * 0.5 * torch.ones_like(Y, device=self.device)
 
         # Compute the weights for the loss
-        non_sub_label_weight = self.train_parameters['hyperparams']['non_sub_label_weight']
+        non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
         P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
                                                                                 f=lambda x:
@@ -423,7 +415,7 @@ class Run:
                 Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                     nearest_valid_actions = self.process_single_val_dp(dp)
 
-                if not self.train_parameters['settings']['advanced_val_analysis']:
+                if not self.train_config['settings']['advanced_val_analysis']:
                     continue
 
                 # Increment the counters for counting the number of (in)correct classifications of each label
@@ -463,7 +455,7 @@ class Run:
             val_macro_accuracy_valid = self.val_metrics.metrics_dict['val_macro_accuracy_valid'][1].get()
             if val_macro_accuracy_valid > self.best_score:
                 self.best_score = val_macro_accuracy_valid
-                self.stop_countdown = self.train_parameters['hyperparams']['early_stopping_patience']
+                self.stop_countdown = self.train_config['hyperparams']['early_stopping_patience']
                 torch.save(self.model.state_dict(), "models/" + run.name)
             else:
                 self.stop_countdown -= 1
@@ -474,13 +466,14 @@ class Run:
             self.val_metrics.log_to_wandb(run, step)
             self.val_metrics.reset()
 
-            if not self.train_parameters['settings']['advanced_val_analysis']:
+            if not self.train_config['settings']['advanced_val_analysis']:
                 return
 
             # Logging substation confusion matrix
             Y_subs = [(v if v is not None else -1) for v in Y_subs]
             P_subs = [(v if v is not None else -1) for v in P_subs]
-            n_subs = self.config['rte_case14_realistic']['n_subs']
+            config = get_config()
+            n_subs = config['rte_case14_realistic']['n_subs']
             classes = np.arange(-1, n_subs).tolist()
             disp = ConfusionMatrixDisplay.from_predictions(Y_subs,
                                                            P_subs,
@@ -553,8 +546,8 @@ class Run:
         with self.run as run:
 
             # Initialize progress bar
-            n_epoch = self.train_parameters['hyperparams']['n_epoch']
-            est_tsize = self.train_parameters['constants']['estimated_train_size']
+            n_epoch = self.train_config['hyperparams']['n_epoch']
+            est_tsize = self.train_config['constants']['estimated_train_size']
             pbar = tqdm(total=n_epoch * est_tsize)
 
             self.model.train()
@@ -567,13 +560,13 @@ class Run:
                     self.process_single_train_dp(dp, step)
 
                     # Periodically log train metrics
-                    train_log_freq = self.train_parameters['settings']['train_log_freq']
+                    train_log_freq = self.train_config['settings']['train_log_freq']
                     if (not step % train_log_freq) and (step != 0):
                         self.train_metrics.log_to_wandb(run, step)
                         self.train_metrics.reset()
 
                     # Periodically evaluate the validation set
-                    val_log_freq = self.train_parameters['settings']['val_log_freq']
+                    val_log_freq = self.train_config['settings']['val_log_freq']
                     if (not step % val_log_freq) and (step != 0):
                         self.model.eval()
                         self.evaluate_val_set(step, run)

@@ -73,8 +73,8 @@ training:
       size_in: 344
       size_out: 56
   wandb:
-    model_name: GCN_test_diff_label_weights
-    model_tags: [GCN, different_label_weights]
+    model_name: test #GCN_test_diff_label_weights
+    model_tags: [test] #[GCN, different_label_weights]
     project: msc_thesis_gnn_power
     entity: mattholomew
-    mode: disabled
+    mode: online # disabled
