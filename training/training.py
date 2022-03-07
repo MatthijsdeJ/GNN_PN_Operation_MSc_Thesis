@@ -520,7 +520,7 @@ class Run:
                     color=['lime', 'red'],
                     bins=n_bins,
                     stacked=True)
-            run.log({"label_correct_dist": fig}, step=step)
+            run.log({"label_correct_dist": wandb.Image(fig)}, step=step)
             plt.close(fig)
 
             # Logging topoly vector counters as stacked histogram
@@ -535,7 +535,7 @@ class Run:
                     color=['lime', 'red'],
                     bins=n_bins,
                     stacked=True)
-            run.log({"topovect_correct_dist": fig}, step=step)
+            run.log({"topovect_correct_dist": wandb.Image(fig)}, step=step)
             plt.close(fig)
 
     def start(self):
