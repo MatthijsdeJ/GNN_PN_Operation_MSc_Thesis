@@ -177,19 +177,13 @@ class Run:
         self.best_score = 0
 
         # Start wandb run
-        if 'model_name' in train_config['wandb']:
-            self.run = wandb.init(project=train_config['wandb']["project"],
-                                  entity=train_config['wandb']["entity"],
-                                  name=train_config['wandb']['model_name'],
-                                  tags=train_config['wandb']['model_tags'],
-                                  mode=train_config['wandb']['mode'],
-                                  config=train_config)
-        else:
-            self.run = wandb.init(project=train_config['wandb']["project"],
-                                  entity=train_config['wandb']["entity"],
-                                  tags=train_config['wandb']['model_tags'],
-                                  mode=train_config['wandb']['mode'],
-                                  config=train_config)
+        self.run = wandb.init(project=train_config['wandb']["project"],
+                              entity=train_config['wandb']["entity"],
+                              name=train_config['wandb']['model_name'],
+                              group=train_config['wandb']['group'],
+                              tags=train_config['wandb']['model_tags'],
+                              mode=train_config['wandb']['mode'],
+                              config=train_config)
         self.run.watch(self.model,
                        log_freq=train_config['settings']['train_log_freq'],
                        log='all',
