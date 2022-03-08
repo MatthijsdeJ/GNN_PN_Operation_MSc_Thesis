@@ -14,7 +14,7 @@ from typing import List, Optional, Type
 import numpy as np
 from training.models import GCN, FCNN
 from abc import ABC, abstractmethod
-from auxiliary.config import get_config
+from auxiliary.config import get_config, NetworkType, ModelType
 
 
 class TutorDataLoader:
@@ -28,8 +28,8 @@ class TutorDataLoader:
                  feature_statistics_path: str,
                  action_counter_path: str,
                  device: torch.device,
-                 model_type: Type,
-                 network_type: Optional[GCN.NetworkType],
+                 model_type: ModelType,
+                 network_type: Optional[NetworkType],
                  train: bool,
                  action_frequency_threshold: int = 0):
         """
@@ -62,18 +62,20 @@ class TutorDataLoader:
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
-        if model_type == GCN:
-            assert isinstance(network_type, GCN.NetworkType), 'Invalid network type'
+        if model_type == ModelType.GCN:
+            assert isinstance(network_type, NetworkType), 'Invalid network type'
             matrix_cache = idp.ConMatrixCache.load(matrix_cache_path)
             self.process_dp_strategy = ProcessDataPointGCN(device,
                                                            train,
                                                            feature_statistics,
                                                            network_type,
                                                            matrix_cache)
-        elif model_type == FCNN:
+        elif model_type == ModelType.FCNN:
             self.process_dp_strategy = ProcessDataPointFCNN(device,
                                                             train,
                                                             feature_statistics)
+        else:
+            raise ValueError("Invalid model_type value.")
 
 
     def get_file_datapoints(self, idx: int) -> List[dict]:
@@ -242,7 +244,7 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
                  device: torch.device,
                  train: bool,
                  feature_statistics: dict,
-                 network_type: GCN.NetworkType,
+                 network_type: NetworkType,
                  matrix_cache: idp.ConMatrixCache):
         """
         Parameters
@@ -319,11 +321,11 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
         # network type
         same_busbar_e, other_busbar_e, line_e = \
             self.matrix_cache.con_matrices[str(raw_dp['cm_index'])][1]
-        if self.network_type == GCN.NetworkType.HOMO:
+        if self.network_type == NetworkType.HOMO:
             dp['edges'] = torch.tensor(np.append(same_busbar_e, line_e, axis=1),
                                        device=self.device,
                                        dtype=torch.long)
-        elif self.network_type == GCN.NetworkType.HETERO:
+        elif self.network_type == NetworkType.HETERO:
             dp['edges'] = {('object', 'line', 'object'):
                                torch.tensor(line_e,
                                             device=self.device,

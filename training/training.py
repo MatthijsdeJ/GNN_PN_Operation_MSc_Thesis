@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
-from auxiliary.config import get_config
+from auxiliary.config import get_config, ModelType
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
 
@@ -82,9 +82,6 @@ class Run:
         # Save some configurations
         config = get_config()
         self.train_config = train_config = config['training']
-        train_config['GCN']['hyperparams']['network_type'] = GCN.NetworkType(
-            train_config['GCN']['hyperparams']['network_type']
-        )
         processed_data_path = config['paths']['processed_tutor_imitation']
         matrix_cache_path = config['paths']['con_matrix_cache']
         feature_statistics_path = config['paths']['feature_statistics']
@@ -95,7 +92,7 @@ class Run:
                                    else 'cpu')
 
         # Init model
-        if train_config['hyperparams']['model_type'] == 'GCN':
+        if train_config['hyperparams']['model_type'] == ModelType.GCN:
             self.model = GCN(train_config['hyperparams']['LReLu_neg_slope'],
                              train_config['hyperparams']['weight_init_std'],
                              train_config['GCN']['constants']['N_f_gen'],
@@ -105,7 +102,7 @@ class Run:
                              train_config['hyperparams']['N_node_hidden'],
                              train_config['GCN']['hyperparams']['aggr'],
                              train_config['GCN']['hyperparams']['network_type'])
-        elif train_config['hyperparams']['model_type'] == 'FCNN':
+        elif train_config['hyperparams']['model_type'] == ModelType.FCNN:
             self.model = FCNN(train_config['hyperparams']['LReLu_neg_slope'],
                               train_config['hyperparams']['weight_init_std'],
                               train_config['FCNN']['constants']['size_in'],
@@ -113,7 +110,7 @@ class Run:
                               train_config['FCNN']['hyperparams']['N_layers'],
                               train_config['hyperparams']['N_node_hidden'])
         else:
-            raise ValueError("Invalid model_type name.")
+            raise ValueError("Invalid model_type value.")
         self.model.to(self.device)
 
         # Init optimizer
@@ -124,13 +121,14 @@ class Run:
 
         # Initialize dataloaders
         network_type = train_config['GCN']['hyperparams']['network_type']
+        model_type = train_config['hyperparams']['model_type']
         af_th = train_config['hyperparams']['action_frequency_threshold']
         self.train_dl = TutorDataLoader(processed_data_path + '/train',
                                         matrix_cache_path,
                                         feature_statistics_path,
                                         action_counter_path,
                                         device=self.device,
-                                        model_type=type(self.model),
+                                        model_type=model_type,
                                         network_type=network_type,
                                         train=True,
                                         action_frequency_threshold=af_th)
@@ -139,7 +137,7 @@ class Run:
                                       feature_statistics_path,
                                       action_counter_path,
                                       device=self.device,
-                                      model_type=type(self.model),
+                                      model_type=model_type,
                                       network_type=network_type,
                                       train=False,
                                       action_frequency_threshold=af_th)

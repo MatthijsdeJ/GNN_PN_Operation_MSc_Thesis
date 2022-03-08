@@ -38,13 +38,13 @@ training:
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100
-    lr: 1.5E-3
+    lr: 1.5E-4
     N_node_hidden: 120 #Size of hidden layers in model
     LReLu_neg_slope: 0.1
     batch_size: 32
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
     weight_init_std: 3
-    weight_decay: 3.0E-4
+    weight_decay: 0
     non_sub_label_weight: 0.1
     early_stopping_patience: 50 #stop training when max. val. macro accuracy
     #valid hasn't improved
@@ -75,6 +75,6 @@ training:
     model_name: test #GCN_test_diff_label_weights
     model_tags: [test] #[GCN, different_label_weights]
     group: null
-    project: msc_thesis_gnn_power
+    project: ms c_thesis_gnn_power
     entity: mattholomew
     mode: online # disabled

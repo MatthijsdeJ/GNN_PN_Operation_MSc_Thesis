@@ -10,6 +10,26 @@ Consequently, access to the config dict from other modules should always happen 
 """
 import yaml
 from typing import Dict, Hashable, Sequence
+from enum import Enum, unique
+
+
+@unique
+class NetworkType(Enum):
+    HETERO = 'heterogeneous'
+    HOMO = 'homogeneous'
+
+
+@unique
+class AggrType(Enum):
+    ADD = 'add'
+    MEAN = 'mean'
+
+
+@unique
+class ModelType(Enum):
+    GCN = 'GCN'
+    FCNN = 'FCNN'
+
 
 _config = None
 _has_been_accessed = False
@@ -60,17 +80,26 @@ def assert_config():
                                                                      " the number of lines."
     assert 0 <= _config['dataset']['train_perc'] <= 1, "Train. perc. should be in percentage range."
     assert 0 <= _config['dataset']['val_perc'] <= 1, "Val. perc. should be in percentage range."
-    assert _config['training']['hyperparams']['model_type'] in ['GCN', 'FCNN'], \
-        "Model_type should be value GCN or FCNN."
-    assert _config['training']['GCN']['hyperparams']['network_type'] in ['heterogeneous', 'homogeneous'], \
-        "Network_type should be value homogeneous or heterogeneous."
-    assert _config['training']['GCN']['hyperparams']['aggr'] in ['add', 'mean'], \
-        "Aggr. should be mean or add."
     assert _config['training']['wandb']['mode'] in ['online', 'offline', 'disabled'], \
         "WandB mode should be online, offline, or disabled."
 
 
+def cast_config_to_enums():
+    """
+    Cast the values in the config types that have an enum representation to their enum types.
+
+    Returns
+    -------
+
+    """
+    _config['training']['hyperparams']['model_type'] = ModelType(_config['training']['hyperparams']['model_type'])
+    _config['training']['GCN']['hyperparams']['network_type'] = NetworkType(_config['training']
+                                                                            ['GCN']['hyperparams']['network_type'])
+    _config['training']['GCN']['hyperparams']['aggr'] = AggrType(_config['training']['GCN']['hyperparams']['aggr'])
+
+
 assert_config()
+cast_config_to_enums()
 
 
 def nested_overwrite(dic: Dict, keys: Sequence[Hashable], value):
@@ -101,6 +130,7 @@ def overwrite_config(keys: Sequence[Hashable], value):
         raise Exception("Overwriting is not allowed after the config has been accessed.")
 
     nested_overwrite(_config, keys, value)
+    cast_config_to_enums()
 
 
 def get_config() -> Dict:

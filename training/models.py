@@ -8,7 +8,7 @@ Created on Fri Jan 14 12:11:43 2022
 import torch
 from torch_geometric.nn import SAGEConv, Linear, HeteroConv
 from typing import Dict, List
-from enum import Enum, unique
+from auxiliary.config import NetworkType, AggrType
 
 
 class GCN(torch.nn.Module):
@@ -18,10 +18,6 @@ class GCN(torch.nn.Module):
     features into a common embedding; and a number of GCN layers.
     """
 
-    @unique
-    class NetworkType(Enum):
-        HETERO = 'heterogeneous'
-        HOMO = 'homogeneous'
 
     def __init__(self,
                  LReLu_neg_slope: float,
@@ -31,7 +27,7 @@ class GCN(torch.nn.Module):
                  N_f_endpoint: int,
                  N_GCN_layers: int,
                  N_node_hidden: int,
-                 aggr: str,
+                 aggr: AggrType,
                  network_type: NetworkType) -> object:
         """
         Parameters
@@ -51,15 +47,15 @@ class GCN(torch.nn.Module):
             The number of GCN layers.
         N_node_hidden : int
             The number of hidden nodes in the hidden layers.
-        aggr : str
+        aggr : AggrType
             The aggregation function for GCN layers. Should be 'add' or 'mean'.
         network_type : NetworkType
             The type of network.
         """
         super().__init__()
         self.network_type = network_type
-        HOMO = GCN.NetworkType.HOMO
-        HETERO = GCN.NetworkType.HETERO
+        HOMO = NetworkType.HOMO
+        HETERO = NetworkType.HETERO
 
         # The activation function. Inplace helps make it work for both
         # network types.
@@ -67,7 +63,6 @@ class GCN(torch.nn.Module):
         self.activation_f = torch.nn.LeakyReLU(LReLu_neg_slope, inplace=True)
 
         # The embedding layers
-
         self.lin_gen_1 = Linear(N_f_gen, N_node_hidden)
         self.lin_gen_2 = Linear(N_node_hidden, N_node_hidden)
 
@@ -95,10 +90,10 @@ class GCN(torch.nn.Module):
                 }, aggr='sum' if aggr_f == 'add' else aggr_f)
 
         # Create the GCN layers
-        self.GCN_layers = torch.nn.ModuleList([GCN_layer(N_node_hidden, N_node_hidden, aggr)
+        self.GCN_layers = torch.nn.ModuleList([GCN_layer(N_node_hidden, N_node_hidden, aggr.value)
                                                for _ in range(N_GCN_layers - 1)])
         # Create the final layer
-        self.GCN_layers.append(GCN_layer(N_node_hidden, 1, aggr))
+        self.GCN_layers.append(GCN_layer(N_node_hidden, 1, aggr.value))
 
         # Initialize weights according to normal distribution
         self.init_weights_normalized_normal(weight_init_std)
@@ -140,8 +135,8 @@ class GCN(torch.nn.Module):
         x : torch.Tensor
             The output vector. Values should be in range (0,1).
         """
-        HOMO = GCN.NetworkType.HOMO
-        HETERO = GCN.NetworkType.HETERO
+        HOMO = NetworkType.HOMO
+        HETERO = NetworkType.HETERO
 
         # Passing the object features through their respective
         # embedding layers
@@ -246,7 +241,7 @@ class GCN(torch.nn.Module):
             return abs(layer.weight).sum().item()
 
         diffs = {}
-        if self.network_type == GCN.NetworkType.HETERO:
+        if self.network_type == NetworkType.HETERO:
 
             diffs['self_line_neigh'] = []
             diffs['self_sb_neigh'] = []
@@ -266,8 +261,7 @@ class GCN(torch.nn.Module):
                 diffs['self_sb_neigh'].append(norm_w_self - norm_w_sb)
                 diffs['self_ob_neigh'].append(norm_w_self - norm_w_ob)
 
-        elif self.network_type == GCN.NetworkType.HOMO:
-
+        elif self.network_type == NetworkType.HOMO:
             diffs['self_neigh'] = []
 
             for l in self.GCN_layers:
