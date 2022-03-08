@@ -168,8 +168,6 @@ class ProcessDataPointStrategy(ABC):
                                                          config['training']['hyperparams']['class_weights']
                                                                ['max_adapt_weight'],
                                                          config['training']['hyperparams']['class_weights']
-                                                               ['min_adapt_weight'],
-                                                         config['training']['hyperparams']['class_weights']
                                                                ['min_weight_zero'])
 
     @abstractmethod
@@ -420,15 +418,13 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
 
 class ClassWeightAssigner:
     """
-    Class for assigning weights to samples based on their class (i.e. action). Us
+    Class for assigning weights to samples based on their class (i.e. action).
     """
     def __init__(self,
                  class_counter_path: str,
                  max_adapt_weight: int,
-                 min_adapt_weight: int,
                  min_weight_zero):
         """
-
         Parameters
         ----------
         class_counter_path : str
@@ -436,21 +432,16 @@ class ClassWeightAssigner:
             entire (train+val+test) dataset.
         max_adapt_weight : int
             The max threshold for transforming the weight of a class, above which classes are assigned a weight of 1.
-        min_adapt_weight : int
-            The min threshold for transforming the weight of a class, below which classes are assigned a weight of 1 or
-             0.
         min_weight_zero : int
             The max threshold, below which classes are assigned a weight of 0. Used to exclude infrequent classes.
         """
-        assert max_adapt_weight >= min_adapt_weight, "Max adapt weight cannot be smaller than the min adapt weight."
-        assert min_adapt_weight >= min_weight_zero, "Min adapt weight cannot be smaller than min_weight_zero."
+        assert max_adapt_weight >= min_weight_zero, "Max adapt weight cannot be smaller than the min weight zero."
         # Open action counter data structure
         with open(class_counter_path, 'r') as file:
             self._class_counter = json.loads(file.read())
 
         # Save parameters
         self.max_adapt_weight = max_adapt_weight
-        self.min_adapt_weight = min_adapt_weight
         self.min_weight_zero = min_weight_zero
 
         # Compute relevant numbers
@@ -461,7 +452,8 @@ class ClassWeightAssigner:
 
     def assign(self, class_hash: int) -> float:
         """
-        Given an action/class hash, return the class weights.
+        Given an action/class hash, return the class weights. The class weights are 1 above max_adapt_weight, 0 below
+        min_weight_zero, and max_adapt_weight/class_count in between.
 
         Parameters
         ----------
@@ -482,23 +474,23 @@ class ClassWeightAssigner:
 
         if class_count < self.min_weight_zero:
             return 0
-        elif self.min_adapt_weight < class_count < self.max_adapt_weight:
-            return self._get_adapted_class_weight(class_count)
+        elif self.min_weight_zero < class_count < self.max_adapt_weight:
+            return self.max_adapt_weight / class_count
         else:
             return 1
 
-    def _get_adapted_class_weight(self, class_count: int) -> float:
-        """
-        Get the adapted class weight for a class given the class count.
+    # def _get_adapted_class_weight(self, class_count: int) -> float:
+    #     """
+    #     Get the adapted class weight for a class given the class count.
 
-        Parameters
-        ----------
-        class_count : int
-            The class count.
+    #     Parameters
+    #     ----------
+    #     class_count : int
+    #         The class count.
 
-        Returns
-        -------
-        float
-            The adapted class weight.
-        """
-        return (self.N_datapoints/self.N_classes)/class_count
+    #     Returns
+    #     -------
+    #     float
+    #         The adapted class weight.
+    #     """
+    #     return (self.N_datapoints/self.N_classes)/class_count

@@ -52,8 +52,7 @@ training:
     #dataset in order to be used during training. Can be used to filter 
     #infrequent actions
     class_weights:
-      max_adapt_weight: 200
-      min_adapt_weight: 10
+      max_adapt_weight: 10
       min_weight_zero: 10
   constants:
     estimated_train_size: 36497 #Used for estimating tqdm duration
