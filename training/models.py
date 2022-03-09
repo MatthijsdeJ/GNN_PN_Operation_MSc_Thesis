@@ -6,9 +6,10 @@ Created on Fri Jan 14 12:11:43 2022
 @author: matthijs
 """
 import torch
-from torch_geometric.nn import SAGEConv, Linear, HeteroConv
-from typing import Dict, List
-from auxiliary.config import NetworkType, AggrType
+import torch_geometric.nn
+from torch_geometric.nn import SAGEConv, Linear, HeteroConv, GINConv
+from typing import Dict, List, Optional
+from auxiliary.config import NetworkType, AggrType, LayerType
 
 
 class GCN(torch.nn.Module):
@@ -19,19 +20,14 @@ class GCN(torch.nn.Module):
     """
 
 
-    def __init__(self,
-                 LReLu_neg_slope: float,
-                 weight_init_std: float,
-                 N_f_gen: int,
-                 N_f_load: int,
-                 N_f_endpoint: int,
-                 N_GCN_layers: int,
-                 N_node_hidden: int,
-                 aggr: AggrType,
-                 network_type: NetworkType) -> object:
+    def __init__(self, LReLu_neg_slope: float, weight_init_std: float, N_f_gen: int, N_f_load: int, N_f_endpoint: int,
+                 N_GCN_layers: int, N_node_hidden: int, aggr: AggrType, network_type: NetworkType,
+                 layer_type: LayerType, GINConv_nn_depth: Optional[int]) -> object:
         """
         Parameters
         ----------
+        o
+        o1
         LReLu_neg_slope : float
             The negative slope of the LReLu activation function.
         weight_init_std: float,
@@ -51,11 +47,18 @@ class GCN(torch.nn.Module):
             The aggregation function for GCN layers. Should be 'add' or 'mean'.
         network_type : NetworkType
             The type of network.
+        layer_type : LayerType
+            The type of layer.
+        GINConv_nn_depth : Optional[int]
+            The depth of the nn used for GINConv layers.
         """
         super().__init__()
         self.network_type = network_type
-        HOMO = NetworkType.HOMO
-        HETERO = NetworkType.HETERO
+        self.aggr_str = aggr.value
+        self.layer_type = layer_type
+        self.GINConv_nn_depth = GINConv_nn_depth
+        self.N_node_hidden = N_node_hidden
+        self.LReLu_neg_slope = LReLu_neg_slope
 
         # The activation function. Inplace helps make it work for both
         # network types.
@@ -75,25 +78,11 @@ class GCN(torch.nn.Module):
         self.lin_ex_1 = Linear(N_f_endpoint, N_node_hidden)
         self.lin_ex_2 = Linear(N_node_hidden, N_node_hidden)
 
-        # Factory function that creates GCN layers.
-        def GCN_layer(n_in, n_out, aggr_f='add'):
-            if network_type == HOMO:
-                return SAGEConv(n_in, n_out, root_weight=True, aggr=aggr_f)
-            elif network_type == HETERO:
-                return HeteroConv({
-                    ('object', 'line', 'object'):
-                        SAGEConv(n_in, n_out, root_weight=False, aggr=aggr_f, bias=False),
-                    ('object', 'same_busbar', 'object'):
-                        SAGEConv(n_in, n_out, root_weight=True, aggr=aggr_f, bias=True),
-                    ('object', 'other_busbar', 'object'):
-                        SAGEConv(n_in, n_out, root_weight=False, aggr=aggr_f, bias=False),
-                }, aggr='sum' if aggr_f == 'add' else aggr_f)
-
         # Create the GCN layers
-        self.GCN_layers = torch.nn.ModuleList([GCN_layer(N_node_hidden, N_node_hidden, aggr.value)
+        self.GCN_layers = torch.nn.ModuleList([self.create_GCN_layer(N_node_hidden, N_node_hidden)
                                                for _ in range(N_GCN_layers - 1)])
         # Create the final layer
-        self.GCN_layers.append(GCN_layer(N_node_hidden, 1, aggr.value))
+        self.GCN_layers.append(self.create_GCN_layer(N_node_hidden, 1))
 
         # Initialize weights according to normal distribution
         self.init_weights_normalized_normal(weight_init_std)
@@ -175,6 +164,78 @@ class GCN(torch.nn.Module):
         x = torch.sigmoid(x if self.network_type == HOMO else x['object'])
 
         return x
+
+    def create_GCN_layer(self, n_in: int, n_out: int) -> torch_geometric.nn.MessagePassing:
+        """
+        Creates a GCN layer.
+
+        Parameters
+        ----------
+        n_in : int
+            The dimensionality of the layer output.
+        n_out : int
+            The dimensionality of the layer input.
+
+        Returns
+        -------
+        torch_geometric.nn.MessagePassing
+            The output layer.
+        """
+        if self.layer_type == LayerType.SAGECONV:
+            if self.network_type == NetworkType.HOMO:
+                return SAGEConv(n_in, n_out, root_weight=True, aggr=self.aggr_str)
+            elif self.network_type == NetworkType.HETERO:
+                return HeteroConv({
+                    ('object', 'line', 'object'):
+                        SAGEConv(n_in, n_out, root_weight=False, aggr=self.aggr_str, bias=False),
+                    ('object', 'same_busbar', 'object'):
+                        SAGEConv(n_in, n_out, root_weight=True, aggr=self.aggr_str, bias=True),
+                    ('object', 'other_busbar', 'object'):
+                        SAGEConv(n_in, n_out, root_weight=False, aggr=self.aggr_str, bias=False),
+                }, aggr='sum' if self.aggr_str == 'add' else self.aggr_str)
+            else:
+                raise ValueError('Invalid value for network_type.')
+        elif self.layer_type == LayerType.GINCONV:
+            if self.network_type == NetworkType.HOMO:
+                return GINConv(self._create_GINCov_NN(n_in, n_out))
+            elif self.network_type == NetworkType.HETERO:
+                return HeteroConv({
+                    ('object', 'line', 'object'): GINConv(self._create_GINCov_NN(n_in, n_out)),
+                    ('object', 'same_busbar', 'object'): GINConv(self._create_GINCov_NN(n_in, n_out)),
+                    ('object', 'other_busbar', 'object'): GINConv(self._create_GINCov_NN(n_in, n_out)),
+                }, aggr='sum' if self.aggr_str == 'add' else self.aggr_str)
+            else:
+                raise ValueError('Invalid value for network_type.')
+        else:
+            raise ValueError('Invalid value for layer_type.')
+
+    def _create_GINCov_NN(self, n_in, n_out) -> torch.nn.Module:
+        """
+        Creates a neural network that is used by the GINConv layer.
+
+        Parameters
+        ----------
+        n_in : int
+            The dimensionality of the layer output.
+        n_out : int
+            The dimensionality of the layer input.
+
+        Returns
+        -------
+        torch.nn.Module
+            The NN to be used by the GINConv Layer.
+        """
+        if self.GINConv_nn_depth == 1:
+            return Linear(n_in, n_out, bias=True)
+
+        modules = []
+        modules.append(Linear(n_in, self.N_node_hidden, bias=True))
+        modules.append(torch.nn.LeakyReLU(self.LReLu_neg_slope))
+        for _ in range(self.GINConv_nn_depth-2):
+            modules.append(Linear(self.N_node_hidden, self.N_node_hidden))
+            modules.append(torch.nn.LeakyReLU(self.LReLu_neg_slope))
+        modules.append(Linear(self.N_node_hidden, n_out, bias=True))
+        return torch.nn.Sequential(*modules)
 
     def init_weights_kaiming(self):
         """

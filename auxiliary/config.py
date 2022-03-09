@@ -31,6 +31,12 @@ class ModelType(Enum):
     FCNN = 'FCNN'
 
 
+@unique
+class LayerType(Enum):
+    SAGECONV = 'SAGEConv'
+    GINCONV = 'GINConv'
+
+
 _config = None
 _has_been_accessed = False
 
@@ -69,7 +75,8 @@ def assert_config():
                    (_config['training']['GCN']['constants']['N_f_endpoint'], 'N_f_endpoint'),
                    (_config['training']['FCNN']['hyperparams']['N_layers'], 'N_layers'),
                    (_config['training']['FCNN']['constants']['size_in'], 'size_in'),
-                   (_config['training']['FCNN']['constants']['size_out'], 'size_out')]:
+                   (_config['training']['FCNN']['constants']['size_out'], 'size_out'),
+                   (_config['training']['GCN']['hyperparams']['GINConv_nn_depth'], 'GINConv_nn_depth')]:
         assert prm >= 0, f'Parameter {n} should not be negative.'
     assert all(l >= 0 for l in _config['tutor_generated_data']['line_idxs_to_consider_N-1']), \
         "Line idx cannot be negative."
@@ -96,6 +103,8 @@ def cast_config_to_enums():
     _config['training']['GCN']['hyperparams']['network_type'] = NetworkType(_config['training']
                                                                             ['GCN']['hyperparams']['network_type'])
     _config['training']['GCN']['hyperparams']['aggr'] = AggrType(_config['training']['GCN']['hyperparams']['aggr'])
+    _config['training']['GCN']['hyperparams']['layer_type'] = LayerType(_config['training']['GCN']['hyperparams']
+                                                                           ['layer_type'])
 
 
 assert_config()

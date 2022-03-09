@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
-from auxiliary.config import get_config, ModelType
+from auxiliary.config import get_config, ModelType, LayerType
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
 
@@ -101,7 +101,9 @@ class Run:
                              train_config['GCN']['hyperparams']['N_GCN_layers'],
                              train_config['hyperparams']['N_node_hidden'],
                              train_config['GCN']['hyperparams']['aggr'],
-                             train_config['GCN']['hyperparams']['network_type'])
+                             train_config['GCN']['hyperparams']['network_type'],
+                             train_config['GCN']['hyperparams']['layer_type'],
+                             train_config['GCN']['hyperparams']['GINConv_nn_depth'])
         elif train_config['hyperparams']['model_type'] == ModelType.FCNN:
             self.model = FCNN(train_config['hyperparams']['LReLu_neg_slope'],
                               train_config['hyperparams']['weight_init_std'],
@@ -494,7 +496,8 @@ class Run:
                      wandb.Histogram(Y_rank_in_nearest_v_acts)}, step=step)
 
             # Logging difference between the self weights and the other weights
-            if type(self.model) == GCN:
+            if self.train_config['GCN']['hyperparams']['layer_type'] == ModelType.GCN and \
+                    self.train_config['GCN']['hyperparams']['layer_type'] == LayerType.SAGECONV:
                 diffs = self.model.compute_difference_weights()
                 diffs = dict([('diffs_weights_' + k, v) for k, v in diffs.items()])
                 run.log(dict([(k, wandb.Histogram(v)) for k, v in diffs.items()]),
