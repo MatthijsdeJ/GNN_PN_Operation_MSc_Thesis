@@ -405,7 +405,6 @@ class Run:
 
         with torch.no_grad():
             for dp in self.val_dl:
-
                 Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                     nearest_valid_actions = self.process_single_val_dp(dp)
 
@@ -480,11 +479,11 @@ class Run:
             # Plotting distributions for the true/predicted/postprocessed-predicted objects
             fig, ax = plt.subplots(3, 1, sharex=True)
             n_obs = len(Y_obs)
-            ax[0].bar(range(n_obs), Y_obs)
+            ax[0].bar(range(n_obs), Y_obs.cpu())
             ax[0].title.set_text('True object action distribution')
-            ax[1].bar(range(n_obs), nearest_valid_P_obs)
+            ax[1].bar(range(n_obs), nearest_valid_P_obs.cpu())
             ax[1].title.set_text('Postprocessed predicted object action distribution')
-            ax[2].bar(range(n_obs), P_obs)
+            ax[2].bar(range(n_obs), P_obs.cpu())
             ax[2].title.set_text('Predicted object action distribution')
             plt.tight_layout()
             run.log({"object_pred_bars": fig}, step=step)

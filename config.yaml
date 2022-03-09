@@ -77,6 +77,6 @@ training:
     model_name: test #GCN_test_diff_label_weights
     model_tags: [test] #[GCN, different_label_weights]
     group: null
-    project: ms c_thesis_gnn_power
+    project: msc_thesis_gnn_power
     entity: mattholomew
     mode: online # disabled
