@@ -9,10 +9,11 @@ Created on Fri Jan 28 13:51:31 2022
 import os
 import grid2op
 import numpy as np
-from imitation_generation.tutor import Tutor, CheckNMinOneStrategy, GreedyStrategy
+from imitation_generation.tutor import Tutor, CheckNMinOneStrategy, GreedyStrategy, Strategy
 from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
 from auxiliary.config import get_config
+from typing import Sequence
 
 # =============================================================================
 # This is half-finished code for returning to the reference topology without requiring 'different' Grid2Op Rule.
@@ -95,6 +96,7 @@ def empty_records(obs_vect_size: int):
 
         
 def generate(strategy_name: str,
+             activity_criteria_names: Sequence[str],
              do_nothing_capacity_threshold: float = 0.97,
              disable_line: int = -1,
              start_chronic_id: int = 0):
@@ -105,6 +107,8 @@ def generate(strategy_name: str,
     ----------
     strategy_name : str
         String indicated the strategy to select. Should be 'Greedy' or 'CheckNMinOne'.
+    activity_criteria_names : Sequence[str]
+        The names of the activity criteria, that decide whether the agent will become active.
     do_nothing_capacity_threshold : float, optional
         The threshold max. line rho at which the tutor takes actions. The default is .97.
     disable_line : int, optional
@@ -135,10 +139,12 @@ def generate(strategy_name: str,
         strategy = CheckNMinOneStrategy(env.action_space, config['tutor_generated_data']['line_idxs_to_consider_N-1'])
     else:
         raise ValueError("Invalid value for strategy_name.")
+    activity_criteria = Strategy.get_activity_criteria_from_names(activity_criteria_names)
     tutor = Tutor(env.action_space,
                   get_env_actions(env, disable_line=disable_line),
                   do_nothing_capacity_threshold,
-                  strategy)
+                  strategy,
+                  activity_criteria)
     obs_vect_size = len(env.get_obs().to_vect())
     records = empty_records(obs_vect_size)
     

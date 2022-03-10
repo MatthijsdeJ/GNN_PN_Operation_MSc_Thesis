@@ -25,9 +25,13 @@ if __name__ == '__main__':
                         required=False, default=0, type=int)
     parser.add_argument("--strategy", help="The strategy to select. Should be 'Greedy' or 'CheckNMinOne'.",
                         required=False, default="CheckNMinOne")
+    parser.add_argument("--activity_criteria", help="The activity criteria: the agent takes a do-nothing action" +
+                        "and does not store the action in the data if all evaluate to False.",
+                        required=False, nargs="*", type=str, default=["current"])
+
     args = parser.parse_args()
-    
     gnr.generate(args.strategy,
+                 args.activity_criteria,
                  args.do_nothing_capacity_threshold,
                  args.disable_line,
                  args.start_chronic_id)

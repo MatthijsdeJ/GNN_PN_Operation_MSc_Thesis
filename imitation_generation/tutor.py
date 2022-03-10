@@ -15,7 +15,7 @@ mail: cbb@cbb1996.com
 import time
 import grid2op
 from grid2op.Agent import BaseAgent
-from typing import Tuple, Optional, Sequence
+from typing import Tuple, Optional, Sequence, Callable
 from abc import ABC, abstractmethod
 import numpy as np
 
@@ -24,6 +24,7 @@ class Strategy(ABC):
     """
     Base class for the strategy taken by the tutor model.
     """
+
 
     @abstractmethod
     def select_act(self,
@@ -94,7 +95,7 @@ class Strategy(ABC):
     
     @staticmethod
     def activity_criterion_current(observation: grid2op.Observation.CompleteObservation,
-                              do_nothing_capacity_threshold: float) -> bool:
+                                   **kwargs) -> bool:
         """
         Evaluates activity criterion 1. Returns if agent should get active.
         
@@ -102,7 +103,7 @@ class Strategy(ABC):
         ----------
         observation: grid2op.Observation.CompleteObservation
             The observation to simulate the action in.
-        do_nothing_capacity_threshold: float
+        kwargs.do_nothing_capacity_threshold: float
             The rho value, so that if exceeded by any line the agent gets active.
 
         Returns
@@ -110,12 +111,12 @@ class Strategy(ABC):
         bool
             Whether the agent should get active.
         """
+        do_nothing_capacity_threshold = kwargs['do_nothing_capacity_threshold']
         return observation.rho.max() > do_nothing_capacity_threshold
 
     @staticmethod
     def activity_criterion_simulate(observation: grid2op.Observation.CompleteObservation,
-                                    do_nothing_action: grid2op.Action.BaseAction,
-                                    do_nothing_capacity_threshold: float) -> bool:
+                                    **kwargs) -> bool:
         """
         Simulates the do-nothing action, evaluates activity criterion 2. Returns if agent should get active.
         
@@ -123,9 +124,9 @@ class Strategy(ABC):
         ----------
         observation: grid2op.Observation.CompleteObservation
             The observation to simulate the action in.
-        do_nothing_action: grid2op.Action.BaseAction
+        kwargs.do_nothing_action: grid2op.Action.BaseAction
             The do nothing action that will be simulated.
-        do_nothing_capacity_threshold: float
+        kwargs.do_nothing_capacity_threshold: float
             The rho value, so that if exceeded by any line the agent gets active.
 
         Returns
@@ -133,8 +134,43 @@ class Strategy(ABC):
         bool
             Whether the agent should get active.
         """
+        do_nothing_capacity_threshold = kwargs['do_nothing_capacity_threshold']
+        do_nothing_action = kwargs['do_nothing_action']
         obs, _, done, _ = observation.simulate(do_nothing_action)
         return obs.rho.max() > do_nothing_capacity_threshold or done
+
+    @staticmethod
+    def get_activity_criteria_from_names(names: Sequence[str]) -> Sequence[Callable]:
+        """
+        Given a list of names, return the corresponding activity criteria.
+
+        Parameters
+        ----------
+        names : Sequence[str]
+            The sequence of criteria names.
+
+        Returns
+        -------
+        activity_criteria : Sequence[Callable]
+            The sequence of activity criterial.
+
+        Raises
+        ------
+        ValueError
+            If one of the names does not correspond to an activity criteria.
+        """
+        activity_criteria_by_name = {
+            'current': Strategy.activity_criterion_current,
+            'simulate': Strategy.activity_criterion_simulate
+        }
+
+        try:
+            activity_criteria = [activity_criteria_by_name[name] for name in names]
+        except KeyError as e:
+            raise ValueError(f"Invalid name for activity criterion: {e.args[0]}")
+
+        return activity_criteria
+
 
 class GreedyStrategy(Strategy):
     """
@@ -355,7 +391,8 @@ class Tutor(BaseAgent):
                  env_action_space: grid2op.Action.ActionSpace,
                  selected_action_space: Sequence[grid2op.Action.TopologyAction],
                  do_nothing_capacity_threshold: float,
-                 strategy: Strategy):
+                 strategy: Strategy,
+                 activity_criteria: Sequence[Callable]):
         """
         Parameters
         ----------
@@ -367,11 +404,15 @@ class Tutor(BaseAgent):
             The rho value, so that if not exceeded by any line a do-nothing action is selected.
         strategy : Strategy
             The strategy to use for selecting actions.
+        activity_criteria : Sequence[Callable]
+            The activity criteria to call. If all evaluate to False, no action is taken.
         """
         BaseAgent.__init__(self, action_space=env_action_space)
         self.actions = selected_action_space
         self.do_nothing_capacity_threshold = do_nothing_capacity_threshold
         self.strategy = strategy
+        self.activity_criteria = activity_criteria
+        self.do_nothing_action = env_action_space()
 
     # =============================================================================
     #     @staticmethod
@@ -459,16 +500,18 @@ class Tutor(BaseAgent):
         tick = time.time()
         
         # check activity criterion
-        if self.strategy.activity_criterion_current(observation, do_nothing_capacity_threshold):
-            return self.action_space(), -2, None, None, None
+        if not any([criterion(observation,
+                              do_nothing_capacity_threshold=self.do_nothing_capacity_threshold,
+                              do_nothing_action=self.do_nothing_action)
+                    for criterion in self.activity_criteria]):
+            return self.do_nothing_action, -2, None, None, None
 
         # If above that max. rho threshold, display a message
         print('%s: close to overload! line-%d has a max. rho of %.2f' %
               (str(observation.get_time_stamp()), observation.rho.argmax(), observation.rho.max()))
 
         # Calculate the max. rho of the do-nothing action
-        do_nothing_action = self.action_space()  #  Shouldn't we put this in __init__? 
-        obs, _, _, _ = observation.simulate(do_nothing_action)
+        obs, _, _, _ = observation.simulate(self.do_nothing_action)
         do_nothing_rho = obs.rho.max()
 
         # Select an action based on the strategy
