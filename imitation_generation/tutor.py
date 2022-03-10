@@ -136,7 +136,6 @@ class Strategy(ABC):
         """
         do_nothing_capacity_threshold = kwargs['do_nothing_capacity_threshold']
         do_nothing_action = kwargs['do_nothing_action']
-
         obs, _, done, _ = observation.simulate(do_nothing_action)
         return obs.rho.max() > do_nothing_capacity_threshold or done
 
