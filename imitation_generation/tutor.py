@@ -159,7 +159,7 @@ class Strategy(ABC):
         ValueError
             If one of the names does not correspond to an activity criteria.
         """
-        _activity_criteria_by_name = {
+        activity_criteria_by_name = {
             'current': Strategy.activity_criterion_current,
             'simulate': Strategy.activity_criterion_simulate
         }
