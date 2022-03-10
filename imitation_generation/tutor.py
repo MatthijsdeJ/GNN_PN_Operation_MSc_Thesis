@@ -165,7 +165,7 @@ class Strategy(ABC):
         }
 
         try:
-            activity_criteria = [_activity_criteria_by_name[name] for name in names]
+            activity_criteria = [activity_criteria_by_name[name] for name in names]
         except KeyError as e:
             raise ValueError(f"Invalid name for activity criterion: {e.args[0]}")
 
