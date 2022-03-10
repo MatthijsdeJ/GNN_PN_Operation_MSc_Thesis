@@ -458,8 +458,11 @@ class Tutor(BaseAgent):
         """
         tick = time.time()
         
+        do_nothing_action = self.action_space()  #  Shouldn't we put this in __init__? 
+
         # check activity criterion
-        if self.strategy.activity_criterion_current(observation, do_nothing_capacity_threshold):
+        if self.strategy.activity_criterion_current(observation, do_nothing_capacity_threshold) or 
+           self.strategy.activity_criterion_simulate(observation, do_nothing_action, do_nothing_capacity_threshold):
             return self.action_space(), -2, None, None, None
 
         # If above that max. rho threshold, display a message
@@ -467,7 +470,6 @@ class Tutor(BaseAgent):
               (str(observation.get_time_stamp()), observation.rho.argmax(), observation.rho.max()))
 
         # Calculate the max. rho of the do-nothing action
-        do_nothing_action = self.action_space()  #  Shouldn't we put this in __init__? 
         obs, _, _, _ = observation.simulate(do_nothing_action)
         do_nothing_rho = obs.rho.max()
 
