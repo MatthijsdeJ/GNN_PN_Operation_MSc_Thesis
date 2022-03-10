@@ -396,7 +396,6 @@ class Tutor(BaseAgent):
         """
         Parameters
         ----------
-        criteria
         env_action_space : grid2op.Action.ActionSpace
             The full action space of the environment.
         selected_action_space : Sequence[grid2op.Action.TopologyAction]
