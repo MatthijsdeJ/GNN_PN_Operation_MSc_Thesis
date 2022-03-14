@@ -17,7 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
-from auxiliary.config import get_config, ModelType, LayerType
+from auxiliary.config import get_config, ModelType, LayerType, LabelWeightsType
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
 
@@ -47,30 +47,6 @@ def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
     return loss
 
 
-def get_label_weights(Y_sub_mask : torch.Tensor,
-                      P_sub_mask : torch.Tensor,
-                      non_mask_label_weights : float) -> torch.Tensor:
-    """
-    Give the masked labels a specific weight value, and the other weights value 1.
-
-    Parameters
-    ----------
-    Y_sub_mask : torch.Tensor
-        The mask indicating the true selected substation.
-    P_sub_mask : torch.Tensor
-        The mask indicating the predicted selected substation.
-    non_mask_label_weights : float
-        The weights to give to the labels that are masked by neither of above masks.
-
-    Returns
-    -------
-    weights : torch.Tensor[float]
-        The resulting label weights, consisting of the values '1' and 'w_when_zero'.
-    """
-    mask = torch.logical_or(Y_sub_mask, P_sub_mask)
-    label_weights = torch.ones_like(mask)
-    label_weights[~mask.detach().bool()] = non_mask_label_weights
-    return label_weights
 
 
 class Run:
@@ -189,6 +165,37 @@ class Run:
                        log='all',
                        log_graph=True)
 
+    def get_label_weights(self, Y_sub_mask: torch.Tensor, P_sub_mask: torch.Tensor) -> torch.Tensor:
+        """
+        Give the masked labels a specific weight value, and the other weights value 1.
+
+        Parameters
+        ----------
+        Y_sub_mask : torch.Tensor
+            The mask indicating the true selected substation.
+        P_sub_mask : torch.Tensor
+            The mask indicating the predicted selected substation.
+
+        Returns
+        -------
+        weights : torch.Tensor[float]
+            The resulting label weights, consisting of the values '1' and 'w_when_zero'.
+        """
+        if self.train_config['hyperparams']['label_weights']['type'] == LabelWeightsType.ALL:
+            mask = torch.ones_like(Y_sub_mask)
+        elif self.train_config['hyperparams']['label_weights']['type'] == LabelWeightsType.Y:
+            mask = Y_sub_mask
+        elif self.train_config['hyperparams']['label_weights']['type'] == LabelWeightsType.P:
+            mask = P_sub_mask
+        elif self.train_config['hyperparams']['label_weights']['type'] == LabelWeightsType.Y_AND_P:
+            mask = torch.logical_or(Y_sub_mask, P_sub_mask)
+        else:
+            raise ValueError('Invalid value for label weights type.')
+
+        label_weights = torch.ones_like(mask)
+        label_weights[~mask.detach().bool()] = self.train_config['hyperparams']['label_weights']['non_masked_weight']
+        return label_weights
+
     def predict_datapoint(self, dp: dict) -> torch.Tensor:
         """
         Extract the necessary information from a datapoint, and use it to
@@ -255,12 +262,11 @@ class Run:
                  label_smth_alpha * 0.5 * torch.ones_like(Y, device=self.device)
 
         # Compute the label weights for the loss
-        non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
         P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
                                                                                 f=lambda x:
                                                                                 torch.sum(torch.clamp(x - 0.5, min=0)))
-        weights = get_label_weights(Y_sub_mask, P_sub_mask, non_sub_label_weight)
+        weights = self.get_label_weights(Y_sub_mask, P_sub_mask)
 
         # Compute the loss, update gradients
         l = BCELoss_labels_weighted(P, Y_smth, weights)
@@ -333,12 +339,11 @@ class Run:
                  label_smth_alpha * 0.5 * torch.ones_like(Y, device=self.device)
 
         # Compute the weights for the loss
-        non_sub_label_weight = self.train_config['hyperparams']['non_sub_label_weight']
         Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
         P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
                                                                                 f=lambda x:
                                                                                 torch.sum(torch.clamp(x - 0.5, min=0)))
-        weights = get_label_weights(Y_sub_mask, P_sub_mask, non_sub_label_weight)
+        weights = self.get_label_weights(Y_sub_mask, P_sub_mask)
 
         # Compute the loss
         l = BCELoss_labels_weighted(P, Y_smth, weights)

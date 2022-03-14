@@ -37,6 +37,14 @@ class LayerType(Enum):
     GINCONV = 'GINConv'
 
 
+@unique
+class LabelWeightsType(Enum):
+    ALL = 'ALL'
+    Y = 'Y'
+    P = 'P'
+    Y_AND_P = 'Y_AND_P'
+
+
 _config = None
 _has_been_accessed = False
 
@@ -65,7 +73,8 @@ def assert_config():
                    (_config['training']['hyperparams']['label_smoothing_alpha'], 'label_smoothing_alpha'),
                    (_config['training']['hyperparams']['weight_init_std'], 'weight_init_std'),
                    (_config['training']['hyperparams']['weight_decay'], 'weight_decay'),
-                   (_config['training']['hyperparams']['non_sub_label_weight'], 'non_sub_label_weight'),
+                   (_config['training']['hyperparams']['label_weights']['non_masked_weight'],
+                    'non_sub_weight'),
                    (_config['training']['hyperparams']['early_stopping_patience'], 'early_stopping_patience'),
                    (_config['training']['hyperparams']['action_frequency_threshold'], 'action_frequency_threshold'),
                    (_config['training']['constants']['estimated_train_size'], 'estimated_train_size'),
@@ -104,7 +113,9 @@ def cast_config_to_enums():
                                                                             ['GCN']['hyperparams']['network_type'])
     _config['training']['GCN']['hyperparams']['aggr'] = AggrType(_config['training']['GCN']['hyperparams']['aggr'])
     _config['training']['GCN']['hyperparams']['layer_type'] = LayerType(_config['training']['GCN']['hyperparams']
-                                                                           ['layer_type'])
+                                                                        ['layer_type'])
+    _config['training']['hyperparams']['label_weights']['type'] = LabelWeightsType(_config['training']['hyperparams']
+                                                                                   ['label_weights']['type'])
 
 
 assert_config()

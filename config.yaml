@@ -33,7 +33,7 @@ dataset:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 18 #How often to evaluate the validation set
+    val_log_freq: 18000 #How often to evaluate the validation set
     advanced_val_analysis: true
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
@@ -45,12 +45,14 @@ training:
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
     weight_init_std: 3
     weight_decay: 0
-    non_sub_label_weight: 0.1
     early_stopping_patience: 50 #stop training when max. val. macro accuracy
     #valid hasn't improved
     action_frequency_threshold: 0 #min. frequency of an action in the
     #dataset in order to be used during training. Can be used to filter 
     #infrequent actions
+    label_weights:
+      type: Y_AND_P
+      non_masked_weight: 0.1
     class_weights:
       max_adapt_weight: 10
       min_weight_zero: 10
