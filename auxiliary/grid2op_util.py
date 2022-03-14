@@ -451,11 +451,11 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
         Whether a DivergingPowerFlowException occurred while fast-forwarding.
     """
     # Reset environment
+    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step, ts_in_day))
     env.set_id(chronic_id)
     env.reset()
 
     # Fast forward to the day, disable lines if necessary
-    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step, ts_in_day))
     env.fast_forward_chronics(ts_next_day - 1)
     if disable_line != -1:
         _, _, _, info = env.step(env.action_space(
