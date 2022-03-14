@@ -33,7 +33,7 @@ dataset:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 18000 #How often to evaluate the validation set
+    val_log_freq: 18 #How often to evaluate the validation set
     advanced_val_analysis: true
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
@@ -61,7 +61,7 @@ training:
       network_type: heterogeneous #Should be a str as defined in training.models.GCN.NetworkType
       N_GCN_layers: 8
       aggr: add #Aggregation function: should be 'add' or 'mean'
-      layer_type: GINConv
+      layer_type: SAGEConv
       GINConv_nn_depth : 2
     constants:
       N_f_gen: 3 #Number of generator features

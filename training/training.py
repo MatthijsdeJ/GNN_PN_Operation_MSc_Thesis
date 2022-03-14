@@ -88,8 +88,8 @@ class Run:
         action_counter_path = config['paths']['action_counter']
 
         # Specify device to use
-        self.device = torch.device('cuda' if torch.cuda.is_available()
-                                   else 'cpu')
+        self.device = 'cpu'#torch.device('cuda' if torch.cuda.is_available()
+                      #             else 'cpu')
 
         # Init model
         if train_config['hyperparams']['model_type'] == ModelType.GCN:
@@ -207,7 +207,7 @@ class Run:
             range (0,1).
         """
         if type(self.model) == GCN:
-            # Extract features
+            # Extrackt features
             X_gen = dp['gen_features']
             X_load = dp['load_features']
             X_or = dp['or_features']
@@ -403,7 +403,11 @@ class Run:
         correct_counter_topovect = collections.Counter()
         wrong_counter_topovect = collections.Counter()
 
+        #Init object for tracking MAD scores
+        MAD_scores = None
+
         with torch.no_grad():
+            i = 0
             for dp in self.val_dl:
                 Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                     nearest_valid_actions = self.process_single_val_dp(dp)
@@ -443,6 +447,29 @@ class Run:
                 Y_index_in_valid = torch.where((nearest_valid_actions == Y)
                                                .all(dim=1))[0].item()
                 Y_rank_in_nearest_v_acts.append(Y_index_in_valid)
+
+                # For the first 100 datapoints, compute the mads
+                i += 1
+                if i < 100 and self.train_config['hyperparams']['model_type'] == ModelType.GCN:
+                    # Extract features
+                    X_gen = dp['gen_features']
+                    X_load = dp['load_features']
+                    X_or = dp['or_features']
+                    X_ex = dp['ex_features']
+
+                    # Extract the position topology vector, which relates the
+                    # objects ordered by type to their position in the topology vector
+                    object_ptv = dp['object_ptv']
+
+                    # Extract the edges
+                    E = dp['edges']
+
+                    # Pass through the model
+                    if MAD_scores is None:
+                        MAD_scores = self.model.get_MADs(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape(1, -1)
+                    else:
+                        MAD = self.model.get_MADs(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape(1, -1)
+                        MAD_scores = np.concatenate((MAD_scores, MAD), axis=0)
 
             # Checking early stopping
             val_macro_accuracy_valid = self.val_metrics.metrics_dict['val_macro_accuracy_valid'][1].get()
@@ -495,7 +522,7 @@ class Run:
                      wandb.Histogram(Y_rank_in_nearest_v_acts)}, step=step)
 
             # Logging difference between the self weights and the other weights
-            if self.train_config['GCN']['hyperparams']['layer_type'] == ModelType.GCN and \
+            if self.train_config['hyperparams']['model_type'] == ModelType.GCN and \
                     self.train_config['GCN']['hyperparams']['layer_type'] == LayerType.SAGECONV:
                 diffs = self.model.compute_difference_weights()
                 diffs = dict([('diffs_weights_' + k, v) for k, v in diffs.items()])
@@ -531,6 +558,14 @@ class Run:
                     stacked=True)
             run.log({"topovect_correct_dist": wandb.Image(fig)}, step=step)
             plt.close(fig)
+
+            # Logging mean MADs as a bar plot
+            if self.train_config['hyperparams']['model_type'] == ModelType.GCN:
+                mean_MAD = MAD_scores.mean(axis=0)
+                fig, ax = plt.subplots()
+                ax.bar([str(i) for i in range(len(mean_MAD))], mean_MAD)
+                run.log({"MAD_per_layer": wandb.Image(fig)}, step=step)
+                plt.close(fig)
 
     def start(self):
         """

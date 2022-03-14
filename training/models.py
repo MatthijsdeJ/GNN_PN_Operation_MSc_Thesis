@@ -10,7 +10,8 @@ import torch_geometric.nn
 from torch_geometric.nn import SAGEConv, Linear, HeteroConv, GINConv
 from typing import Dict, List, Optional
 from auxiliary.config import NetworkType, AggrType, LayerType
-
+from typing import Sequence
+import numpy as np
 
 class GCN(torch.nn.Module):
     """
@@ -331,6 +332,125 @@ class GCN(torch.nn.Module):
                 diffs['self_neigh'].append(norm_w_self - norm_w_neigh)
 
         return diffs
+
+    def get_MADs(self,
+        x_gen: torch.Tensor,
+        x_load: torch.Tensor,
+        x_or: torch.Tensor,
+        x_ex: torch.Tensor,
+        edge_index: torch.Tensor,
+        object_ptv: torch.Tensor) -> Sequence[float]:
+        """
+        Passes the datapoint through the network, and return the mean average distance (MAD) for the different
+        GCN layers. Used to inspect the degree of oversmoothing.
+
+        Parameters
+        ----------
+        x_gen : torch.Tensor
+            The generator features. Columns represent features, rows different
+            generator objects.
+        x_load : torch.Tensor
+            The load features. Columns represent features, rows different
+            load objects.
+        x_or : torch.Tensor
+            The line origin features. Columns represent features, rows different
+            line origin objects.
+        x_ex : torch.Tensor
+            The line extremity features. Columns represent features, rows different
+            line extremity objects.
+        edge_index : torch.Tensor
+            The edge indices of the adjacency matrix. Edge indices indicate
+            the indices of objects in the topoly vector.
+            Should have shape (2,num_edges). Should be symmetric.
+        object_ptv : torch.Tensor
+            Vector describing the permutation required to set the different object
+            at their position in the topology vector.
+
+        Returns
+        -------
+        MADs : np.array[float]
+            Array of MADs metrics before each layer.
+        """
+        HOMO = NetworkType.HOMO
+        HETERO = NetworkType.HETERO
+
+        # Passing the object features through their respective
+        # embedding layers
+        x_gen = self.lin_gen_1(x_gen)
+        self.activation_f(x_gen)
+        x_gen = self.lin_gen_2(x_gen)
+        self.activation_f(x_gen)
+        x_load = self.lin_load_1(x_load)
+        self.activation_f(x_load)
+        x_load = self.lin_load_2(x_load)
+        self.activation_f(x_load)
+        x_or = self.lin_or_1(x_or)
+        self.activation_f(x_or)
+        x_or = self.lin_or_2(x_or)
+        self.activation_f(x_or)
+        x_ex = self.lin_ex_1(x_ex)
+        self.activation_f(x_ex)
+        x_ex = self.lin_ex_2(x_ex)
+        self.activation_f(x_ex)
+
+        # Combining different object states into the order of the
+        # topology vector
+        MADs = np.array([])
+        x = torch.cat([x_gen, x_load, x_or, x_ex], axis=0)
+        x = x[object_ptv]
+        combined_edges = edge_index if self.network_type == HOMO else torch.cat(tuple(edge_index.values()), axis=1)
+
+        if self.network_type == HETERO:
+            x = {'object': x}
+        MADs = np.append(MADs, self.get_MAD_from_hidden_state(x if self.network_type == HOMO else x['object'],
+                                                              combined_edges))
+
+        # Pass through the GCN layers
+        for l in self.GCN_layers[:-1]:
+            x = l(x, edge_index)
+            self.activation_f(x if self.network_type == HOMO else x['object'])
+            MADs = np.append(MADs, self.get_MAD_from_hidden_state(x if self.network_type == HOMO else x['object'],
+                                                                  combined_edges))
+
+        # Pass through the final layer and the sigmoid activation function
+        x = self.GCN_layers[-1](x, edge_index)
+        x = torch.sigmoid(x if self.network_type == HOMO else x['object'])
+
+        return MADs
+
+    def get_MAD_from_hidden_state(self,
+                                  H : torch.Tensor,
+                                  edge_index: torch.Tensor) -> float:
+        """
+        For a given hidden state, compute the MAD (mean average distance) between neighbouring nodes.
+
+        Parameters
+        ----------
+        H : torch.Tensor
+            The hidden state.
+        edge_index : torch.Tensor
+            The tensor of edge indices, indicating which nodes are connected.
+
+        Returns
+        -------
+        MAD : float
+            The mean average distance
+        """
+        # Calculate the cosine distance between nodes
+        similarity_between_nodes = H @ H.t()
+        H_norm_per_node = torch.linalg.vector_norm(H, dim=1).reshape(-1, 1)
+        cosine_dist_between_nodes = 1 - (similarity_between_nodes / (H_norm_per_node @ H_norm_per_node.t()))
+
+        # Calculate the MAD
+        adjacency_matrix = torch.squeeze(torch_geometric.utils.to_dense_adj(edge_index))
+        cosine_dist_between_connected_nodes = cosine_dist_between_nodes * adjacency_matrix
+        # TODO: this function only works for networks where each node has at least one connection.
+        # Otherwise, a division by zero occurs.
+        mean_cos_dist_node_to_neighbours = cosine_dist_between_connected_nodes.sum(axis=0) \
+                                            / adjacency_matrix.sum(axis=0)
+        MAD = mean_cos_dist_node_to_neighbours.mean().item()
+
+        return MAD
 
 
 class FCNN(torch.nn.Module):
