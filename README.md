@@ -8,9 +8,22 @@ The project consists of a pipeline of four distinct parts:
 3. Training the ML models on the processed teacher data
 4. Evaluation of the trained ML models
 
+## 0. Auxiliary functionality
+
+
 ## 1. Application of the rule-based agents
 
-The functionality 
+The functionality for applying the rule-based agents is mostly contained in three files:
+- [`generate_imitation_data.py`](generate_imitation_data.py) is the script that starts the application process. It takes the following arguments:
+  - `--do_nothing_capacity_threshold`
+  - `--disable_line`
+  - `--start_chronic_id`
+  - `--strategy`
+  - `--activity_criteria`
+- [`imitation_generation/generation.py`](imitation_generation/generation.py) contains the functionality for the agent application process and for saving the generated data. 
+- [`imitation_generation/tutor.py`](imitation_generation/tutor.py) contains the functionality for the different rule-based agents. 
+
+The generated data is also used to evaluate the performance of the rule-based agents.
 
 ## 2. Data processing and analysis
 
