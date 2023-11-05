@@ -13,14 +13,13 @@ The project consists of a pipeline of four distinct parts:
 
 ## 1. Application of the rule-based agents
 
-The functionality for applying the rule-based agents is mostly contained in three files:
+The code for applying the rule-based agents is mostly contained in three files:
 - [`generate_imitation_data.py`](generate_imitation_data.py) is the script that starts the application process. It takes the following arguments:
-  - `--do_nothing_capacity_threshold`
-  - `--disable_line`
-  - `--start_chronic_id`
-  - `--strategy`
-  - `--activity_criteria`
-- [`imitation_generation/generation.py`](imitation_generation/generation.py) contains the functionality for the agent application process and for saving the generated data. 
+  - `--do_nothing_capacity_threshold`: The threshold that, if not exceeded by the max. rho percentage, causes the agent to choose do-nothing actions.
+  - `--disable_line`: The index of the line to be disabled. A value of '-1' disables no lines.
+  - `--start_chronic_id`: The chronic/scenario number from which to start.
+  - `--strategy`: Which rule-based agent to employ. Acceptable values are 'Greedy' or 'CheckNMinOne'.
+- [`imitation_generation/generation.py`](imitation_generation/generation.py) contains the code for applying the agent and for saving the generated data. 
 - [`imitation_generation/tutor.py`](imitation_generation/tutor.py) contains the functionality for the different rule-based agents. 
 
 The generated data is also used to evaluate the performance of the rule-based agents.
