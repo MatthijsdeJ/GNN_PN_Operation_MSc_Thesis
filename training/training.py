@@ -522,9 +522,18 @@ class Run:
             plt.close(fig)
 
             # Logging histogram of the ranks of the true actions in the list of
-            # valid actions sorted by nearness to the predicted actions
+            # valid actions sorted by nearness to the predicted actions,
+            # and the corresponding top-k accuracies
             run.log({"Y_rank_in_nearest_v_acts":
                      wandb.Histogram(Y_rank_in_nearest_v_acts)}, step=step)
+            run.log({
+                "top-1 accuracy": np.mean([x < 1 for x in Y_rank_in_nearest_v_acts]),
+                "top-2 accuracy": np.mean([x < 2 for x in Y_rank_in_nearest_v_acts]),
+                "top-3 accuracy": np.mean([x < 3 for x in Y_rank_in_nearest_v_acts]),
+                "top-5 accuracy": np.mean([x < 5 for x in Y_rank_in_nearest_v_acts]),
+                "top-10 accuracy": np.mean([x < 10 for x in Y_rank_in_nearest_v_acts]),
+                "top-20 accuracy": np.mean([x < 20 for x in Y_rank_in_nearest_v_acts])
+            }, step=step)
 
             # Logging difference between the self weights and the other weights
             if self.train_config['hyperparams']['model_type'] == ModelType.GCN and \
