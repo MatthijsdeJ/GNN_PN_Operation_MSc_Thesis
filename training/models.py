@@ -310,9 +310,9 @@ class GCN(torch.nn.Module):
             diffs['self_ob_neigh'] = []
 
             for l in self.GCN_layers:
-                l_key = 'object__line__object'
-                sb_key = 'object__same_busbar__object'
-                ob_key = 'object__other_busbar__object'
+                l_key = '<object___line___object>'
+                sb_key = '<object___same_busbar___object>'
+                ob_key = '<object___other_busbar___object>'
 
                 norm_w_self = l_w_norm(l.convs[sb_key].lin_r)
                 norm_w_line = l_w_norm(l.convs[l_key].lin_l)
