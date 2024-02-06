@@ -159,6 +159,7 @@ class Run:
                               group=train_config['wandb']['group'],
                               tags=train_config['wandb']['model_tags'],
                               mode=train_config['wandb']['mode'],
+                              dir=config['paths']['wandb'],
                               config=train_config)
         self.run.watch(self.model,
                        log_freq=train_config['settings']['train_log_freq'],
