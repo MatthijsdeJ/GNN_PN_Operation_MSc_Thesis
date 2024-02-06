@@ -25,7 +25,7 @@ def main():
     
     # specify hyperparameter arguments
     parser.add_argument("-mt", "--model_type", help="The model type. Should be GCN or FCNN.", type=str)
-    parser.add_argument("-ngl", "--GCN_layers", help="Number of GCN layers in the model", type=int)
+    parser.add_argument("-ngl", "--N_GCN_layers", help="Number of GCN layers in the model", type=int)
     parser.add_argument("-nh", "--N_node_hidden", help="Number of nodes in the hidden layers.", type=int)
     parser.add_argument("-lr", "--lr", help="Learning rate of the optimizer", type=float)
     parser.add_argument("-bs", "--batch_size", help="Batch size. ", type=int)
@@ -46,8 +46,8 @@ def main():
         overwrite_config(['training', 'wandb', 'model_name'], args.model_name)
     if args.model_type is not None:
         overwrite_config(['training', 'hyperparams', 'model_type'], args.model_type)
-    if args.GCN_layers is not None:
-        overwrite_config(['training', 'GCN', 'hyperparams', 'GCN_layers'], args.GCN_layers)
+    if args.N_GCN_layers is not None:
+        overwrite_config(['training', 'GCN', 'hyperparams', 'N_GCN_layers'], args.N_GCN_layers)
     if args.N_node_hidden is not None:
         overwrite_config(['training', 'hyperparams', 'N_node_hidden'], args.N_node_hidden)
     if args.lr is not None:
