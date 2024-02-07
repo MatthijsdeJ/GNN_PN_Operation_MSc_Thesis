@@ -35,8 +35,8 @@ dataset:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 18000 #How often to evaluate the validation set
-    advanced_val_analysis: true
+    val_log_freq: 10000 #How often to evaluate the validation set
+    advanced_val_analysis: false
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100
@@ -83,7 +83,4 @@ training:
     group: null
     project: msc_thesis_gnn_power
     entity: mattholomew
-    mode: online # disabled
-
-error_analysis:
-  onset: 1.0E6
+    mode: disabled #online # disabled

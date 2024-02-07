@@ -20,6 +20,8 @@ import auxiliary.util as util
 from auxiliary.config import get_config, ModelType, LayerType, LabelWeightsType
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
+import os.path
+import json
 
 
 def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
@@ -118,7 +120,8 @@ class Run:
                                       model_type=model_type,
                                       network_type=network_type,
                                       train=False,
-                                      action_frequency_threshold=af_th)
+                                      action_frequency_threshold=af_th,
+                                      shuffle=False)
 
         # Initialize metrics objects
         IA = metrics.IncrementalAverage
@@ -418,7 +421,31 @@ class Run:
                 Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                     nearest_valid_actions = self.process_single_val_dp(dp)
 
+                # Store error analysis files
+                config = get_config()
+                fp = config['paths']['error_analysis_files'] + f'{i}.json'
+                if os.path.isfile(fp):
+                    with open(fp, "r") as f:
+                        data = json.load(f)
+                    data['P'].append(P.tolist())
+                    data['nearest_valid_P'].append(nearest_valid_P.tolist())
+                else:
+                    data = {
+                        'gen_features': dp['gen_features'].flatten().tolist(),
+                        'load_features': dp['load_features'].flatten().tolist(),
+                        'or_features': dp['or_features'].flatten().tolist(),
+                        'ex_features': dp['ex_features'].flatten().tolist(),
+                        'topo_vect': dp['topo_vect'].tolist(),
+                        'P': [P.tolist()],
+                        'nearest_valid_P': [nearest_valid_P.tolist()],
+                        'Y': [Y.tolist()]
+                    }
+                with open(fp, "w") as f:
+                    json.dump(data, f)
+
+
                 if not self.train_config['settings']['advanced_val_analysis']:
+                    i += 1
                     continue
 
                 # Increment the counters for counting the number of (in)correct classifications of each label
@@ -454,8 +481,8 @@ class Run:
                                                .all(dim=1))[0].item()
                 Y_rank_in_nearest_v_acts.append(Y_index_in_valid)
 
+
                 # For the first 100 datapoints, compute the mads
-                i += 1
                 if i < 100 and self.train_config['hyperparams']['model_type'] == ModelType.GCN:
                     # Extract features
                     X_gen = dp['gen_features']
