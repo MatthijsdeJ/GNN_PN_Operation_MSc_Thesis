@@ -8,6 +8,8 @@ paths:
   con_matrix_cache: data/auxiliary_data_objects/con_matrix_cache.json
   feature_statistics: data/auxiliary_data_objects/feature_statistics.json
   action_counter: data/auxiliary_data_objects/action_counter.json
+  wandb: wandb_test/
+  error_analysis_files: data/error_analysis/
 
 tutor_generated_data:
   n_chronics: 50
@@ -82,3 +84,6 @@ training:
     project: msc_thesis_gnn_power
     entity: mattholomew
     mode: online # disabled
+
+error_analysis:
+  onset: 1.0E6
