@@ -31,7 +31,8 @@ class TutorDataLoader:
                  model_type: ModelType,
                  network_type: Optional[NetworkType],
                  train: bool,
-                 action_frequency_threshold: int = 0):
+                 action_frequency_threshold: int = 0,
+                 shuffle=True):
         """
         Parameters
         ----------
@@ -55,10 +56,13 @@ class TutorDataLoader:
             Minimum frequency of an action in the dataset in order to be
             used during training. Can be used to filter out infrequent actions.
             Default is zero.
+        shuffle : bool
+            Whether to shuffle the files the datapoints are loaded from self.
         """
 
         self._file_names = os.listdir(root)
         self._file_paths = [os.path.join(root, fn) for fn in self._file_names]
+        self.shuffle = shuffle
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
@@ -115,15 +119,9 @@ class TutorDataLoader:
 
         return processed_datapoints
 
-    def __iter__(self, shuffle: bool = True) -> dict:
+    def __iter__(self) -> dict:
         """
         Iterate over the datapoints.
-
-        Parameters
-        ----------
-        shuffle : bool, optional
-            Whether to shuffle the data files. Does NOT mean that the dps
-            in the files are also shuffled. The default is True.
 
         Yields
         ------
@@ -132,7 +130,7 @@ class TutorDataLoader:
 
         """
         file_idxs = list(range(len(self._file_paths)))
-        if shuffle:
+        if self.shuffle:
             random.shuffle(file_idxs)
 
         for idx in file_idxs:
