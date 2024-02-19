@@ -63,6 +63,7 @@ def assert_config():
     for prm, n in [(_config['tutor_generated_data']['n_chronics'], 'n_chronics'),
                    (_config['rte_case14_realistic']['ts_in_day'], 'ts_in_day'),
                    (_config['rte_case14_realistic']['n_subs'], 'n_subs'),
+                   (_config['dataset']['number_of_datafiles'], 'number_of_datafiles'),
                    (_config['training']['settings']['train_log_freq'], 'train_log_freq'),
                    (_config['training']['settings']['val_log_freq'], 'val_log_freq'),
                    (_config['training']['hyperparams']['n_epoch'], 'n_epoch'),
