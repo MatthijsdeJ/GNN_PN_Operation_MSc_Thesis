@@ -5,6 +5,8 @@ Created on Thu Oct 28 16:30:55 2021
 
 @author: matthijs
 """
+import random
+
 import grid2op
 import numpy as np
 from typing import List, Tuple, Callable, Sequence
@@ -316,27 +318,6 @@ class ConMatrixCache:
         return cmc
 
 
-def save_data_to_file(data: List[dict], output_data_path: str):
-    """
-    Given a list of dictionaries, representing various data points,
-    save these to a json file. If the list is empty, save nothing.
-
-    Parameters
-    ----------
-    data : List[dict]
-        Various data points.
-    output_data_path : str
-        The output directory where to save the file.
-    """
-    if not data:
-        return
-
-    filename = f'data_lout{data[0]["line_disabled"]}_' + \
-               f'chr{data[0]["chronic_id"]}.json'
-    with open(output_data_path + filename, 'w') as outfile:
-        json.dump(data, outfile, cls=NumpyEncoder)
-
-
 class FeatureStatistics:
     """
     Used to track the statistics about features (N, mean, std), which are used
@@ -430,6 +411,10 @@ def process_raw_tutor_data():
     grid2op_vect_size = len(env.get_obs().to_vect())
     thermal_limits = config['rte_case14_realistic']['thermal_limits']
 
+    # Obtain parameters
+    exclude_chronics = config['dataset']['exclude_chronics']
+    number_of_datafiles = config['dataset']['number_of_datafiles']
+
     # Create an object for caching connectivity matrices
     cmc = ConMatrixCache()
     # Create a dictionary used for finding actions corresponding to action ids
@@ -444,6 +429,10 @@ def process_raw_tutor_data():
         line_disabled, _, chronic_id, dayscomp = \
             extract_data_from_filepath(fp.relative_to(tutor_data_path))
 
+        # Skip chronic if excluded
+        if chronic_id in exclude_chronics:
+            continue
+
         # Load a single file with raw datapoints
         chr_ldis_raw_dps = np.load(fp)
 
@@ -452,10 +441,6 @@ def process_raw_tutor_data():
         # Action identificator give the action corresponding to an action index
         if line_disabled not in action_iders:
             action_iders[line_disabled] = action_identificator(env, line_disabled)
-
-        # Create a list wherein to store the processed datapoints for this
-        # particular file
-        file_dps = []
 
         # Env information specifically for a line removed
         env_info_dict = env_info_line_disabled(env, line_disabled)
@@ -535,12 +520,10 @@ def process_raw_tutor_data():
             dp['cm_index'] = cm_index
             assert dp['cm_index'] in cmc.con_matrices
 
-            # Append datapoint to the datapoints for a particular chronic and
-            # line disabled, update summary object
-            file_dps.append(dp)
-
-        # Save the processed datapoints for a particular chronic and line disabled
-        save_data_to_file(file_dps, output_data_path)
+            # Add datapoint to random datafile
+            datafile_number = random.randint(0, number_of_datafiles-1)
+            filepath = output_data_path + f'data_lout{line_disabled}_{datafile_number}.json'
+            save_datapoint_to_file(dp, filepath)
 
     cmc.save(con_matrix_path)
     fstats.save_feature_statistics(fstats_path)
@@ -548,6 +531,30 @@ def process_raw_tutor_data():
         json.dump(action_counter,
                   outfile,
                   cls=NumpyEncoder)
+
+
+def save_datapoint_to_file(datapoint: dict, filepath: str):
+    """
+    Given a dictionary representing a data point, append it to a json datafile identified by the filepath.
+    Creates the file if it does not exist.
+
+    Parameters
+    ----------
+    datapoint : dict
+       The datapoint.
+    filepath : str
+       The filepath.
+    """
+    if os.path.isfile(filepath):
+        with open(filepath, "r") as file:
+            data = json.load(file)
+    else:
+        data = []
+
+    data.append(datapoint)
+
+    with open(filepath, "w") as file:
+        json.dump(data, file, cls=NumpyEncoder)
 
 
 def divide_files_train_val_test():
