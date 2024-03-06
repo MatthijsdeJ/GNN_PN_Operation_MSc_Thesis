@@ -351,8 +351,8 @@ class Run:
         l = dp['class_weight']*l
 
         # Calculate statistics for metrics
-        one_sub_P = torch.zeros_like(P)
-        one_sub_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
+        one_sub_p = torch.zeros_like(p)
+        one_sub_p[torch.logical_and(p_sub_mask, p > 0.5)] = 1
         get_cabnp = self.as_cache.get_change_actspace_by_nearness_pred
         nearest_valid_actions = get_cabnp(dp['line_disabled'],
                                           dp['topo_vect'],

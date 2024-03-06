@@ -38,6 +38,11 @@ class LayerType(Enum):
 
 
 @unique
+class StrategyType(Enum):
+    NAIVE = 'naive'
+
+
+@unique
 class LabelWeightsType(Enum):
     ALL = 'ALL'
     Y = 'Y'
@@ -88,9 +93,9 @@ def assert_config():
                    (_config['training']['FCNN']['constants']['size_out'], 'size_out'),
                    (_config['training']['GCN']['hyperparams']['GINConv_nn_depth'], 'GINConv_nn_depth')]:
         assert prm >= 0, f'Parameter {n} should not be negative.'
-    assert all(l >= 0 for l in _config['tutor_generated_data']['line_idxs_to_consider_N-1']), \
+    assert all(line >= 0 for line in _config['tutor_generated_data']['line_idxs_to_consider_N-1']), \
         "Line idx cannot be negative."
-    assert all(l >= 0 for l in _config['rte_case14_realistic']['thermal_limits']), \
+    assert all(line >= 0 for line in _config['rte_case14_realistic']['thermal_limits']), \
         "Thermal limit cannot be negative."
     assert (max(_config['tutor_generated_data']['line_idxs_to_consider_N-1']) + 1 <=
             len(_config['rte_case14_realistic']['thermal_limits'])), "Line idx plus one cannot be higher than" + \
@@ -115,6 +120,7 @@ def cast_config_to_enums():
     _config['training']['GCN']['hyperparams']['aggr'] = AggrType(_config['training']['GCN']['hyperparams']['aggr'])
     _config['training']['GCN']['hyperparams']['layer_type'] = LayerType(_config['training']['GCN']['hyperparams']
                                                                         ['layer_type'])
+    _config['evaluation']['strategy'] = StrategyType(_config['evaluation']['strategy'])
     _config['training']['hyperparams']['label_weights']['type'] = LabelWeightsType(_config['training']['hyperparams']
                                                                                    ['label_weights']['type'])
 

@@ -8,6 +8,8 @@ paths:
   con_matrix_cache: data/auxiliary_data_objects/con_matrix_cache.json
   feature_statistics: data/auxiliary_data_objects/feature_statistics.json
   action_counter: data/auxiliary_data_objects/action_counter.json
+  model: models/error_analysis
+  evaluation: data/evaluation
 
 tutor_generated_data:
   n_chronics: 50
@@ -16,7 +18,7 @@ tutor_generated_data:
   # for evaluating N-1 scenarios
 
 rte_case14_realistic:
-  thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,380,380,760,380,760,380,380,380,2000,2000]
+  thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,381,380,760,380,760,380,380,380,2000,2000]
   ts_in_day: 288 #Number of timesteps in a grid2op day
   n_subs: 14
   sub_info: [3, 6, 4, 6, 5, 6, 3, 2, 5, 3, 3, 3, 4, 3]
@@ -31,26 +33,26 @@ dataset:
   #Remainder is used in the test set
   exclude_chronics: [310, 446, 777] #chronics not included in the dataset
   number_of_datafiles: 1000 #amount of files with datapoints
-  
+
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 18000 #How often to evaluate the validation set
-    advanced_val_analysis: true
+    val_log_freq: 40000 #How often to evaluate the validation set
+    advanced_val_analysis: false
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100
-    lr: 1.5E-4
-    N_node_hidden: 120 #Size of hidden layers in model
+    lr: 5.0E-4
+    N_node_hidden: 128 #Size of hidden layers in model
     LReLu_neg_slope: 0.1
-    batch_size: 32
+    batch_size: 64
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
     weight_init_std: 3
     weight_decay: 0
     early_stopping_patience: 50 #stop training when max. val. macro accuracy
     #valid hasn't improved
     action_frequency_threshold: 0 #min. frequency of an action in the
-    #dataset in order to be used during training. Can be used to filter 
+    #dataset in order to be used during training. Can be used to filter
     #infrequent actions
     label_weights:
       type: Y_AND_P
@@ -62,7 +64,7 @@ training:
     estimated_train_size: 36497 #Used for estimating tqdm duration
   GCN:
     hyperparams:
-      network_type: heterogeneous #Should be a str as defined in training.models.GCN.NetworkType
+      network_type: homogeneous #Should be a str as defined in training.models.GCN.NetworkType
       N_GCN_layers: 8
       aggr: add #Aggregation function: should be 'add' or 'mean'
       layer_type: SAGEConv
@@ -84,3 +86,9 @@ training:
     project: msc_thesis_gnn_power
     entity: mattholomew
     mode: online # disabled
+
+evaluation:
+  model_name: naive
+  strategy: naive
+  disable_line: -1
+  activity_threshold: 0.97

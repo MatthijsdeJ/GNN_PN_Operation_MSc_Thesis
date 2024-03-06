@@ -12,23 +12,70 @@ from typing import Dict, List, Optional
 from auxiliary.config import NetworkType, AggrType, LayerType
 from typing import Sequence
 import numpy as np
+import grid2op
+from abc import ABC, abstractmethod
+import auxiliary.grid2op_util as g2o_util
 
-class GCN(torch.nn.Module):
+
+class Model(ABC):
+    """
+    Base class for the models.
+    """
+
+    @abstractmethod
+    def init_weights_normalized_normal(self, weight_init_std: float):
+        """
+        Initialize the weights of the network according to the normal
+        distribution, but with the std divided by the number of in channels.
+        The biases are initialized to zero.
+
+        Parameters
+        ----------
+        weight_init_std : float
+            The standard deviation of the normal distribution.
+        """
+        pass
+
+    @abstractmethod
+    def predict_observation(self, obs: grid2op.Observation.CompleteObservation) -> torch.Tensor:
+        """
+        Make a prediction based on Grid2Op observation.
+
+        Parameters
+        ----------
+        obs : grid2op.Observation.CompleteObservation
+            The grid2op observation.
+
+        Returns
+        -------
+        P : float
+            The prediction.
+        """
+        pass
+
+
+class GCN(torch.nn.Module, Model):
     """
     Graph convolutional network model.
     Consists of: two embedding layers that should embed the different object
     features into a common embedding; and a number of GCN layers.
     """
 
-
-    def __init__(self, LReLu_neg_slope: float, weight_init_std: float, N_f_gen: int, N_f_load: int, N_f_endpoint: int,
-                 N_GCN_layers: int, N_node_hidden: int, aggr: AggrType, network_type: NetworkType,
-                 layer_type: LayerType, GINConv_nn_depth: Optional[int]) -> object:
+    def __init__(self,
+                 LReLu_neg_slope: float,
+                 weight_init_std: float,
+                 N_f_gen: int,
+                 N_f_load: int,
+                 N_f_endpoint: int,
+                 N_GCN_layers: int,
+                 N_node_hidden: int,
+                 aggr: AggrType,
+                 network_type: NetworkType,
+                 layer_type: LayerType,
+                 GINConv_nn_depth: Optional[int]):
         """
         Parameters
         ----------
-        o
-        o1
         LReLu_neg_slope : float
             The negative slope of the LReLu activation function.
         weight_init_std: float,
@@ -147,8 +194,7 @@ class GCN(torch.nn.Module):
         x_ex = self.lin_ex_2(x_ex)
         self.activation_f(x_ex)
 
-        # Combining different object states into the order of the
-        # topology vector
+        # Combining different object states into the order of the topology vector
         x = torch.cat([x_gen, x_load, x_or, x_ex], axis=0)
         x = x[object_ptv]
 
@@ -156,8 +202,8 @@ class GCN(torch.nn.Module):
             x = {'object': x}
 
         # Pass through the GCN layers
-        for l in self.GCN_layers[:-1]:
-            x = l(x, edge_index)
+        for layer in self.GCN_layers[:-1]:
+            x = layer(x, edge_index)
             self.activation_f(x if self.network_type == HOMO else x['object'])
 
         # Pass through the final layer and the sigmoid activation function
@@ -232,7 +278,7 @@ class GCN(torch.nn.Module):
         modules = []
         modules.append(Linear(n_in, self.N_node_hidden, bias=True))
         modules.append(torch.nn.LeakyReLU(self.LReLu_neg_slope))
-        for _ in range(self.GINConv_nn_depth-2):
+        for _ in range(self.GINConv_nn_depth - 2):
             modules.append(Linear(self.N_node_hidden, self.N_node_hidden))
             modules.append(torch.nn.LeakyReLU(self.LReLu_neg_slope))
         modules.append(Linear(self.N_node_hidden, n_out, bias=True))
@@ -309,15 +355,15 @@ class GCN(torch.nn.Module):
             diffs['self_sb_neigh'] = []
             diffs['self_ob_neigh'] = []
 
-            for l in self.GCN_layers:
+            for layer in self.GCN_layers:
                 l_key = '<object___line___object>'
                 sb_key = '<object___same_busbar___object>'
                 ob_key = '<object___other_busbar___object>'
 
-                norm_w_self = l_w_norm(l.convs[sb_key].lin_r)
-                norm_w_line = l_w_norm(l.convs[l_key].lin_l)
-                norm_w_sb = l_w_norm(l.convs[sb_key].lin_l)
-                norm_w_ob = l_w_norm(l.convs[ob_key].lin_l)
+                norm_w_self = l_w_norm(layer.convs[sb_key].lin_r)
+                norm_w_line = l_w_norm(layer.convs[l_key].lin_l)
+                norm_w_sb = l_w_norm(layer.convs[sb_key].lin_l)
+                norm_w_ob = l_w_norm(layer.convs[ob_key].lin_l)
 
                 diffs['self_line_neigh'].append(norm_w_self - norm_w_line)
                 diffs['self_sb_neigh'].append(norm_w_self - norm_w_sb)
@@ -326,20 +372,20 @@ class GCN(torch.nn.Module):
         elif self.network_type == NetworkType.HOMO:
             diffs['self_neigh'] = []
 
-            for l in self.GCN_layers:
-                norm_w_self = l_w_norm(l.lin_r)
-                norm_w_neigh = l_w_norm(l.lin_l)
+            for layer in self.GCN_layers:
+                norm_w_self = l_w_norm(layer.lin_r)
+                norm_w_neigh = l_w_norm(layer.lin_l)
                 diffs['self_neigh'].append(norm_w_self - norm_w_neigh)
 
         return diffs
 
     def get_MADs(self,
-        x_gen: torch.Tensor,
-        x_load: torch.Tensor,
-        x_or: torch.Tensor,
-        x_ex: torch.Tensor,
-        edge_index: torch.Tensor,
-        object_ptv: torch.Tensor) -> Sequence[float]:
+                 x_gen: torch.Tensor,
+                 x_load: torch.Tensor,
+                 x_or: torch.Tensor,
+                 x_ex: torch.Tensor,
+                 edge_index: torch.Tensor,
+                 object_ptv: torch.Tensor) -> Sequence[float]:
         """
         Passes the datapoint through the network, and return the mean average distance (MAD) for the different
         GCN layers. Used to inspect the degree of oversmoothing.
@@ -419,7 +465,7 @@ class GCN(torch.nn.Module):
         return MADs
 
     def get_MAD_from_hidden_state(self,
-                                  H : torch.Tensor,
+                                  H: torch.Tensor,
                                   edge_index: torch.Tensor) -> float:
         """
         For a given hidden state, compute the MAD (mean average distance) between neighbouring nodes.
@@ -447,13 +493,76 @@ class GCN(torch.nn.Module):
         # TODO: this function only works for networks where each node has at least one connection.
         # Otherwise, a division by zero occurs.
         mean_cos_dist_node_to_neighbours = cosine_dist_between_connected_nodes.sum(axis=0) \
-                                            / adjacency_matrix.sum(axis=0)
+                                           / adjacency_matrix.sum(axis=0)
         MAD = mean_cos_dist_node_to_neighbours.mean().item()
 
         return MAD
 
+    def predict_observation(self,
+                            obs: grid2op.Observation.CompleteObservation,
+                            feature_statistics: dict) -> torch.Tensor:
+        """
+        Make a prediction based on Grid2Op observation.
 
-class FCNN(torch.nn.Module):
+        Parameters
+        ----------
+        obs : grid2op.Observation.CompleteObservation
+            The grid2op observation.
+        feature_statistics : dict[dict[float]]
+            The statistics (meand, stds) per object type (gen, load, or, ex).
+        Returns
+        -------
+        P : float
+            The prediction.
+        """
+        obs_dict = obs.to_dict()
+
+        # Extract features
+        x_gen = torch.tensor(g2o_util.extract_gen_features(obs_dict))
+        x_load = torch.tensor(g2o_util.extract_load_features(obs_dict))
+        x_or = torch.tensor(g2o_util.extract_or_features(obs_dict, obs.thermal_limit))
+        x_ex = torch.tensor(g2o_util.extract_ex_features(obs_dict, obs.thermal_limit))
+        object_ptv = torch.tensor(np.argsort(np.concatenate([
+            obs.gen_pos_topo_vect,
+            obs.load_pos_topo_vect,
+            obs.line_or_pos_topo_vect,
+            obs.line_ex_pos_topo_vect])))
+
+        # Normalize features
+        x_gen = ((x_gen - torch.tensor(feature_statistics['gen']['mean'])) /
+                 torch.tensor(feature_statistics['gen']['std']))
+        x_load = ((x_load - torch.tensor(feature_statistics['load']['mean'])) /
+                  torch.tensor(feature_statistics['load']['std']))
+        x_or = ((x_or - torch.tensor(feature_statistics['or']['mean'])) /
+                torch.tensor(feature_statistics['or']['std']))
+        x_ex = ((x_ex - torch.tensor(feature_statistics['ex']['mean'])) /
+                torch.tensor(feature_statistics['ex']['std']))
+
+        # Extract connectivity matrix
+        same_busbar_e, other_busbar_e, line_e = g2o_util.connectivity_matrices(obs.sub_info.astype(int),
+                                                                               obs.topo_vect.astype(int),
+                                                                               obs.line_or_pos_topo_vect.astype(int),
+                                                                               obs.line_ex_pos_topo_vect.astype(int))
+        if self.network_type == NetworkType.HOMO:
+            edge_index = torch.tensor(np.append(same_busbar_e, line_e, axis=1),
+                                      dtype=torch.long)
+        elif self.network_type == NetworkType.HETERO:
+            edge_index = {('object', 'line', 'object'):
+                              torch.tensor(line_e,
+                                           dtype=torch.long),
+                          ('object', 'same_busbar', 'object'):
+                              torch.tensor(same_busbar_e,
+                                           dtype=torch.long),
+                          ('object', 'other_busbar', 'object'):
+                              torch.tensor(other_busbar_e,
+                                           dtype=torch.long)}
+
+        # Creating and returning the prediction
+        P = self.forward(x_gen, x_load, x_or, x_ex, edge_index, object_ptv)
+        return P
+
+
+class FCNN(torch.nn.Module, Model):
     """
     Fully connected neural network. Consists of multiple feedforward layers.
     """
@@ -547,3 +656,19 @@ class FCNN(torch.nn.Module):
                     m.bias.data.fill_(0)
 
         self.apply(layer_weights_normal)
+
+    def predict_observation(self, obs: grid2op.Observation.CompleteObservation) -> torch.Tensor:
+        """
+        Make a prediction based on Grid2Op observation.
+
+        Parameters
+        ----------
+        obs : grid2op.Observation.CompleteObservation
+            The grid2op observation.
+
+        Returns
+        -------
+        P : float
+            The prediction.
+        """
+        pass
