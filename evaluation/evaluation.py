@@ -14,7 +14,7 @@ import torch
 from evaluation.strategy import NaiveStrategy
 from training.models import GCN, FCNN
 import json
-
+import logging
 
 def evaluate():
     """
@@ -26,6 +26,13 @@ def evaluate():
     ts_in_day = int(config['rte_case14_realistic']['ts_in_day'])
     disable_line = config['evaluation']['disable_line']
     feature_statistics_path = config['paths']['feature_statistics']
+    logging_path = config['paths']['evaluation_log']
+
+    # Initialize logging
+    logging.basicConfig(filename=logging_path,
+                        filemode='w',
+                        format='%(message)s',
+                        level=logging.INFO)
 
     # Initialize environment
     env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
@@ -54,6 +61,7 @@ def evaluate():
         days_completed = 0
         fast_forward_divergingpowerflow_exception = False
         print('current chronic: %s' % env.chronics_handler.get_name())
+        logging.info('current chronic: %s' % env.chronics_handler.get_name())
 
         # Disable lines, if any
         if disable_line != -1:
@@ -69,6 +77,8 @@ def evaluate():
             if fast_forward_divergingpowerflow_exception:
                 print(f'Powerflow exception at step {env.nb_time_step} ' +
                       f'on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+                logging.error(f'Powerflow exception at step {env.nb_time_step} ' +
+                              f'on day {ts_to_day(env.nb_time_step, ts_in_day)}')
                 info = g2o_util.skip_to_next_day(env, ts_in_day,
                                                  num, disable_line)
                 continue
@@ -76,6 +86,7 @@ def evaluate():
             # At midnight, reset the topology to the reference, store days' records, reset days' records
             if env.nb_time_step % ts_in_day == ts_in_day-1:
                 print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
+                logging.info(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
                 obs, _, _, _ = env.step(env.action_space({'set_bus':
                                                           reference_topo_vect}))
                 days_completed += 1
@@ -86,17 +97,32 @@ def evaluate():
             action = strategy.select_action(obs)
 
             # Take the selected action in the environment
+            old_rho = obs.rho.max()
+            old_tv = obs.topo_vect
             obs, _, _, _ = env.step(action)
-            
+
+            # Potentially log action information
+            if old_rho > config['evaluation']['activity_threshold']:
+                mask, sub_id = g2o_util.select_single_substation_from_topovect(torch.tensor(action.set_bus != old_tv),
+                                                                               torch.tensor(obs.sub_info),
+                                                                               select_nothing_condition= lambda x:
+                                                                               not any(x))
+                msg = "Old max rho, new max rho, substation, set_bus: " + \
+                      str((old_rho,  obs.rho.max(),  sub_id,  list(action.set_bus[mask])))
+                print(msg)
+                logging.info(msg)
+
             # If the game is done at this point, this indicated a (failed) game over.
             # If so, reset the environment to the start of next day and discard the records
             if env.done:
                 print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+                logging.info(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
                 fast_forward_divergingpowerflow_exception = g2o_util.skip_to_next_day(env,  ts_in_day,
                                                                                       num, disable_line)
 
         # At the end of a chronic, print a message, and store and reset the corresponding records
         print('Chronic exhausted! \n\n\n')
+        logging.info('Chronic exhausted! \n\n\n')
 
 
 def init_model():
