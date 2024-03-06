@@ -9,7 +9,7 @@ paths:
   feature_statistics: data/auxiliary_data_objects/feature_statistics.json
   action_counter: data/auxiliary_data_objects/action_counter.json
   model: models/error_analysis
-  evaluation_log: data/evaluation/naive.log
+  evaluation_log: data/evaluation/verify.log
 
 tutor_generated_data:
   n_chronics: 50
@@ -88,6 +88,8 @@ training:
     mode: online # disabled
 
 evaluation:
-  strategy: naive
   disable_line: -1
   activity_threshold: 0.97
+  strategy: verify
+  verify_strategy:
+    reject_action_threshold: 1.0

@@ -11,10 +11,11 @@ import auxiliary.grid2op_util as g2o_util
 from auxiliary.grid2op_util import ts_to_day
 from auxiliary.config import get_config, StrategyType, ModelType
 import torch
-from evaluation.strategy import NaiveStrategy
-from training.models import GCN, FCNN
+from evaluation.strategy import AgentStrategy, IdleStrategy, NaiveStrategy,  VerifyStrategy
+from training.models import GCN, FCNN, Model
 import json
 import logging
+
 
 def evaluate():
     """
@@ -44,28 +45,21 @@ def evaluate():
         feature_statistics = json.loads(file.read())
 
     # Initialize strategy
-    strategy_type = config['evaluation']['strategy']
-    if strategy_type == StrategyType.NAIVE:
-        strategy = NaiveStrategy(model,
-                                 feature_statistics,
-                                 env.action_space,
-                                 config['evaluation']['activity_threshold'])
-    else:
-        raise ValueError("Invalid value for strategy_name.")
+    strategy = init_strategy(env, model, feature_statistics)
 
     # Loop over chronics
     for num in range(0, num_chronics):
 
         # (Re)set variables
-        obs = env.reset()
-        days_completed = 0
-        fast_forward_divergingpowerflow_exception = False
         print('current chronic: %s' % env.chronics_handler.get_name())
         logging.info('current chronic: %s' % env.chronics_handler.get_name())
+        divergingpowerflow_exception = False
 
         # Disable lines, if any
         if disable_line != -1:
             obs, _, _, _ = env.step(env.action_space({"set_line_status": (disable_line, -1)}))
+        else:
+            obs, _, _, _ = env.step(env.action_space({}))
 
         # Save reference topology
         reference_topo_vect = obs.topo_vect.copy()
@@ -74,13 +68,12 @@ def evaluate():
         while env.nb_time_step < env.chronics_handler.max_timestep():
             # Sporadically, when fast-forwarding, a diverging powerflow exception can occur.  If that exception
             # has occurred, we skip to the next day.
-            if fast_forward_divergingpowerflow_exception:
+            if divergingpowerflow_exception:
                 print(f'Powerflow exception at step {env.nb_time_step} ' +
                       f'on day {ts_to_day(env.nb_time_step, ts_in_day)}')
                 logging.error(f'Powerflow exception at step {env.nb_time_step} ' +
                               f'on day {ts_to_day(env.nb_time_step, ts_in_day)}')
-                info = g2o_util.skip_to_next_day(env, ts_in_day,
-                                                 num, disable_line)
+                _ = g2o_util.skip_to_next_day(env, ts_in_day, num, disable_line)
                 continue
                 
             # At midnight, reset the topology to the reference, store days' records, reset days' records
@@ -89,7 +82,6 @@ def evaluate():
                 logging.info(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
                 obs, _, _, _ = env.step(env.action_space({'set_bus':
                                                           reference_topo_vect}))
-                days_completed += 1
                 continue
                 
             # If neither of above holds, the model takes an action
@@ -103,12 +95,13 @@ def evaluate():
 
             # Potentially log action information
             if old_rho > config['evaluation']['activity_threshold']:
-                mask, sub_id = g2o_util.select_single_substation_from_topovect(torch.tensor(action.set_bus != old_tv),
+                mask, sub_id = g2o_util.select_single_substation_from_topovect(torch.tensor(action.set_bus),
                                                                                torch.tensor(obs.sub_info),
-                                                                               select_nothing_condition= lambda x:
-                                                                               not any(x))
+                                                                               select_nothing_condition=lambda x:
+                                                                               not any(x) or x == old_tv)
+                # todo: the select_nothing_condition sometimes doesn't work
                 msg = "Old max rho, new max rho, substation, set_bus: " + \
-                      str((old_rho,  obs.rho.max(),  sub_id,  list(action.set_bus[mask])))
+                      str((old_rho,  obs.rho.max(),  sub_id,  list(action.set_bus[mask == 1])))
                 print(msg)
                 logging.info(msg)
 
@@ -117,20 +110,28 @@ def evaluate():
             if env.done:
                 print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
                 logging.info(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
-                fast_forward_divergingpowerflow_exception = g2o_util.skip_to_next_day(env,  ts_in_day,
-                                                                                      num, disable_line)
+                divergingpowerflow_exception = g2o_util.skip_to_next_day(env,
+                                                                         ts_in_day,
+                                                                         int(env.chronics_handler.get_name()),
+                                                                         disable_line)
 
         # At the end of a chronic, print a message, and store and reset the corresponding records
         print('Chronic exhausted! \n\n\n')
         logging.info('Chronic exhausted! \n\n\n')
 
+        # Resetting environment
+        env.reset()
+        divergingpowerflow_exception = False
 
-def init_model():
+
+def init_model() -> Model:
     """
+    Initialize the machine learning model.
 
     Returns
     -------
-
+    model : Model
+        The machine learning model.
     """
     config = get_config()
     train_config = config['training']
@@ -163,3 +164,44 @@ def init_model():
     model.load_state_dict(torch.load(model_path))
 
     return model
+
+
+def init_strategy(env: grid2op.Environment, model: Model, feature_statistics: dict) -> AgentStrategy:
+    """
+    Initialize the strategy.
+
+    Parameters
+    ----------
+    env : grid2op.Environment
+        The grid2op environment.
+    model : Model
+        The machine learning model.
+    feature_statistics : dict[dict[float]]
+        The statistics (meand, stds) per object type (gen, load, or, ex).
+
+
+    Returns
+    -------
+    strategy : StrategyType
+        The initialized strategy.
+    """
+    config = get_config()
+    strategy_type = config['evaluation']['strategy']
+
+    if strategy_type == StrategyType.IDLE:
+        strategy = IdleStrategy(env.action_space)
+    elif strategy_type == StrategyType.NAIVE:
+        strategy = NaiveStrategy(model,
+                                 feature_statistics,
+                                 env.action_space,
+                                 config['evaluation']['activity_threshold'])
+    elif strategy_type == StrategyType.VERIFY:
+        strategy = VerifyStrategy(model,
+                                  feature_statistics,
+                                  env.action_space,
+                                  config['evaluation']['activity_threshold'],
+                                  config['evaluation']['verify_strategy']['reject_action_threshold'])
+    else:
+        raise ValueError("Invalid value for strategy_name.")
+
+    return strategy

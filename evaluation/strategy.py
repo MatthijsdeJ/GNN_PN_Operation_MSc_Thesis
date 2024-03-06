@@ -58,6 +58,34 @@ class AgentStrategy(ABC):
         return obs.rho.max() if not done else float('Inf')
 
 
+class IdleStrategy(AgentStrategy):
+    """
+    Strategy that produces only do-nothing actions.
+    """
+
+    def __init__(self, action_space):
+        super()
+        self.action_space = action_space
+
+    def select_action(self, observation: grid2op.Observation.CompleteObservation):
+        """
+        Selects an action.
+
+        Parameters
+        ----------
+        observation :  grid2op.Observation.CompleteObservation
+            The observation, on which to base the action.
+
+        Returns
+        -------
+        action_chosen : grid2op.Action.BaseAction
+            The selected action.
+        """
+        action = self.action_space({})
+
+        return action
+
+
 class NaiveStrategy(AgentStrategy):
     """
     Naive strategy that simply selects the action predicted by the ML model.
@@ -72,10 +100,17 @@ class NaiveStrategy(AgentStrategy):
 
     def select_action(self, observation: grid2op.Observation.CompleteObservation):
         """
+        Selects an action.
+
+        Parameters
+        ----------
+        observation :  grid2op.Observation.CompleteObservation
+            The observation, on which to base the action.
 
         Returns
         -------
-
+        action_chosen : grid2op.Action.BaseAction
+            The selected action.
         """
         if observation.rho.max() > self.dn_threshold:
             P = torch.flatten(self.model.predict_observation(observation, self.feature_statistics)).detach()
@@ -88,6 +123,55 @@ class NaiveStrategy(AgentStrategy):
             # TODO: Fix with disabled lines
 
             action = self.action_space({'set_bus': set_action})
+        else:
+            action = self.action_space({})
+
+        return action
+
+
+class VerifyStrategy(AgentStrategy):
+    """
+    Naive strategy that simply selects the action predicted by the ML model.
+    """
+
+    def __init__(self, model, feature_statistics, action_space, dn_threshold: float, reject_action_threshold: float):
+        super()
+        self.model = model
+        self.feature_statistics = feature_statistics
+        self.action_space = action_space
+        self.dn_threshold = dn_threshold
+        self.reject_action_threshold = reject_action_threshold
+
+    def select_action(self, observation: grid2op.Observation.CompleteObservation):
+        """
+        Selects an action.
+
+        Parameters
+        ----------
+        observation :  grid2op.Observation.CompleteObservation
+            The observation, on which to base the action.
+
+        Returns
+        -------
+        action_chosen : grid2op.Action.BaseAction
+            The selected action.
+        """
+        if observation.rho.max() > self.dn_threshold:
+            P = torch.flatten(self.model.predict_observation(observation, self.feature_statistics)).detach()
+            P_sub_mask, _ = g2o_util.select_single_substation_from_topovect(P,
+                                                                            observation.sub_info,
+                                                                            f=lambda x: torch.sum(torch.clamp(x - 0.5,
+                                                                                                              min=0)))
+            P = np.array([1 if (m and p > 0.5) else 0 for m, p in zip(P_sub_mask, P)])
+            set_action = 1 + (observation.topo_vect - 1 + P) % 2
+            # TODO: Fix with disabled lines
+
+            action = self.action_space({'set_bus': set_action})
+
+            # Verify the action; if failed, use a do_nothing action
+            simulation_max_rho = self.get_max_rho_simulated(observation, action)
+            if simulation_max_rho > self.reject_action_threshold and simulation_max_rho > observation.rho.max():
+                action = self.action_space({})
         else:
             action = self.action_space({})
 
