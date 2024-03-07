@@ -42,6 +42,7 @@ class StrategyType(Enum):
     IDLE = 'idle'
     NAIVE = 'naive'
     VERIFY = 'verify'
+    HYBRID = 'hybrid'
 
 
 @unique

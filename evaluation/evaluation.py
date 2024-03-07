@@ -11,11 +11,11 @@ import auxiliary.grid2op_util as g2o_util
 from auxiliary.grid2op_util import ts_to_day
 from auxiliary.config import get_config, StrategyType, ModelType
 import torch
-from evaluation.strategy import AgentStrategy, IdleStrategy, NaiveStrategy,  VerifyStrategy
+import evaluation.strategy as strat
 from training.models import GCN, FCNN, Model
 import json
 import logging
-
+from auxiliary.generate_action_space import get_env_actions
 
 def evaluate():
     """
@@ -99,7 +99,6 @@ def evaluate():
                                                                                torch.tensor(obs.sub_info),
                                                                                select_nothing_condition=lambda x:
                                                                                not any(x) or x == old_tv)
-                # todo: the select_nothing_condition sometimes doesn't work
                 msg = "Old max rho, new max rho, substation, set_bus: " + \
                       str((old_rho,  obs.rho.max(),  sub_id,  list(action.set_bus[mask == 1])))
                 print(msg)
@@ -166,7 +165,7 @@ def init_model() -> Model:
     return model
 
 
-def init_strategy(env: grid2op.Environment, model: Model, feature_statistics: dict) -> AgentStrategy:
+def init_strategy(env: grid2op.Environment, model: Model, feature_statistics: dict) -> strat.AgentStrategy:
     """
     Initialize the strategy.
 
@@ -189,18 +188,26 @@ def init_strategy(env: grid2op.Environment, model: Model, feature_statistics: di
     strategy_type = config['evaluation']['strategy']
 
     if strategy_type == StrategyType.IDLE:
-        strategy = IdleStrategy(env.action_space)
+        strategy = strat.IdleStrategy(env.action_space)
     elif strategy_type == StrategyType.NAIVE:
-        strategy = NaiveStrategy(model,
-                                 feature_statistics,
-                                 env.action_space,
-                                 config['evaluation']['activity_threshold'])
+        strategy = strat.NaiveStrategy(model,
+                                       feature_statistics,
+                                       env.action_space,
+                                       config['evaluation']['activity_threshold'])
     elif strategy_type == StrategyType.VERIFY:
-        strategy = VerifyStrategy(model,
-                                  feature_statistics,
-                                  env.action_space,
-                                  config['evaluation']['activity_threshold'],
-                                  config['evaluation']['verify_strategy']['reject_action_threshold'])
+        strategy = strat.VerifyStrategy(model,
+                                        feature_statistics,
+                                        env.action_space,
+                                        config['evaluation']['activity_threshold'],
+                                        config['evaluation']['verify_strategy']['reject_action_threshold'])
+    elif strategy_type == StrategyType.HYBRID:
+        strategy = strat.HybridStrategy(model,
+                                        feature_statistics,
+                                        env.action_space,
+                                        config['evaluation']['activity_threshold'],
+                                        config['evaluation']['hybrid_strategy']['reject_action_threshold'],
+                                        config['evaluation']['hybrid_strategy']['greedy_take_the_wheel_threshold'],
+                                        get_env_actions(env, disable_line=config['evaluation']['disable_line']))
     else:
         raise ValueError("Invalid value for strategy_name.")
 

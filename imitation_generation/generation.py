@@ -14,7 +14,7 @@ from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
 from auxiliary.config import get_config
 from typing import Sequence
-
+from auxiliary.generate_action_space import get_env_actions
 # =============================================================================
 # This is half-finished code for returning to the reference topology without requiring 'different' Grid2Op Rule.
 #

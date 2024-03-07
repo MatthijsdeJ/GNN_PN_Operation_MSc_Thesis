@@ -9,7 +9,7 @@ paths:
   feature_statistics: data/auxiliary_data_objects/feature_statistics.json
   action_counter: data/auxiliary_data_objects/action_counter.json
   model: models/error_analysis
-  evaluation_log: data/evaluation/verify.log
+  evaluation_log: data/evaluation/hybrid.log
 
 tutor_generated_data:
   n_chronics: 50
@@ -90,6 +90,9 @@ training:
 evaluation:
   disable_line: -1
   activity_threshold: 0.97
-  strategy: verify
+  strategy: hybrid
   verify_strategy:
     reject_action_threshold: 1.0
+  hybrid_strategy:
+    reject_action_threshold: 1.0
+    greedy_take_the_wheel_threshold: 1.0
