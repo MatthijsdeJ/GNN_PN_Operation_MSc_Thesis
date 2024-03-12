@@ -45,8 +45,7 @@ def evaluate():
     # Loop over chronics
     for num in range(0, num_chronics):
         try:
-            print('current chronic: %s' % env.chronics_handler.get_name())
-            logging.info('current chronic: %s' % env.chronics_handler.get_name())
+            log_and_print('current chronic: %s' % env.chronics_handler.get_name())
 
             # (Re)set variables
             days_completed = 0
@@ -62,21 +61,19 @@ def evaluate():
             # Save reference topology
             reference_topo_vect = obs.topo_vect.copy()
 
-            # Loop over timesteps until exhausted
+            # While chronic is not completed
             while env.nb_time_step < env.chronics_handler.max_timestep():
 
-                # Reset at midnight
+                # Reset at midnight,  add day data to chronic data
                 if env.nb_time_step % ts_in_day == ts_in_day - 1:
-                    print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
-                    logging.info(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
-
+                    log_and_print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
                     days_completed += 1
 
                     # Reset topology
-                    obs = env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
+                    env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
 
+                    # Save and reset data
                     if save_data:
-                        # Save and reset data
                         chronic_datapoints += day_datapoints
                         day_datapoints = []
 
@@ -100,10 +97,8 @@ def evaluate():
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
                                                                           not any(x) or x == previous_topo_vect)
-                    msg = "Old max rho, new max rho, substation, set_bus: " + \
-                          str((previous_max_rho, obs.rho.max(), sub_id, list(action.set_bus[mask == 1])))
-                    print(msg)
-                    logging.info(msg)
+                    log_and_print("Old max rho, new max rho, substation, set_bus: " +
+                                  str((previous_max_rho, obs.rho.max(), sub_id, list(action.set_bus[mask == 1]))))
 
                 # Save action data
                 if save_data and datapoint is not None:
@@ -112,26 +107,36 @@ def evaluate():
                 # If the game is done at this point, this indicated a (failed) game over.
                 # If so, reset the environment to the start of next day and discard the records
                 if env.done:
-                    print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
-                    logging.info(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+                    log_and_print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
 
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
 
             # At the end of a chronic, print a message, and store and reset the corresponding records
-            print('Chronic exhausted! \n\n\n')
-            logging.info('Chronic exhausted! \n\n\n')
+            log_and_print('Chronic exhausted! \n\n\n')
 
             # Saving and resetting the data
             if save_data:
                 save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
         except grid2op.Exceptions.DivergingPowerFlow:
-            msg = (f'Diverging-powerflow exception at step {env.nb_time_step} on '
-                   f'day {ts_to_day(env.nb_time_step, ts_in_day)}. Skipping this chronic.')
-            print(msg)
-            logging.info(msg)
+            log_and_print(f'Diverging-powerflow exception encountered at step {env.nb_time_step} on '
+                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}. Skipping this chronic.')
         finally:
+            # Regardless of whether the chronic was completed or interrupted, reset the environment
             env.reset()
+
+
+def log_and_print(msg: str):
+    """
+    Log and print a message.
+
+    Parameters
+    ----------
+    msg : str
+        The message.
+    """
+    print(msg)
+    logging.info(msg)
 
 
 def init_model() -> Model:
@@ -267,7 +272,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
                                                            'line_idxs_to_consider_N-1'],
                                                        config['evaluation']['NMinusOne_strategy']['N0_rho_threshold'],
                                                        config['evaluation']['hybrid_strategies'][
-                                                            'take_the_wheel_threshold'])
+                                                           'take_the_wheel_threshold'])
     else:
         raise ValueError("Invalid value for strategy_name.")
 
