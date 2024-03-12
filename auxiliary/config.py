@@ -87,7 +87,6 @@ def assert_config():
                    (_config['training']['hyperparams']['label_weights']['non_masked_weight'],
                     'non_sub_weight'),
                    (_config['training']['hyperparams']['early_stopping_patience'], 'early_stopping_patience'),
-                   (_config['training']['hyperparams']['action_frequency_threshold'], 'action_frequency_threshold'),
                    (_config['training']['constants']['estimated_train_size'], 'estimated_train_size'),
                    (_config['training']['GCN']['hyperparams']['N_GCN_layers'], 'N_GCN_layers'),
                    (_config['training']['GCN']['constants']['N_f_gen'], 'N_f_gen'),

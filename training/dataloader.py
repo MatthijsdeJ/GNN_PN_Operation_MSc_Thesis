@@ -26,12 +26,10 @@ class TutorDataLoader:
                  root: str,
                  matrix_cache_path: str,
                  feature_statistics_path: str,
-                 action_counter_path: str,
                  device: torch.device,
                  model_type: ModelType,
                  network_type: Optional[NetworkType],
-                 train: bool,
-                 action_frequency_threshold: int = 0):
+                 train: bool):
         """
         Parameters
         ----------
@@ -41,8 +39,6 @@ class TutorDataLoader:
             The path of the matrix cache file.
         feature_statistics_path : str
             The path of the feature statistics file.
-        action_counter_path: str
-            The path of the action counter json file.
         device : torch.device
             What device to load the data on.
         network_type : NetworkType
@@ -51,12 +47,7 @@ class TutorDataLoader:
         train : bool
             Whether the loaded data is used for training or validation.
             More information is included in validation.
-        action_frequency_threshold : int
-            Minimum frequency of an action in the dataset in order to be
-            used during training. Can be used to filter out infrequent actions.
-            Default is zero.
         """
-
         self._file_names = os.listdir(root)
         self._file_paths = [os.path.join(root, fn) for fn in self._file_names]
         with open(feature_statistics_path, 'r') as file:
@@ -166,11 +157,6 @@ class ProcessDataPointStrategy(ABC):
         self.train = train
         self.feature_statistics = feature_statistics
         config = get_config()
-        self.class_weight_assigner = ClassWeightAssigner(config['paths']['action_counter'],
-                                                         config['training']['hyperparams']['class_weights']
-                                                               ['max_adapt_weight'],
-                                                         config['training']['hyperparams']['class_weights']
-                                                               ['min_weight_zero'])
 
     @abstractmethod
     def process_datapoint(self, raw_dp: int):
@@ -192,7 +178,7 @@ class ProcessDataPointStrategy(ABC):
 
     def add_processed_label(self, raw_dp: dict, dp: dict):
         """
-        Extract the label from raw_dp, process it, and store it in dp. Includes the class weight too.
+        Extract the label from raw_dp, process it, and store it in dp.
 
         Parameters
         ----------
@@ -209,7 +195,6 @@ class ProcessDataPointStrategy(ABC):
         dp['change_topo_vect'] = torch.tensor(raw_dp['change_topo_vect'],
                                               device=self.device,
                                               dtype=torch.float)
-        dp['class_weight'] = self.class_weight_assigner.assign(raw_dp['act_hash'])
         return dp
 
     def add_val_info(self, raw_dp: dict, dp: dict):
@@ -416,83 +401,3 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
             dp = self.add_val_info(raw_dp, dp)
 
         return dp
-
-
-class ClassWeightAssigner:
-    """
-    Class for assigning weights to samples based on their class (i.e. action).
-    """
-    def __init__(self,
-                 class_counter_path: str,
-                 max_adapt_weight: int,
-                 min_weight_zero):
-        """
-        Parameters
-        ----------
-        class_counter_path : str
-            Path of the .json file storing the data structure that stores the frequency of each class in the
-            entire (train+val+test) dataset.
-        max_adapt_weight : int
-            The max threshold for transforming the weight of a class, above which classes are assigned a weight of 1.
-        min_weight_zero : int
-            The max threshold, below which classes are assigned a weight of 0. Used to exclude infrequent classes.
-        """
-        assert max_adapt_weight >= min_weight_zero, "Max adapt weight cannot be smaller than the min weight zero."
-        # Open action counter data structure
-        with open(class_counter_path, 'r') as file:
-            self._class_counter = json.loads(file.read())
-
-        # Save parameters
-        self.max_adapt_weight = max_adapt_weight
-        self.min_weight_zero = min_weight_zero
-
-        # Compute relevant numbers
-        values = self._class_counter.values()
-        self.N_datapoints = sum(values)
-        self.N_classes = len(values)
-        self.max_class_size = max(values)
-
-    def assign(self, class_hash: int) -> float:
-        """
-        Given an action/class hash, return the class weights. The class weights are 1 above max_adapt_weight, 0 below
-        min_weight_zero, and max_adapt_weight/class_count in between.
-
-        Parameters
-        ----------
-        class_hash : int
-            The hash of the class.
-
-        Returns
-        -------
-        weight : float
-            The weight.
-
-        Raises
-        ------
-        ValueError : When the action hash isn't stored in the action counter, i.e. it is not in the train/val/test
-        data.
-        """
-        class_count = self._class_counter[str(class_hash)]
-
-        if class_count < self.min_weight_zero:
-            return 0
-        elif self.min_weight_zero < class_count < self.max_adapt_weight:
-            return self.max_adapt_weight / class_count
-        else:
-            return 1
-
-    # def _get_adapted_class_weight(self, class_count: int) -> float:
-    #     """
-    #     Get the adapted class weight for a class given the class count.
-
-    #     Parameters
-    #     ----------
-    #     class_count : int
-    #         The class count.
-
-    #     Returns
-    #     -------
-    #     float
-    #         The adapted class weight.
-    #     """
-    #     return (self.N_datapoints/self.N_classes)/class_count

@@ -342,7 +342,6 @@ class FeatureStatistics:
         ----------
         data : np.array
             Dictionary representing the datapoints, containing the features.
-
         """
         features = [data['gen_features'], data['load_features'],
                     data['or_features'], data['ex_features']]
@@ -404,7 +403,6 @@ def process_raw_tutor_data():
     output_data_path = config['paths']['processed_tutor_imitation']
     con_matrix_path = config['paths']['con_matrix_cache']
     fstats_path = config['paths']['feature_statistics']
-    ac_path = config['paths']['action_counter']
 
     # Initialize environment and environment variables
     env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
@@ -421,9 +419,6 @@ def process_raw_tutor_data():
     action_iders = {}
     # Create object for tracking the feature statistics
     fstats = FeatureStatistics()
-    # Object for tracking action frequencies. Can be used to filter out
-    # rare actions
-    action_counter = Counter()
 
     for fp in tqdm(get_filepaths(tutor_data_path)):
         line_disabled, _, chronic_id, dayscomp = \
@@ -486,14 +481,6 @@ def process_raw_tutor_data():
             dp['res_topo_vect'] = np.array([t if s == 0 else s for t, s in
                                             zip(dp['topo_vect'], dp['set_topo_vect'])])
 
-            # Update action counter
-            # TODO: Change this for scenarios with different topologies
-            if line_disabled != -1:
-                raise NotImplementedError
-            act_hash = util.hash_nparray(dp['change_topo_vect'])
-            action_counter[act_hash] += 1
-            dp['act_hash'] = act_hash
-
             # Skip datapoint if any other line is disabled
             if -1 in dp['topo_vect']:
                 continue
@@ -527,11 +514,6 @@ def process_raw_tutor_data():
 
     cmc.save(con_matrix_path)
     fstats.save_feature_statistics(fstats_path)
-    with open(ac_path, 'w') as outfile:
-        json.dump(action_counter,
-                  outfile,
-                  cls=NumpyEncoder)
-
 
 def save_datapoint_to_file(datapoint: dict, filepath: str):
     """

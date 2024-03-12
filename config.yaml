@@ -2,12 +2,12 @@ paths:
   rte_case14_realistic: data/rte_case14_realistic/
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   medha_imitation: data/medha_imitation_sample/
-  tutor_imitation: data/test_N-1/
+  tutor_imitation: data/tutor_generated_data/
   processed_tutor_imitation: data/processed_tutor_data/
   action_space: action_space/
   con_matrix_cache: data/auxiliary_data_objects/con_matrix_cache.json
   feature_statistics: data/auxiliary_data_objects/feature_statistics.json
-  action_counter: data/auxiliary_data_objects/action_counter.json
+  wandb: data/wandb/
   model: models/error_analysis
   evaluation_log: data/evaluation/test.log
 
@@ -60,15 +60,9 @@ training:
     weight_decay: 0
     early_stopping_patience: 50 #stop training when max. val. macro accuracy
     #valid hasn't improved
-    action_frequency_threshold: 0 #min. frequency of an action in the
-    #dataset in order to be used during training. Can be used to filter
-    #infrequent actions
     label_weights:
       type: Y_AND_P
       non_masked_weight: 0.1
-    class_weights:
-      max_adapt_weight: 10
-      min_weight_zero: 10
   constants:
     estimated_train_size: 36497 #Used for estimating tqdm duration
   GCN:
@@ -94,4 +88,4 @@ training:
     group: null
     project: msc_thesis_gnn_power
     entity: mattholomew
-    mode: online # disabled
+    mode: disabled

@@ -61,7 +61,6 @@ class Run:
         processed_data_path = config['paths']['processed_tutor_imitation']
         matrix_cache_path = config['paths']['con_matrix_cache']
         feature_statistics_path = config['paths']['feature_statistics']
-        action_counter_path = config['paths']['action_counter']
 
         # Specify device to use
         self.device = 'cpu'#torch.device('cuda' if torch.cuda.is_available()
@@ -100,25 +99,20 @@ class Run:
         # Initialize dataloaders
         network_type = train_config['GCN']['hyperparams']['network_type']
         model_type = train_config['hyperparams']['model_type']
-        af_th = train_config['hyperparams']['action_frequency_threshold']
         self.train_dl = TutorDataLoader(processed_data_path + '/train',
                                         matrix_cache_path,
                                         feature_statistics_path,
-                                        action_counter_path,
                                         device=self.device,
                                         model_type=model_type,
                                         network_type=network_type,
-                                        train=True,
-                                        action_frequency_threshold=af_th)
+                                        train=True)
         self.val_dl = TutorDataLoader(processed_data_path + '/val',
                                       matrix_cache_path,
                                       feature_statistics_path,
-                                      action_counter_path,
                                       device=self.device,
                                       model_type=model_type,
                                       network_type=network_type,
-                                      train=False,
-                                      action_frequency_threshold=af_th)
+                                      train=False)
 
         # Initialize metrics objects
         IA = metrics.IncrementalAverage
@@ -271,7 +265,6 @@ class Run:
 
         # Compute the loss, update gradients
         l = BCELoss_labels_weighted(P, Y_smth, weights)
-        l = dp['class_weight']*l
         l.backward()
 
         # If the batch is filled, update the model, reset gradients
@@ -348,11 +341,10 @@ class Run:
 
         # Compute the loss
         l = BCELoss_labels_weighted(P, Y_smth, weights)
-        l = dp['class_weight']*l
 
         # Calculate statistics for metrics
-        one_sub_p = torch.zeros_like(p)
-        one_sub_p[torch.logical_and(p_sub_mask, p > 0.5)] = 1
+        one_sub_P = torch.zeros_like(P)
+        one_sub_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
         get_cabnp = self.as_cache.get_change_actspace_by_nearness_pred
         nearest_valid_actions = get_cabnp(dp['line_disabled'],
                                           dp['topo_vect'],
