@@ -58,7 +58,7 @@ def extract_load_features(obs_dict: dict) -> np.array:
 
 
 def extract_or_features(obs_dict: dict, thermal_limits: Sequence[int]) \
-                        -> np.array:
+        -> np.array:
     """
     Given the grid2op observation in dictionary form,
     return the load features.
@@ -88,7 +88,7 @@ def extract_or_features(obs_dict: dict, thermal_limits: Sequence[int]) \
 
 
 def extract_ex_features(obs_dict: dict, thermal_limits: Sequence[int]) \
-                        -> np.array:
+        -> np.array:
     """
     Given the grid2op observation in dictionary form,
     return the generator features.
@@ -116,9 +116,9 @@ def extract_ex_features(obs_dict: dict, thermal_limits: Sequence[int]) \
     return X
 
 
-def connectivity_matrices(sub_info: Sequence[int], 
-                          topo_vect: Sequence[int], 
-                          line_or_pos_topo_vect: Sequence[int], 
+def connectivity_matrices(sub_info: Sequence[int],
+                          topo_vect: Sequence[int],
+                          line_or_pos_topo_vect: Sequence[int],
                           line_ex_pos_topo_vect: Sequence[int]
                           ) -> Tuple[np.array, np.array, np.array]:
     """
@@ -158,8 +158,8 @@ def connectivity_matrices(sub_info: Sequence[int],
     row_ind_otherbus = []
     col_ind_otherbus = []
     row_ind_line = []
-    col_ind_line = []         
-    
+    col_ind_line = []
+
     for sub_id, nb_obj in enumerate(sub_info):
         # it must be a vanilla python integer, otherwise it's not handled by 
         # some backend
@@ -168,18 +168,18 @@ def connectivity_matrices(sub_info: Sequence[int],
         end_ += nb_obj
         # tmp = np.zeros(shape=(nb_obj, nb_obj), dtype=dt_float)
         for obj1 in range(nb_obj):
-            my_bus = topo_vect[beg_+obj1]
+            my_bus = topo_vect[beg_ + obj1]
             if my_bus == -1:
                 # object is disconnected, nothing is done
                 continue
             # connect an object to itself
-#                 row_ind.append(beg_ + obj1)
-#                 col_ind.append(beg_ + obj1)
-#                 WHY??
+            #                 row_ind.append(beg_ + obj1)
+            #                 col_ind.append(beg_ + obj1)
+            #                 WHY??
 
             # connect the other objects to it
-            for obj2 in range(obj1+1, nb_obj):
-                my_bus2 = topo_vect[beg_+obj2]
+            for obj2 in range(obj1 + 1, nb_obj):
+                my_bus2 = topo_vect[beg_ + obj2]
                 if my_bus2 == -1:
                     # object is disconnected, nothing is done
                     continue
@@ -196,7 +196,7 @@ def connectivity_matrices(sub_info: Sequence[int],
                     row_ind_otherbus.append(beg_ + obj2)
                     col_ind_otherbus.append(beg_ + obj1)
                     row_ind_otherbus.append(beg_ + obj1)
-                    col_ind_otherbus.append(beg_ + obj2)                      
+                    col_ind_otherbus.append(beg_ + obj2)
         beg_ += nb_obj
 
     # both ends of a line are connected together (if line is connected)
@@ -207,7 +207,7 @@ def connectivity_matrices(sub_info: Sequence[int],
             col_ind_line.append(line_ex_pos_topo_vect[q_id])
             row_ind_line.append(line_ex_pos_topo_vect[q_id])
             col_ind_line.append(line_or_pos_topo_vect[q_id])
-         
+
     row_ind_samebus = np.array(row_ind_samebus).astype(dt_int)
     col_ind_samebus = np.array(col_ind_samebus).astype(dt_int)
     row_ind_otherbus = np.array(row_ind_otherbus).astype(dt_int)
@@ -215,11 +215,11 @@ def connectivity_matrices(sub_info: Sequence[int],
     row_ind_line = np.array(row_ind_line).astype(dt_int)
     col_ind_line = np.array(col_ind_line).astype(dt_int)
 
-    assert all([i!=j for i,j in list(zip(row_ind_samebus,col_ind_samebus))]), \
+    assert all([i != j for i, j in list(zip(row_ind_samebus, col_ind_samebus))]), \
         "No object should be connected to itself."
-    assert all([i!=j for i,j in list(zip(row_ind_otherbus,col_ind_otherbus))]), \
+    assert all([i != j for i, j in list(zip(row_ind_otherbus, col_ind_otherbus))]), \
         "No object should be connected to itself."
-    assert all([i!=j for i,j in list(zip(row_ind_line,col_ind_line))]), \
+    assert all([i != j for i, j in list(zip(row_ind_line, col_ind_line))]), \
         "No object should be connected to itself."
 
     connectivity_matrix_samebus = np.stack((row_ind_samebus, col_ind_samebus))
@@ -314,16 +314,16 @@ def tv_groupby_subst(tv: Sequence, sub_info: Sequence[int]) -> \
     i = 0
     gs = []
     for ss in sub_info:
-        gs.append(tv[i:i+ss])
+        gs.append(tv[i:i + ss])
         i += ss
     return gs
 
 
-def select_single_substation_from_topovect(topo_vect : torch.Tensor,
-                                           sub_info : torch.Tensor,
-                                           f : Callable = torch.sum,
-                                           select_nothing_condition : Callable = lambda tv: all(tv < 0.5)) \
-                                           -> Tuple[torch.Tensor, Optional[int]]:
+def select_single_substation_from_topovect(topo_vect: torch.Tensor,
+                                           sub_info: torch.Tensor,
+                                           f: Callable = torch.sum,
+                                           select_nothing_condition: Callable = lambda tv: all(tv < 0.5)) \
+        -> Tuple[torch.Tensor, Optional[int]]:
     """
     Given a topology vector, select the substation which object' maximize some function. From this substation, the mask
     in the topology vector and the index are returned. If a certain condition is met, the function can also select
@@ -387,24 +387,24 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
         # if lightsim2grid is available, use it.
         from lightsim2grid import LightSimBackend
         backend = LightSimBackend()
-        env = grid2op.make(dataset=data_path, 
-                           chronics_path=scenario_path, 
+        env = grid2op.make(dataset=data_path,
+                           chronics_path=scenario_path,
                            backend=backend,
                            gamerules_class=gamerules_class,
                            test=True)
     except ImportError:
-        env = grid2op.make(dataset=data_path, 
+        env = grid2op.make(dataset=data_path,
                            chronics_path=scenario_path,
                            gamerules_class=gamerules_class,
                            test=True)
-        
+
     # for reproducible experiments
     env.seed(config['evaluation']['seed'])
 
     # Set custom thermal limits
     thermal_limits = config['rte_case14_realistic']['thermal_limits']
     env.set_thermal_limit(thermal_limits)
-    
+
     return env
 
 
@@ -424,13 +424,10 @@ def ts_to_day(ts: int, ts_in_day: int) -> int:
     int
         The day.
     """
-    return math.floor(ts/ts_in_day)
+    return math.floor(ts / ts_in_day)
 
 
-def skip_to_next_day(env: grid2op.Environment.Environment,
-                     ts_in_day: int,
-                     chronic_id: int,
-                     disable_line: int) -> bool:
+def skip_to_next_day(env: grid2op.Environment.Environment, ts_in_day: int, chronic_id: int, disable_line: int):
     """
     Skip the environment to the next day.
 
@@ -445,25 +442,47 @@ def skip_to_next_day(env: grid2op.Environment.Environment,
     disable_line : int
         The index of the line to be disabled.
 
-    Returns
+    Raises
     -------
-    fast_forward_divergingpowerflow_exception : bool
-        Whether a DivergingPowerFlowException occurred while fast-forwarding.
+    grid2op.Exception.DivergingPowerFlowException
     """
     # Reset environment
-    ts_next_day = ts_in_day*(1+ts_to_day(env.nb_time_step, ts_in_day))
+    ts_next_day = ts_in_day * (1 + ts_to_day(env.nb_time_step, ts_in_day))
     env.set_id(chronic_id)
     env.reset()
 
     # Fast forward to the day, disable lines if necessary
     env.fast_forward_chronics(ts_next_day - 1)
     if disable_line != -1:
-        _, _, _, info = env.step(env.action_space(
-            {"set_line_status": (disable_line, -1)}))
+        env_step_raise_exception(env, env.action_space({"set_line_status": (disable_line, -1)}))
     else:
-        _, _, _, info = env.step(env.action_space())
+        env_step_raise_exception(env, env.action_space())
 
-    # Return whether a DivergingPowerFlowException has occured while fast forwarding
-    fast_forward_divergingpowerflow_exception = (grid2op.Exceptions.PowerflowExceptions.DivergingPowerFlow in
-                                                 [type(e) for e in info['exception']])
-    return fast_forward_divergingpowerflow_exception
+
+def env_step_raise_exception(env: grid2op.Environment.Environment, action: grid2op.Action.BaseAction) \
+        -> grid2op.Observation.CompleteObservation:
+    """
+    Performs a step in the grid2op environment. Raises exceptions if they occur in the grid.
+
+    Parameters
+    ----------
+    env : grid2op.Environment.Environment
+        The grid2op environment.
+    action : grid2op.Action.BaseAction
+        The action to take in the former environment.
+
+    Raises
+    -------
+    grid2op.Exception.DivergingPowerFlowException
+
+    Returns
+    -------
+    obs : grid2op.Observation.CompleteObservation
+        The observation resulting from the action.
+    """
+    obs, _, _, info = env.step(action)
+
+    for e in info['exception']:
+        raise e
+
+    return obs

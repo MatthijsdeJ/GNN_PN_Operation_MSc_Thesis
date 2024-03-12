@@ -7,7 +7,7 @@ Created on Fri Jan 28 13:51:31 2022
 
 import grid2op
 import auxiliary.grid2op_util as g2o_util
-from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect
+from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect, env_step_raise_exception
 from auxiliary.config import get_config, StrategyType, ModelType
 import torch
 import evaluation.strategy as strat
@@ -33,10 +33,7 @@ def evaluate():
     save_data = config['evaluation']['save_data']
 
     # Initialize logging
-    logging.basicConfig(filename=logging_path,
-                        filemode='w',
-                        format='%(message)s',
-                        level=logging.INFO)
+    logging.basicConfig(filename=logging_path, filemode='w', format='%(message)s', level=logging.INFO)
 
     # Initialize environment
     env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
@@ -47,111 +44,94 @@ def evaluate():
 
     # Loop over chronics
     for num in range(0, num_chronics):
+        try:
+            print('current chronic: %s' % env.chronics_handler.get_name())
+            logging.info('current chronic: %s' % env.chronics_handler.get_name())
 
-        print('current chronic: %s' % env.chronics_handler.get_name())
-        logging.info('current chronic: %s' % env.chronics_handler.get_name())
+            # (Re)set variables
+            days_completed = 0
+            if save_data:
+                chronic_datapoints = day_datapoints = []
 
-        # (Re)set variables
-        days_completed = 0
-        divergingpowerflow_exception = False
-        if save_data:
-            chronic_datapoints = day_datapoints = []
-
-        # Disable lines, if any
-        if disable_line != -1:
-            obs, _, _, _ = env.step(env.action_space({"set_line_status": (disable_line, -1)}))
-        else:
-            obs, _, _, _ = env.step(env.action_space({}))
-
-        # Save reference topology
-        reference_topo_vect = obs.topo_vect.copy()
-
-        # Loop over timesteps until exhausted
-        while env.nb_time_step < env.chronics_handler.max_timestep():
-
-            # Sporadically, when fast-forwarding, a diverging powerflow exception can occur.  If that exception
-            # has occurred, we skip to the next day.
-            if divergingpowerflow_exception:
-                print(f'Powerflow exception at step {env.nb_time_step} ' +
-                      f'on day {ts_to_day(env.nb_time_step, ts_in_day)}')
-                logging.error(f'Powerflow exception at step {env.nb_time_step} ' +
-                              f'on day {ts_to_day(env.nb_time_step, ts_in_day)}')
-
-                _ = g2o_util.skip_to_next_day(env, ts_in_day, num, disable_line)
-
-                if save_data:
-                    day_datapoints = []
-
-                continue
-
-            # At midnight, reset the topology to the reference, store days' records, reset days' records
-            if env.nb_time_step % ts_in_day == ts_in_day - 1:
-                print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
-                logging.info(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
-
-                days_completed += 1
-
-                # Reset topology
-                obs, _, _, _ = env.step(env.action_space({'set_bus': reference_topo_vect}))
-
-                if save_data:
-                    # Save and reset data
-                    chronic_datapoints += day_datapoints
-                    day_datapoints = []
-
-                continue
-
-            # If neither of above holds, the model takes an action
-            obs = env.get_obs()
-            if not save_data:
-                action, _ = strategy.select_action(obs)
+            # Disable lines, if any
+            if disable_line != -1:
+                obs = env_step_raise_exception(env, env.action_space({"set_line_status": (disable_line, -1)}))
             else:
-                action, datapoint = strategy.select_action(obs)
+                obs = env_step_raise_exception(env, env.action_space())
 
-            # Take the selected action in the environment
-            previous_max_rho = obs.rho.max()
-            previous_topo_vect = obs.topo_vect
-            obs, _, _, _ = env.step(action)
+            # Save reference topology
+            reference_topo_vect = obs.topo_vect.copy()
 
-            # Potentially log action information
-            if previous_max_rho > config['evaluation']['activity_threshold']:
-                mask, sub_id = select_single_substation_from_topovect(torch.tensor(action.set_bus),
-                                                                      torch.tensor(obs.sub_info),
-                                                                      select_nothing_condition=lambda x:
-                                                                      not any(x) or x == previous_topo_vect)
-                msg = "Old max rho, new max rho, substation, set_bus: " + \
-                      str((previous_max_rho, obs.rho.max(), sub_id, list(action.set_bus[mask == 1])))
-                print(msg)
-                logging.info(msg)
+            # Loop over timesteps until exhausted
+            while env.nb_time_step < env.chronics_handler.max_timestep():
 
-            # Save action data
-            if save_data and datapoint is not None:
-                day_datapoints.append(datapoint)
+                # Reset at midnight
+                if env.nb_time_step % ts_in_day == ts_in_day - 1:
+                    print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
+                    logging.info(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
 
-            # If the game is done at this point, this indicated a (failed) game over.
-            # If so, reset the environment to the start of next day and discard the records
-            if env.done:
-                print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
-                logging.info(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+                    days_completed += 1
 
-                divergingpowerflow_exception = g2o_util.skip_to_next_day(env,
-                                                                         ts_in_day,
-                                                                         int(env.chronics_handler.get_name()),
-                                                                         disable_line)
+                    # Reset topology
+                    obs = env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
 
-                day_datapoints = []
+                    if save_data:
+                        # Save and reset data
+                        chronic_datapoints += day_datapoints
+                        day_datapoints = []
 
-        # At the end of a chronic, print a message, and store and reset the corresponding records
-        print('Chronic exhausted! \n\n\n')
-        logging.info('Chronic exhausted! \n\n\n')
+                    continue
 
-        # Saving and resetting the data
-        if save_data:
-            save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
+                # Strategy selects an action
+                obs = env.get_obs()
+                if not save_data:
+                    action, _ = strategy.select_action(obs)
+                else:
+                    action, datapoint = strategy.select_action(obs)
 
-        # Resetting environment
-        env.reset()
-        divergingpowerflow_exception = False
+                # Take the selected action in the environment
+                previous_max_rho = obs.rho.max()
+                previous_topo_vect = obs.topo_vect
+                obs = env_step_raise_exception(env, action)
+
+                # Potentially log action information
+                if previous_max_rho > config['evaluation']['activity_threshold']:
+                    mask, sub_id = select_single_substation_from_topovect(torch.tensor(action.set_bus),
+                                                                          torch.tensor(obs.sub_info),
+                                                                          select_nothing_condition=lambda x:
+                                                                          not any(x) or x == previous_topo_vect)
+                    msg = "Old max rho, new max rho, substation, set_bus: " + \
+                          str((previous_max_rho, obs.rho.max(), sub_id, list(action.set_bus[mask == 1])))
+                    print(msg)
+                    logging.info(msg)
+
+                # Save action data
+                if save_data and datapoint is not None:
+                    day_datapoints.append(datapoint)
+
+                # If the game is done at this point, this indicated a (failed) game over.
+                # If so, reset the environment to the start of next day and discard the records
+                if env.done:
+                    print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+                    logging.info(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+
+                    g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
+                    day_datapoints = []
+
+            # At the end of a chronic, print a message, and store and reset the corresponding records
+            print('Chronic exhausted! \n\n\n')
+            logging.info('Chronic exhausted! \n\n\n')
+
+            # Saving and resetting the data
+            if save_data:
+                save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
+        except grid2op.Exceptions.DivergingPowerFlow:
+            msg = (f'Diverging-powerflow exception at step {env.nb_time_step} on '
+                   f'day {ts_to_day(env.nb_time_step, ts_in_day)}. Skipping this chronic.')
+            print(msg)
+            logging.info(msg)
+        finally:
+            env.reset()
 
 
 def init_model() -> Model:
