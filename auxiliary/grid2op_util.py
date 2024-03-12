@@ -399,7 +399,7 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
                            test=True)
         
     # for reproducible experiments
-    env.seed(config['tutor_generated_data']['seed'])  
+    env.seed(config['evaluation']['seed'])
 
     # Set custom thermal limits
     thermal_limits = config['rte_case14_realistic']['thermal_limits']

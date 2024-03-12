@@ -2,20 +2,29 @@ paths:
   rte_case14_realistic: data/rte_case14_realistic/
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   medha_imitation: data/medha_imitation_sample/
-  tutor_imitation: data/tutor_generated_data/
+  tutor_imitation: data/test_N-1/
   processed_tutor_imitation: data/processed_tutor_data/
   action_space: action_space/
   con_matrix_cache: data/auxiliary_data_objects/con_matrix_cache.json
   feature_statistics: data/auxiliary_data_objects/feature_statistics.json
   action_counter: data/auxiliary_data_objects/action_counter.json
   model: models/error_analysis
-  evaluation_log: data/evaluation/hybrid.log
+  evaluation_log: data/evaluation/test.log
 
-tutor_generated_data:
-  n_chronics: 50
-  seed: 1
-  line_idxs_to_consider_N-1: [0, 1, 2, 3, 4, 5, 6, 10, 12, 13, 15, 16, 19] # The indices of the lines to disable
-  # for evaluating N-1 scenarios
+evaluation:
+  disable_line: -1 # Index of line to be disabled; -1 indicates no line
+  n_chronics: 50  # Number of chronics to evaluate
+  seed: 1 # Environment seed
+  save_data: false # Whether to save action datapoinst
+  activity_threshold: 0.97 # Threshold below which agents take do-nothing actions; also used as a threshold for logging
+  strategy: verify_greedy_hybrid
+  NMinusOne_strategy:
+    N0_rho_threshold: 1.0 # N-0 rho robustness threshold
+    line_idxs_to_consider_N-1: [0, 1, 2, 3, 4, 5, 6, 10, 12, 13, 15, 16, 19] # Lines to consider in N-1 calculations
+  verify_strategy:
+    reject_action_threshold: 1.0 # Threshold for the simulated max. rho of action, above which it is rejected
+  hybrid_strategies:
+    take_the_wheel_threshold: 1.0 # Threshold below which the ML model takes actions for the hybrid agents
 
 rte_case14_realistic:
   thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,381,380,760,380,760,380,380,380,2000,2000]
@@ -86,13 +95,3 @@ training:
     project: msc_thesis_gnn_power
     entity: mattholomew
     mode: online # disabled
-
-evaluation:
-  disable_line: -1
-  activity_threshold: 0.97
-  strategy: hybrid
-  verify_strategy:
-    reject_action_threshold: 1.0
-  hybrid_strategy:
-    reject_action_threshold: 1.0
-    greedy_take_the_wheel_threshold: 1.0

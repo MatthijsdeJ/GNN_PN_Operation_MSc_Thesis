@@ -40,10 +40,12 @@ class LayerType(Enum):
 @unique
 class StrategyType(Enum):
     IDLE = 'idle'
-    NAIVE = 'naive'
-    VERIFY = 'verify'
-    HYBRID = 'hybrid'
-
+    GREEDY = 'greedy'
+    N_MINUS_ONE = 'nminusone'
+    NAIVE_ML = 'naive_ml'
+    VERIFY_ML = 'verif_yml'
+    VERIFY_GREEDY_HYBRID = 'verify_greedy_hybrid'
+    VERIFY_N_MINUS_ONE_HYBRID = 'verify_nminusone_hybrid'
 
 @unique
 class LabelWeightsType(Enum):
@@ -68,7 +70,7 @@ def assert_config():
     """
     Perform assertions on the config values.
     """
-    for prm, n in [(_config['tutor_generated_data']['n_chronics'], 'n_chronics'),
+    for prm, n in [(_config['evaluation']['n_chronics'], 'n_chronics'),
                    (_config['rte_case14_realistic']['ts_in_day'], 'ts_in_day'),
                    (_config['rte_case14_realistic']['n_subs'], 'n_subs'),
                    (_config['dataset']['number_of_datafiles'], 'number_of_datafiles'),
@@ -96,11 +98,11 @@ def assert_config():
                    (_config['training']['FCNN']['constants']['size_out'], 'size_out'),
                    (_config['training']['GCN']['hyperparams']['GINConv_nn_depth'], 'GINConv_nn_depth')]:
         assert prm >= 0, f'Parameter {n} should not be negative.'
-    assert all(line >= 0 for line in _config['tutor_generated_data']['line_idxs_to_consider_N-1']), \
+    assert all(line >= 0 for line in _config['evaluation']['NMinusOne_strategy']['line_idxs_to_consider_N-1']), \
         "Line idx cannot be negative."
     assert all(line >= 0 for line in _config['rte_case14_realistic']['thermal_limits']), \
         "Thermal limit cannot be negative."
-    assert (max(_config['tutor_generated_data']['line_idxs_to_consider_N-1']) + 1 <=
+    assert (max(_config['evaluation']['NMinusOne_strategy']['line_idxs_to_consider_N-1']) + 1 <=
             len(_config['rte_case14_realistic']['thermal_limits'])), "Line idx plus one cannot be higher than" + \
                                                                      " the number of lines."
     assert 0 <= _config['dataset']['train_perc'] <= 1, "Train. perc. should be in percentage range."
