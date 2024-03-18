@@ -5,7 +5,7 @@ Created on Wed Jan  5 15:47:34 2022
 
 @author: matthijs
 """
-from typing import Tuple, Optional
+from typing import Tuple
 import torch
 import wandb
 import training.metrics as metrics
@@ -20,6 +20,7 @@ import auxiliary.util as util
 from auxiliary.config import get_config, ModelType, LayerType, LabelWeightsType
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
+from auxiliary.config import get_config
 
 
 def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
@@ -47,8 +48,6 @@ def BCELoss_labels_weighted(P: torch.Tensor, Y: torch.Tensor, W: torch.Tensor) \
     return loss
 
 
-
-
 class Run:
     """
     Class that specifies the running of a model.
@@ -63,8 +62,7 @@ class Run:
         feature_statistics_path = config['paths']['feature_statistics']
 
         # Specify device to use
-        self.device = 'cpu'#torch.device('cuda' if torch.cuda.is_available()
-                      #             else 'cpu')
+        self.device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Init model
         if train_config['hyperparams']['model_type'] == ModelType.GCN:
@@ -140,7 +138,7 @@ class Run:
         self.val_metrics = IAM(val_metrics_dict)
 
         # Initialize action space cache used for
-        self.as_cache = ActSpaceCache()
+        self.as_cache = ActSpaceCache(line_outages_considered=train_config['settings']['line_outages_considered'])
 
         # Early stopping parameter
         self.stop_countdown = train_config['hyperparams']['early_stopping_patience']
@@ -208,7 +206,7 @@ class Run:
             the number of objects in the environment. All elements should be in
             range (0,1).
         """
-        if type(self.model) == GCN:
+        if type(self.model) is GCN:
             # Extrackt features
             X_gen = dp['gen_features']
             X_load = dp['load_features']
@@ -224,7 +222,7 @@ class Run:
 
             # Pass through the model
             P = self.model(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape((-1))
-        elif type(self.model) == FCNN:
+        elif type(self.model) is FCNN:
             # Pass through the model
             P = self.model(dp['features']).reshape((-1))
         return P
@@ -281,8 +279,7 @@ class Run:
                                Y_subchanged_idx=Y_sub_idx)
 
     def process_single_val_dp(self, dp: dict) \
-            -> Tuple[torch.Tensor, torch.tensor, int, torch.tensor, int,
-                     torch.Tensor]:
+            -> Tuple[torch.Tensor, torch.tensor, int, torch.tensor, int, torch.Tensor]:
         """
         Process a single validation datapoint. This involves:
             (1) Making a model prediction
@@ -389,8 +386,8 @@ class Run:
         # Initializing distributions for tracking the true/predicted/postprocessed predicted objects
         Y_obs = P_obs = nearest_valid_P_obs = None
 
-        # Initializing lists for tracking the ranks of the true actions in
-        # the list of valid actions sorted by nearness to the predicted actions
+        # Initializing lists for tracking the ranks of the true actions in the list of valid actions sorted by
+        # nearness to the predicted actions
         Y_rank_in_nearest_v_acts = []
 
         # Initializing counters for counting the number of (in)correct classifications of each label
@@ -401,8 +398,15 @@ class Run:
         correct_counter_topovect = collections.Counter()
         wrong_counter_topovect = collections.Counter()
 
-        #Init object for tracking MAD scores
+        # Initializing counters for counting the number of (in)correct classifications of each topology vector
+        correct_counter_lineout = collections.Counter()
+        wrong_counter_lineout = collections.Counter()
+
+        # Init object for tracking MAD scores
         MAD_scores = None
+
+        # Init config
+        config = get_config()
 
         with torch.no_grad():
             i = 0
@@ -413,31 +417,59 @@ class Run:
                 if not self.train_config['settings']['advanced_val_analysis']:
                     continue
 
+                # Create 'expanded' version of vectors - expanded vertors have the size of the topovect without. This
+                # line disabled. This is necessary for comparisons of topologies with different lines disabled.
+                if dp['line_disabled'] == -1:
+                    expanded_Y = Y
+                    expanded_P = P
+                    expanded_valid_P = nearest_valid_P
+                    expanded_topo_vect = dp['topo_vect']
+                    expanded_sub_Y = Y[Y_sub_mask.bool()]
+                else:
+                    or_index = config['rte_case14_realistic']['line_or_pos_topo_vect'][dp['line_disabled']]
+                    ex_index = config['rte_case14_realistic']['line_ex_pos_topo_vect'][dp['line_disabled']]
+                    smll_idx = min(or_index, ex_index)
+                    big_idx = max(or_index, ex_index) - 1
+                    ins = torch.tensor(-1).view(1)
+
+                    expanded_Y = torch.cat([Y[:smll_idx], ins, Y[smll_idx:big_idx], ins, Y[big_idx:]], 0)
+                    expanded_P = torch.cat([P[:smll_idx], ins, P[smll_idx:big_idx], ins, P[big_idx:]], 0)
+                    expanded_valid_P = torch.cat([nearest_valid_P[:smll_idx], ins, nearest_valid_P[smll_idx:big_idx],
+                                                  ins, nearest_valid_P[big_idx:]], 0)
+                    expanded_topo_vect = torch.cat([dp['topo_vect'][:smll_idx], ins, dp['topo_vect'][smll_idx:big_idx],
+                                                    ins, dp['topo_vect'][big_idx:]], 0)
+
+                    if Y_sub_idx is not None:
+                        expanded_sub_Y = g2o_util.tv_groupby_subst(expanded_Y,
+                                                                   config['rte_case14_realistic']['sub_info'])[
+                            Y_sub_idx]
+                    else:
+                        expanded_sub_Y = torch.tensor([])
+
                 # Increment the counters for counting the number of (in)correct classifications of each label
                 # and topology vector
-                sub_Y = tuple(Y[Y_sub_mask.bool()].cpu().tolist())
                 if torch.equal(nearest_valid_P, torch.round(Y)):
-                    correct_counter_label[(Y_sub_idx, sub_Y)] += 1
-                    correct_counter_topovect[tuple(dp['topo_vect'].tolist())] += 1
+                    correct_counter_label[(Y_sub_idx, tuple(expanded_sub_Y.tolist()))] += 1
+                    correct_counter_topovect[(Y_sub_idx, tuple(expanded_topo_vect.tolist()))] += 1
+                    correct_counter_lineout[dp['line_disabled']] += 1
                 else:
-                    wrong_counter_label[(Y_sub_idx, sub_Y)] += 1
-                    wrong_counter_topovect[tuple(dp['topo_vect'].tolist())] += 1
+                    wrong_counter_label[(Y_sub_idx, tuple(expanded_sub_Y.tolist()))] += 1
+                    wrong_counter_topovect[(Y_sub_idx, tuple(expanded_topo_vect.tolist()))] += 1
+                    wrong_counter_lineout[dp['line_disabled']] += 1
 
                 # Update lists for tracking the predicted/true substations
                 Y_subs.append(Y_sub_idx)
                 P_subs.append(P_subchanged_idx)
 
                 # Update distributions for the true/predicted/postprocessed-predicted objects
-                if dp['line_disabled'] != -1:
-                    raise NotImplementedError
                 if Y_obs is None:
-                    Y_obs = Y
-                    P_obs = P
-                    nearest_valid_P_obs = nearest_valid_P
+                    Y_obs = expanded_Y.clip(0)
+                    P_obs = 1 * (expanded_P > 0.5)
+                    nearest_valid_P_obs = expanded_valid_P.clip(0)
                 else:
-                    Y_obs += Y
-                    P_obs += P > 0.5
-                    nearest_valid_P_obs += nearest_valid_P
+                    Y_obs += expanded_Y.clip(0)
+                    P_obs += expanded_P > 0.5
+                    nearest_valid_P_obs += expanded_valid_P.clip(0)
 
                 # Update lists for tracking the ranks of the true actions in
                 # the list of valid actions sorted by nearness to the predicted
@@ -468,6 +500,10 @@ class Run:
                     else:
                         MAD = self.model.get_MADs(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape(1, -1)
                         MAD_scores = np.concatenate((MAD_scores, MAD), axis=0)
+
+                # Stop evaluating validation datapoints
+                if i > config['training']['settings']['dp_per_val_log']:
+                    break
 
             # Checking early stopping
             val_macro_accuracy_valid = self.val_metrics.metrics_dict['val_macro_accuracy_valid'][1].get()
@@ -517,8 +553,7 @@ class Run:
             # Logging histogram of the ranks of the true actions in the list of
             # valid actions sorted by nearness to the predicted actions,
             # and the corresponding top-k accuracies
-            run.log({"Y_rank_in_nearest_v_acts":
-                     wandb.Histogram(Y_rank_in_nearest_v_acts)}, step=step)
+            run.log({"Y_rank_in_nearest_v_acts": wandb.Histogram(Y_rank_in_nearest_v_acts)}, step=step)
             run.log({
                 "top-1 accuracy": np.mean([x < 1 for x in Y_rank_in_nearest_v_acts]),
                 "top-2 accuracy": np.mean([x < 2 for x in Y_rank_in_nearest_v_acts]),
@@ -564,6 +599,20 @@ class Run:
                     bins=n_bins,
                     stacked=True)
             run.log({"topovect_correct_dist": wandb.Image(fig)}, step=step)
+            plt.close(fig)
+
+            # Logging lineout counters as a stacker bar plot
+            fig, ax = plt.subplots()
+            bins = config['training']['settings']['line_outages_considered']
+            ax.bar(bins,
+                   [0 if (k not in correct_counter_lineout.keys()) else correct_counter_lineout[k] for k in bins],
+                   color='lime')
+            ax.bar(bins,
+                   [0 if (k not in wrong_counter_lineout.keys()) else wrong_counter_lineout[k] for k in bins],
+                   bottom=[0 if (k not in correct_counter_lineout.keys()) else correct_counter_lineout[k]
+                           for k in bins],
+                   color='red')
+            run.log({"lout_correct_dist": wandb.Image(fig)}, step=step)
             plt.close(fig)
 
             # Logging mean MADs as a bar plot

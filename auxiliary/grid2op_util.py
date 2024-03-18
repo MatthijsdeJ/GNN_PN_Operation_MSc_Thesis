@@ -231,7 +231,11 @@ def connectivity_matrices(sub_info: Sequence[int],
         connectivity_matrix_line
 
 
-def connectivity_matrices_to_hetero_connectivity_matrices(edges_dict: Dict[str, Tuple[List, List]]) \
+def connectivity_matrices_to_hetero_connectivity_matrices(gen_pos_topo_vect: np.array,
+                                                          load_pos_topo_vect: np.array,
+                                                          line_or_pos_topo_vect: np.array,
+                                                          line_ex_pos_topo_vect: np.array,
+                                                          edges_dict: Dict[str, Tuple[List, List]]) \
         -> List[Tuple[int, int]]:
     """
     Given a dictionary of edge types and their corresponding edges, split these edges into edges based on
@@ -240,6 +244,14 @@ def connectivity_matrices_to_hetero_connectivity_matrices(edges_dict: Dict[str, 
 
     Parameters
     ----------
+    gen_pos_topo_vect : np.array
+        Vector representing the indices of the generators in the topo_vect.
+    load_pos_topo_vect : np.array
+        Vector representing the indices of the loads in the topo_vect.
+    line_or_pos_topo_vect : np.array
+        Vector representing the indices of the line origins in the topo vect.
+    line_ex_pos_topo_vect : np.array
+        Vector representing the indices of the line extremities in the topo vect.
     edges_dict: Dict[str. Tuple(List, List)]
         The dictionary of edges types and their corresponding edges.
 
@@ -250,10 +262,6 @@ def connectivity_matrices_to_hetero_connectivity_matrices(edges_dict: Dict[str, 
 
     hetero_edges_dict = {}
     config = get_config()
-    gen_pos_topo_vect = config['rte_case14_realistic']['gen_pos_topo_vect']
-    load_pos_topo_vect = config['rte_case14_realistic']['load_pos_topo_vect']
-    line_or_pos_topo_vect = config['rte_case14_realistic']['line_or_pos_topo_vect']
-    line_ex_pos_topo_vect = config['rte_case14_realistic']['line_ex_pos_topo_vect']
 
     # For each edge type
     for edge_type, edges in edges_dict.items():

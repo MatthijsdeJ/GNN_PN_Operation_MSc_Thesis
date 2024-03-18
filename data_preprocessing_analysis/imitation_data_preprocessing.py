@@ -224,9 +224,10 @@ class ConMatrixCache:
     def get_key_add_to_dict(self, topo_vect: np.array,
                             line_disabled: int,
                             sub_info: np.array,
+                            gen_pos_topo_vect: np.array,
+                            load_pos_topo_vect: np.array,
                             line_or_pos_topo_vect: np.array,
-                            line_ex_pos_topo_vect: np.array
-                            ) -> int:
+                            line_ex_pos_topo_vect: np.array ) -> int:
         """
         This function fulfils two purposes: (1) if the corresponding con.
         matrix hasn't been stored yet, compute it and store it;
@@ -240,6 +241,10 @@ class ConMatrixCache:
             The line index to be disabled. -1 if no line is disabled.
         sub_info : np.array
             Vector representing the number of objects per substation.
+        gen_pos_topo_vect : np.array
+            Vector representing the indices of the generators in the topo_vect.
+        load_pos_topo_vect : np.array
+            Vector representing the indices of the loads in the topo_vect.
         line_or_pos_topo_vect : np.array
             Vector representing the indices of the line origins in the topo
             vect.
@@ -263,26 +268,26 @@ class ConMatrixCache:
         # are equal
         assert sum(sub_info) == len(topo_vect)
 
-        h_topo_vect = hash((line_disabled, util.hash_nparray(topo_vect)))
-        if h_topo_vect not in self.con_matrices:
+        hash_topo_vect = hash((line_disabled, util.hash_nparray(topo_vect)))
+        if hash_topo_vect not in self.con_matrices:
             con_matrices = g2o_util.connectivity_matrices(sub_info.astype(int),
                                                           topo_vect.astype(int),
                                                           line_or_pos_topo_vect.astype(int),
                                                           line_ex_pos_topo_vect.astype(int))
-            if line_disabled != -1:
-                raise NotImplementedError("Next function needs to be adapted to use the adapted env variables for"
-                                          "lines disabled.")
             hetero_con_matrices = g2o_util.connectivity_matrices_to_hetero_connectivity_matrices(
+                list(gen_pos_topo_vect),
+                list(load_pos_topo_vect),
+                list(line_or_pos_topo_vect),
+                list(line_ex_pos_topo_vect),
                 {'same_busbar': con_matrices[0],
                  'other_busbar': con_matrices[1],
-                 'line': con_matrices[2]}
-            )
+                 'line': con_matrices[2]})
 
             # Convert hetero_con_matrices keys from tuples to strings, because of json
             hetero_con_matrices = dict([(",".join(k), v) for k, v in hetero_con_matrices.items()])
-            self.con_matrices[h_topo_vect] = (topo_vect, con_matrices, hetero_con_matrices)
+            self.con_matrices[hash_topo_vect] = (topo_vect, con_matrices, hetero_con_matrices)
 
-        return h_topo_vect
+        return hash_topo_vect
 
 
     def save(self, fpath: str = ''):
@@ -420,7 +425,9 @@ def process_raw_tutor_data():
     # Create object for tracking the feature statistics
     fstats = FeatureStatistics()
 
-    for fp in tqdm(get_filepaths(tutor_data_path)):
+    filepaths = get_filepaths(tutor_data_path)
+    random.shuffle(filepaths)
+    for fp in tqdm(filepaths):
         line_disabled, _, chronic_id, dayscomp = \
             extract_data_from_filepath(fp.relative_to(tutor_data_path))
 
@@ -502,6 +509,8 @@ def process_raw_tutor_data():
             cm_index = cmc.get_key_add_to_dict(dp['topo_vect'],
                                                line_disabled,
                                                env_info_dict['sub_info'],
+                                               env_info_dict['gen_pos_topo_vect'],
+                                               env_info_dict['load_pos_topo_vect'],
                                                env_info_dict['line_or_pos_topo_vect'],
                                                env_info_dict['line_ex_pos_topo_vect'])
             dp['cm_index'] = cm_index
@@ -509,7 +518,7 @@ def process_raw_tutor_data():
 
             # Add datapoint to random datafile
             datafile_number = random.randint(0, number_of_datafiles-1)
-            filepath = output_data_path + f'data_lout{line_disabled}_{datafile_number}.json'
+            filepath = output_data_path + f'data_{datafile_number}.json'
             save_datapoint_to_file(dp, filepath)
 
     cmc.save(con_matrix_path)

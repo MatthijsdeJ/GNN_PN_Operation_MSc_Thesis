@@ -2,11 +2,11 @@ paths:
   rte_case14_realistic: data/rte_case14_realistic/
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   medha_imitation: data/medha_imitation_sample/
-  tutor_imitation: data/tutor_generated_data/
-  processed_tutor_imitation: data/processed_tutor_data/
+  tutor_imitation: data/greedy_combined_data/
+  processed_tutor_imitation: data/processed_greedy_combined_data/
   action_space: action_space/
-  con_matrix_cache: data/auxiliary_data_objects/con_matrix_cache.json
-  feature_statistics: data/auxiliary_data_objects/feature_statistics.json
+  con_matrix_cache: data/auxiliary_data_objects/combined_con_matrix_cache.json
+  feature_statistics: data/auxiliary_data_objects/combined_feature_statistics.json
   wandb: data/wandb/
   model: models/error_analysis
   evaluation_log: data/evaluation/test.log
@@ -41,13 +41,15 @@ dataset:
   val_perc: 0.15 #Percentage of the files validation set
   #Remainder is used in the test set
   exclude_chronics: [310, 446, 777] #chronics not included in the dataset
-  number_of_datafiles: 1000 #amount of files with datapoints
+  number_of_datafiles: 7000 #amount of files with datapoints
 
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 40000 #How often to evaluate the validation set
-    advanced_val_analysis: false
+    val_log_freq: 20000 #How often to evaluate the validation set
+    dp_per_val_log: 5000 # How many datapoints to use per val logging
+    advanced_val_analysis: true
+    line_outages_considered: [-1, 0, 1, 2, 3, 4, 5, 6]
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100
@@ -67,7 +69,7 @@ training:
     estimated_train_size: 36497 #Used for estimating tqdm duration
   GCN:
     hyperparams:
-      network_type: homogeneous #Should be a str as defined in training.models.GCN.NetworkType
+      network_type: heterogeneous #Should be a str as defined in training.models.GCN.NetworkType
       N_GCN_layers: 8
       aggr: add #Aggregation function: should be 'add' or 'mean'
       layer_type: SAGEConv
@@ -88,4 +90,4 @@ training:
     group: null
     project: msc_thesis_gnn_power
     entity: mattholomew
-    mode: disabled
+    mode: online
