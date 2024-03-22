@@ -43,7 +43,7 @@ class StrategyType(Enum):
     GREEDY = 'greedy'
     N_MINUS_ONE = 'nminusone'
     NAIVE_ML = 'naive_ml'
-    VERIFY_ML = 'verif_yml'
+    VERIFY_ML = 'verify_ml'
     VERIFY_GREEDY_HYBRID = 'verify_greedy_hybrid'
     VERIFY_N_MINUS_ONE_HYBRID = 'verify_nminusone_hybrid'
 
@@ -132,20 +132,30 @@ cast_config_to_enums()
 
 def nested_overwrite(dic: Dict, keys: Sequence[Hashable], value):
     """
-    Overwrite a value in a nested dict based on a sequence of keys and a value. Raises IndexException if any of the
-    keys are not yet in the nested structure.
+    Overwrite a value in a nested dict based on a sequence of keys and a value.
+    Raises IndexException if any of the keys are not yet in the nested structure.
+    Casts value to the type of the to-be-overwritten value.
     """
     for key in keys[:-1]:
         dic = dic[key]
 
     if keys[-1] not in dic:
         raise IndexError(f"Key {keys[-1]} does not already exist.")
+
+    if ',' in value:
+        # Treat it as a list
+        value = value.split(',')
+        value = [type(dic[keys[-1]][0])(v) for v in value]
+    else:
+        value = type(dic[keys[-1]])(value)
+
     dic[keys[-1]] = value
 
 
 def overwrite_config(keys: Sequence[Hashable], value):
     """
     Overwrite the config dict.
+    Casts value to the type of
 
     Parameters
     ----------
@@ -158,7 +168,6 @@ def overwrite_config(keys: Sequence[Hashable], value):
         raise Exception("Overwriting is not allowed after the config has been accessed.")
 
     nested_overwrite(_config, keys, value)
-    cast_config_to_enums()
 
 
 def get_config() -> Dict:
@@ -178,3 +187,21 @@ def get_config() -> Dict:
 
     _has_been_accessed = True
     return _config
+
+
+def parse_args_overwrite_config(args):
+    """
+    Given a sequence of args of the form keys=value, where keys themselves consist of multiple
+    strings seperated by '.'. Use the keys to overwrite value in the config.
+
+    Parameters
+    ----------
+    args : Sequence[Hashable]
+        The sequence of args.
+    """
+    for arg in args:
+        if '=' in arg:
+            keys, value = arg.split('=', 1)
+            overwrite_config(keys.split('.'), value)
+        else:
+            raise ValueError(f"Argument '{arg}' does not contain '=' sign.")
