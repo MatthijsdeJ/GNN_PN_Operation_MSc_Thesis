@@ -2,11 +2,11 @@ paths:
   rte_case14_realistic: data/rte_case14_realistic/
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   medha_imitation: data/medha_imitation_sample/
-  tutor_imitation: data/greedy_combined_data/
-  processed_tutor_imitation: data/processed_greedy_combined_data/
+  tutor_imitation: data/raw_selection/N-1/
+  processed_tutor_imitation: data/processed/N-1/
   action_space: action_space/
-  con_matrix_cache: data/auxiliary_data_objects/combined_con_matrix_cache.json
-  feature_statistics: data/auxiliary_data_objects/combined_feature_statistics.json
+  con_matrix_cache: data/processed/N-1/auxiliary_data_objects/combined_con_matrix_cache.json
+  feature_statistics: data/processed/N-1/auxiliary_data_objects/combined_feature_statistics.json
   wandb: data/wandb/
   model: models/error_analysis
   evaluation_log: data/evaluation/test.log
@@ -41,7 +41,7 @@ dataset:
   val_perc: 0.15 #Percentage of the files validation set
   #Remainder is used in the test set
   exclude_chronics: [310, 446, 777] #chronics not included in the dataset
-  number_of_datafiles: 7000 #amount of files with datapoints
+  number_of_datafiles: 1000 #amount of files with datapoints
 
 training:
   settings:

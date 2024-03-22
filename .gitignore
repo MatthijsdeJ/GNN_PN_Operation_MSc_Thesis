@@ -6,3 +6,5 @@ wandb/
 **/*.ipynb_checkpoints
 data_preprocessing_analysis/figures/
 models/
+misc.xml
+GNN_PN_Operation_MSc_Thesis.iml

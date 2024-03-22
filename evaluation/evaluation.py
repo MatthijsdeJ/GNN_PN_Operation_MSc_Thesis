@@ -310,8 +310,8 @@ def save_records(datapoints: List[Dict],
     else:
         dp_matrix = np.array()
 
-    folder_name = f'records_chronics_lout:{lout}_dnthreshold:{do_nothing_capacity_threshold}'
-    file_name = f'records_chronic:{chronic}_dayscomp:{days_completed}.npy'
+    folder_name = f'records_chronics_lout_{lout}_dnthreshold_{do_nothing_capacity_threshold}'
+    file_name = f'records_chronic_{chronic}_dayscomp_{days_completed}.npy'
     if not os.path.isdir(os.path.join(save_path, folder_name)):
         os.mkdir(os.path.join(save_path, folder_name))
     np.save(os.path.join(save_path, folder_name, file_name), dp_matrix)
