@@ -1,6 +1,6 @@
 # Data
 data/*
-!data/train_test_split
+!data/data_split
 
 # Python
 **/__pycache__/  
