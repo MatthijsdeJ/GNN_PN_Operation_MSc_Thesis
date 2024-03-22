@@ -11,29 +11,15 @@ The dataset is used for imitation learning of Junior Student afterward.
 author: chen binbin
 mail: cbb@cbb1996.com
 """
-import argparse
+import sys
+import auxiliary.config
 import evaluation.evaluation as evaluation
 
-if __name__ == '__main__':
+
+def main():
+    auxiliary.config.parse_args_overwrite_config(sys.argv[1:])
     evaluation.evaluate()
 
-    # parser = argparse.ArgumentParser()
-    # parser.add_argument("--do_nothing_capacity_threshold",  help="The threshold " +
-    #                     "max. line rho at which the tutor takes actions.",
-    #                     required=False, default=.97, type=float)
-    # parser.add_argument("--disable_line",  help="The index of the line to be disabled.",
-    #                     required=False, default=-1, type=int)
-    # parser.add_argument("--start_chronic_id",  help="The chronic to start with.",
-    #                     required=False, default=0, type=int)
-    # parser.add_argument("--strategy", help="The strategy to select. Should be 'Greedy' or 'CheckNMinOne'.",
-    #                     required=False, default="CheckNMinOne")
-    # parser.add_argument("--activity_criteria", help="The activity criteria: the agent takes a do-nothing action" +
-    #                     "and does not store the action in the data if all evaluate to False.",
-    #                     required=False, nargs="*", type=str, default=["current"])
-    #
-    # args = parser.parse_args()
-    # gnr.generate(args.strategy,
-    #              args.activity_criteria,
-    #              args.do_nothing_capacity_threshold,
-    #              args.disable_line,
-    #              args.start_chronic_id)
+
+if __name__ == "__main__":
+    main()

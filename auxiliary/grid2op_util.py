@@ -389,7 +389,7 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
     """
     config = get_config()
     data_path = config['paths']['rte_case14_realistic']
-    scenario_path = config['paths']['rte_case14_realistic_chronics']
+    scenario_path = data_path + 'chronics/'
 
     try:
         raise ImportError

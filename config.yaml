@@ -1,6 +1,5 @@
 paths:
   rte_case14_realistic: data/rte_case14_realistic/
-  rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
   evaluation_log: data/evaluation/test.log
   data_split: data/data_split/
   data:
