@@ -1,8 +1,22 @@
-data/
+# Data
+data/*
+!data/train_test_split
+
+# Python
 **/__pycache__/  
-*.pyc
-.spyproject
+
+# WandB
 wandb/
+
+# Jupyter notebooks
 **/*.ipynb_checkpoints
 data_preprocessing_analysis/figures/
+
+# Models
 models/
+
+# IDEs
+.idea/misc.xml
+.idea/*.iml
+*.pyc
+.spyproject

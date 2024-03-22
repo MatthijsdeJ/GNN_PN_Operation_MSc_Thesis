@@ -62,8 +62,8 @@ def extract_data_from_filepath(relat_fp: PosixPath) \
         the threshold at which no actions were taken, the id of the chronic,
         and the number of days completed.
     """
-    regex_str = 'records_chronics_lout:(.*)_dnthreshold:(.*)' + \
-                '/records_chronic:(.*)_dayscomp:(.*).npy'
+    regex_str = 'records_chronics_lout_(.*)_dnthreshold_(.*)' + \
+                '/records_chronic_(.*)_dayscomp_(.*).npy'
     line_disabled, dn_threshold, chronic_id, dayscomp = \
         re.search(regex_str, str(relat_fp)).groups()
     return int(line_disabled), float(dn_threshold), int(chronic_id), \
@@ -221,7 +221,8 @@ class ConMatrixCache:
     def __init__(self):
         self.con_matrices = {}
 
-    def get_key_add_to_dict(self, topo_vect: np.array,
+    def get_key_add_to_dict(self,
+                            topo_vect: np.array,
                             line_disabled: int,
                             sub_info: np.array,
                             gen_pos_topo_vect: np.array,
@@ -576,10 +577,7 @@ def divide_files_train_val_test():
         shutil.rmtree(processed_path + 'test')
 
     # List data files, shuffle them
-    data_files = os.listdir(processed_path)
-    assert all([file.endswith('.json') for file in data_files]), "All files in the directory of" \
-                                                                 "processed files must be .json files."
-    assert data_files, "The directory with processed files cannot be empty."
+    data_files = [m for m in os.listdir(processed_path) if m.endswith('.json')]
     shuffle(data_files)
 
     # Create the train, val, test directories
