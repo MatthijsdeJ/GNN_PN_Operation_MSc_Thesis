@@ -1,23 +1,22 @@
 paths:
   rte_case14_realistic: data/rte_case14_realistic/
   rte_case14_realistic_chronics: data/rte_case14_realistic/chronics/
-  medha_imitation: data/medha_imitation_sample/
-  tutor_imitation: data/raw_selection/N-1/
-  processed_tutor_imitation: data/processed/N-1/
-  action_space: action_space/
-  con_matrix_cache: data/processed/N-1/auxiliary_data_objects/combined_con_matrix_cache.json
-  feature_statistics: data/processed/N-1/auxiliary_data_objects/combined_feature_statistics.json
+  evaluation_log: data/evaluation/test.log
+  data_split: data/data_split/
+  data:
+    raw: data/raw_selection/unseen_greedy/
+    processed: data/processed/unseen_greedy/
   wandb: data/wandb/
   model: models/error_analysis
-  evaluation_log: data/evaluation/test.log
 
 evaluation:
   disable_line: -1 # Index of line to be disabled; -1 indicates no line
-  n_chronics: 50  # Number of chronics to evaluate
+  n_chronics: 1000
+  partition: val #train, val, test, all
   seed: 1 # Environment seed
   save_data: false # Whether to save action datapoinst
   activity_threshold: 0.97 # Threshold below which agents take do-nothing actions; also used as a threshold for logging
-  strategy: verify_greedy_hybrid
+  strategy: greedy
   NMinusOne_strategy:
     N0_rho_threshold: 1.0 # N-0 rho robustness threshold
     line_idxs_to_consider_N-1: [0, 1, 2, 3, 4, 5, 6, 10, 12, 13, 15, 16, 19] # Lines to consider in N-1 calculations
@@ -37,11 +36,9 @@ rte_case14_realistic:
   line_ex_pos_topo_vect: [ 3, 19,  9, 13, 20, 14, 21, 43, 46, 49, 40, 53, 44, 50, 54, 30, 37, 27, 33, 32]
 
 dataset:
-  train_perc: 0.7 #Percentage of the files used in the training set
-  val_perc: 0.15 #Percentage of the files validation set
-  #Remainder is used in the test set
-  exclude_chronics: [310, 446, 777] #chronics not included in the dataset
-  number_of_datafiles: 1000 #amount of files with datapoints
+  n_train_datafiles: 14000 #amount of train files
+  n_val_datafiles: 200 #amount of val files
+  n_test_datafiles: 400 #amount of test files
 
 training:
   settings:

@@ -73,7 +73,6 @@ def assert_config():
     for prm, n in [(_config['evaluation']['n_chronics'], 'n_chronics'),
                    (_config['rte_case14_realistic']['ts_in_day'], 'ts_in_day'),
                    (_config['rte_case14_realistic']['n_subs'], 'n_subs'),
-                   (_config['dataset']['number_of_datafiles'], 'number_of_datafiles'),
                    (_config['training']['settings']['train_log_freq'], 'train_log_freq'),
                    (_config['training']['settings']['val_log_freq'], 'val_log_freq'),
                    (_config['training']['hyperparams']['n_epoch'], 'n_epoch'),
@@ -104,8 +103,6 @@ def assert_config():
     assert (max(_config['evaluation']['NMinusOne_strategy']['line_idxs_to_consider_N-1']) + 1 <=
             len(_config['rte_case14_realistic']['thermal_limits'])), "Line idx plus one cannot be higher than" + \
                                                                      " the number of lines."
-    assert 0 <= _config['dataset']['train_perc'] <= 1, "Train. perc. should be in percentage range."
-    assert 0 <= _config['dataset']['val_perc'] <= 1, "Val. perc. should be in percentage range."
     assert _config['training']['wandb']['mode'] in ['online', 'offline', 'disabled'], \
         "WandB mode should be online, offline, or disabled."
 

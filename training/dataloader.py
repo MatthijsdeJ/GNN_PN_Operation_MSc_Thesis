@@ -9,7 +9,7 @@ import torch
 import os
 import json
 import random
-import data_preprocessing_analysis.imitation_data_preprocessing as idp
+import data_preprocessing_analysis.data_preprocessing as idp
 from typing import List, Optional, Type
 import numpy as np
 from training.models import GCN, FCNN

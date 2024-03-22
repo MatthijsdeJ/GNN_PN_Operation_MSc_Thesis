@@ -26,7 +26,8 @@ def evaluate():
     """
     # Load constants, settings, hyperparameters, arguments
     config = get_config()
-    num_chronics = config['evaluation']['n_chronics']
+    n_chronics = config['evaluation']['n_chronics']
+    partition = config['evaluation']['partition']
     ts_in_day = int(config['rte_case14_realistic']['ts_in_day'])
     disable_line = config['evaluation']['disable_line']
     logging_path = config['paths']['evaluation_log']
@@ -37,13 +38,26 @@ def evaluate():
 
     # Initialize environment
     env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
-    print("Number of available scenarios: " + str(len(env.chronics_handler.subpaths)))
 
     # Initialize strategy
     strategy = init_strategy(env)
 
+    # Specify scenarios
+    match partition:
+        case 'train':
+            scenarios = np.load(config['paths']['data_split'] + 'train_scenarios.py')
+        case 'val':
+            scenarios = np.load(config['paths']['data_split'] + 'val_scenarios.npy')
+        case 'test':
+            scenarios = np.load(config['paths']['data_split'] + 'test_scenarios.npy')
+        case 'all':
+            scenarios = range(0, n_chronics)
+
     # Loop over chronics
-    for num in range(0, num_chronics):
+    for num in scenarios:
+        env.set_id(num)
+        env.reset()
+
         try:
             log_and_print('current chronic: %s' % env.chronics_handler.get_name())
 
@@ -120,10 +134,7 @@ def evaluate():
                 save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
         except grid2op.Exceptions.DivergingPowerFlow:
             log_and_print(f'Diverging-powerflow exception encountered at step {env.nb_time_step} on '
-                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}. Skipping this chronic.')
-        finally:
-            # Regardless of whether the chronic was completed or interrupted, reset the environment
-            env.reset()
+                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}. Skipping this scenario.')
 
 
 def log_and_print(msg: str):

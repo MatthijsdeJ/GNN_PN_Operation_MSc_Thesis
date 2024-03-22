@@ -392,6 +392,7 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
     scenario_path = config['paths']['rte_case14_realistic_chronics']
 
     try:
+        raise ImportError
         # if lightsim2grid is available, use it.
         from lightsim2grid import LightSimBackend
         backend = LightSimBackend()
