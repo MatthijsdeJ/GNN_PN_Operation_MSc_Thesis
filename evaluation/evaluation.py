@@ -43,15 +43,16 @@ def evaluate():
     strategy = init_strategy(env)
 
     # Specify scenarios
-    match partition:
-        case 'train':
-            scenarios = np.load(config['paths']['data_split'] + 'train_scenarios.py')
-        case 'val':
-            scenarios = np.load(config['paths']['data_split'] + 'val_scenarios.npy')
-        case 'test':
-            scenarios = np.load(config['paths']['data_split'] + 'test_scenarios.npy')
-        case 'all':
-            scenarios = range(0, n_chronics)
+    if partition == 'train':
+        scenarios = np.load(config['paths']['data_split'] + 'train_scenarios.py')
+    elif partition == 'val':
+        scenarios = np.load(config['paths']['data_split'] + 'val_scenarios.npy')
+    elif partition == 'test':
+        scenarios = np.load(config['paths']['data_split'] + 'test_scenarios.npy')
+    elif partition == 'all':
+        scenarios = range(0, n_chronics)
+    else:
+        raise ValueError()
 
     # Loop over chronics
     for num in scenarios:
