@@ -10,7 +10,7 @@ import warnings
 
 class AgentStrategy(ABC):
     """
-    Base class for the strategy used for evaluation.
+    Base class for the strategy used for simulation.
     """
 
     # @property

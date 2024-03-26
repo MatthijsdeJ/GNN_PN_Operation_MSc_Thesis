@@ -13,12 +13,12 @@ mail: cbb@cbb1996.com
 """
 import sys
 import auxiliary.config
-import evaluation.evaluation as evaluation
+import simulation.simulation as simulation
 
 
 def main():
     auxiliary.config.parse_args_overwrite_config(sys.argv[1:])
-    evaluation.evaluate()
+    simulation.simulate()
 
 
 if __name__ == "__main__":

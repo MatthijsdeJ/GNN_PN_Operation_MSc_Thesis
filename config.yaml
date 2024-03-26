@@ -1,14 +1,14 @@
 paths:
   rte_case14_realistic: data/rte_case14_realistic/
-  evaluation_log: data/evaluation/test.log
+  evaluation_log: data/simulation/test.log
   data_split: data/data_split/
   data:
-    raw: data/raw_selection/N-1
-    processed: data/processed/N-1/
+    raw: data/raw_selection/unseen_greedy/
+    processed: data/processed/unseen_greedy/
   wandb: data/wandb/
   model: models/error_analysis
 
-evaluation:
+simulation:
   disable_line: -1 # Index of line to be disabled; -1 indicates no line
   n_chronics: 1000
   partition: val #train, val, test, all

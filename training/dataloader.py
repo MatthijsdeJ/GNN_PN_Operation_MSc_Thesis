@@ -199,7 +199,7 @@ class ProcessDataPointStrategy(ABC):
 
     def add_val_info(self, raw_dp: dict, dp: dict):
         """
-        Extract information used during evaluation from raw_dp, process it, and store it in dp.
+        Extract information used during simulation from raw_dp, process it, and store it in dp.
 
         Parameters
         ----------
@@ -211,7 +211,7 @@ class ProcessDataPointStrategy(ABC):
         Returns
         -------
             dp : dict
-                The processed datapoint with the processed evaluation information added.
+                The processed datapoint with the processed simulation information added.
         """
         dp['line_disabled'] = raw_dp['line_disabled']
         dp['topo_vect'] = torch.tensor(raw_dp['topo_vect'],

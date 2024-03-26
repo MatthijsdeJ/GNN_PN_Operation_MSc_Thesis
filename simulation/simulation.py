@@ -10,7 +10,7 @@ import auxiliary.grid2op_util as g2o_util
 from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect, env_step_raise_exception
 from auxiliary.config import get_config, StrategyType, ModelType
 import torch
-import evaluation.strategy as strat
+import simulation.strategy as strat
 from training.models import GCN, FCNN, Model
 import json
 import logging
@@ -20,18 +20,18 @@ import os
 from typing import List, Dict
 
 
-def evaluate():
+def simulate():
     """
     Generate imitation learning data from the tutor model.
     """
     # Load constants, settings, hyperparameters, arguments
     config = get_config()
-    n_chronics = config['evaluation']['n_chronics']
-    partition = config['evaluation']['partition']
+    n_chronics = config['simulation']['n_chronics']
+    partition = config['simulation']['partition']
     ts_in_day = int(config['rte_case14_realistic']['ts_in_day'])
-    disable_line = config['evaluation']['disable_line']
+    disable_line = config['simulation']['disable_line']
     logging_path = config['paths']['evaluation_log']
-    save_data = config['evaluation']['save_data']
+    save_data = config['simulation']['save_data']
 
     # Initialize logging
     logging.basicConfig(filename=logging_path, filemode='w', format='%(message)s', level=logging.INFO)
@@ -107,7 +107,7 @@ def evaluate():
                 obs = env_step_raise_exception(env, action)
 
                 # Potentially log action information
-                if previous_max_rho > config['evaluation']['activity_threshold']:
+                if previous_max_rho > config['simulation']['activity_threshold']:
                     mask, sub_id = select_single_substation_from_topovect(torch.tensor(action.set_bus),
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
@@ -208,20 +208,20 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         The initialized strategy.
     """
     config = get_config()
-    strategy_type = config['evaluation']['strategy']
+    strategy_type = config['simulation']['strategy']
 
     if strategy_type == StrategyType.IDLE:
         strategy = strat.IdleStrategy(env.action_space({}))
     elif strategy_type == StrategyType.GREEDY:
-        strategy = strat.GreedyStrategy(config['evaluation']['activity_threshold'],
+        strategy = strat.GreedyStrategy(config['simulation']['activity_threshold'],
                                         env.action_space({}),
-                                        get_env_actions(env, disable_line=config['evaluation']['disable_line']))
+                                        get_env_actions(env, disable_line=config['simulation']['disable_line']))
     elif strategy_type == StrategyType.N_MINUS_ONE:
-        strategy = strat.NMinusOneStrategy(config['evaluation']['activity_threshold'],
+        strategy = strat.NMinusOneStrategy(config['simulation']['activity_threshold'],
                                            env.action_space,
-                                           get_env_actions(env, disable_line=config['evaluation']['disable_line']),
-                                           config['evaluation']['NMinusOne_strategy']['line_idxs_to_consider_N-1'],
-                                           config['evaluation']['NMinusOne_strategy']['N0_rho_threshold'])
+                                           get_env_actions(env, disable_line=config['simulation']['disable_line']),
+                                           config['simulation']['NMinusOne_strategy']['line_idxs_to_consider_N-1'],
+                                           config['simulation']['NMinusOne_strategy']['N0_rho_threshold'])
     elif strategy_type == StrategyType.NAIVE_ML:
         # Initialize model and normalization statistics
         model = init_model()
@@ -233,7 +233,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         strategy = strat.NaiveStrategy(model,
                                        feature_statistics,
                                        env.action_space,
-                                       config['evaluation']['activity_threshold'])
+                                       config['simulation']['activity_threshold'])
     elif strategy_type == StrategyType.VERIFY_ML:
         # Initialize model and normalization statistics
         model = init_model()
@@ -245,8 +245,8 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         strategy = strat.VerifyStrategy(model,
                                         feature_statistics,
                                         env.action_space,
-                                        config['evaluation']['activity_threshold'],
-                                        config['evaluation']['verify_strategy']['reject_action_threshold'])
+                                        config['simulation']['activity_threshold'],
+                                        config['simulation']['verify_strategy']['reject_action_threshold'])
     elif strategy_type == StrategyType.VERIFY_GREEDY_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
@@ -258,11 +258,11 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         strategy = strat.VerifyGreedyHybridStrategy(model,
                                                     feature_statistics,
                                                     env.action_space,
-                                                    config['evaluation']['activity_threshold'],
-                                                    config['evaluation']['verify_strategy']['reject_action_threshold'],
+                                                    config['simulation']['activity_threshold'],
+                                                    config['simulation']['verify_strategy']['reject_action_threshold'],
                                                     get_env_actions(env,
-                                                                    disable_line=config['evaluation']['disable_line']),
-                                                    config['evaluation']['hybrid_strategies'][
+                                                                    disable_line=config['simulation']['disable_line']),
+                                                    config['simulation']['hybrid_strategies'][
                                                         'take_the_wheel_threshold'])
     elif strategy_type == StrategyType.VERIFY_N_MINUS_ONE_HYBRID:
         # Initialize model and normalization statistics
@@ -275,15 +275,15 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         strategy = strat.VerifyNMinusOneHybridStrategy(model,
                                                        feature_statistics,
                                                        env.action_space,
-                                                       config['evaluation']['activity_threshold'],
-                                                       config['evaluation']['verify_strategy'][
+                                                       config['simulation']['activity_threshold'],
+                                                       config['simulation']['verify_strategy'][
                                                            'reject_action_threshold'],
-                                                       get_env_actions(env, disable_line=config['evaluation'][
+                                                       get_env_actions(env, disable_line=config['simulation'][
                                                            'disable_line']),
-                                                       config['evaluation']['NMinusOne_strategy'][
+                                                       config['simulation']['NMinusOne_strategy'][
                                                            'line_idxs_to_consider_N-1'],
-                                                       config['evaluation']['NMinusOne_strategy']['N0_rho_threshold'],
-                                                       config['evaluation']['hybrid_strategies'][
+                                                       config['simulation']['NMinusOne_strategy']['N0_rho_threshold'],
+                                                       config['simulation']['hybrid_strategies'][
                                                            'take_the_wheel_threshold'])
     else:
         raise ValueError("Invalid value for strategy_name.")
@@ -308,8 +308,8 @@ def save_records(datapoints: List[Dict],
     """
     config = get_config()
     save_path = config['paths']['tutor_imitation']
-    do_nothing_capacity_threshold = config['evaluation']['activity_threshold']
-    lout = config['evaluation']['disable_line']
+    do_nothing_capacity_threshold = config['simulation']['activity_threshold']
+    lout = config['simulation']['disable_line']
 
     if datapoints:
         dp_matrix = np.zeros((0, 5 + len(datapoints[0]['observation_vector'])), dtype=np.float32)
