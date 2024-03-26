@@ -57,9 +57,9 @@ class Run:
         # Save some configurations
         config = get_config()
         self.train_config = train_config = config['training']
-        processed_data_path = config['paths']['processed_tutor_imitation']
-        matrix_cache_path = config['paths']['con_matrix_cache']
-        feature_statistics_path = config['paths']['feature_statistics']
+        processed_data_path = config['paths']['data']['processed']
+        matrix_cache_path = processed_data_path + 'auxiliary_data_objects/con_matrix_cache.json'
+        feature_statistics_path = processed_data_path + 'auxiliary_data_objects/feature_stats.json'
 
         # Specify device to use
         self.device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')

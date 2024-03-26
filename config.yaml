@@ -3,8 +3,8 @@ paths:
   evaluation_log: data/evaluation/test.log
   data_split: data/data_split/
   data:
-    raw: data/raw_selection/seen_greedy/
-    processed: data/processed/seen_greedy/
+    raw: data/raw_selection/N-1
+    processed: data/processed/N-1/
   wandb: data/wandb/
   model: models/error_analysis
 
