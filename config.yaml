@@ -3,8 +3,8 @@ paths:
   evaluation_log: data/evaluation/test.log
   data_split: data/data_split/
   data:
-    raw: data/raw_selection/unseen_greedy/
-    processed: data/processed/unseen_greedy/
+    raw: data/raw_selection/seen_greedy/
+    processed: data/processed/seen_greedy/
   wandb: data/wandb/
   model: models/error_analysis
 
@@ -34,10 +34,9 @@ rte_case14_realistic:
   line_or_pos_topo_vect: [ 0,  1,  4,  5,  6, 10, 15, 24, 25, 26, 35, 36, 41, 47, 51, 16, 17, 22, 31, 38]
   line_ex_pos_topo_vect: [ 3, 19,  9, 13, 20, 14, 21, 43, 46, 49, 40, 53, 44, 50, 54, 30, 37, 27, 33, 32]
 
-dataset:
-  n_train_datafiles: 14000 #amount of train files
-  n_val_datafiles: 200 #amount of val files
-  n_test_datafiles: 400 #amount of test files
+data_processing:
+  buffer_size: 10000 # Max. number of datapoints in the buffer used to shuffle file contents
+  output_file_size: 500 # Number of datapoints in output size
 
 training:
   settings:

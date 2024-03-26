@@ -406,6 +406,8 @@ def process_raw_tutor_data():
     raw_data_path = config['paths']['data']['raw']
     processed_data_path = config['paths']['data']['processed']
     split_path = config['paths']['data_split']
+    buffer_size = config['data_processing']['buffer_size']
+    output_file_size = config['data_processing']['output_file_size']
 
     # Create subdirectories
     create_subdirectories()
@@ -430,138 +432,139 @@ def process_raw_tutor_data():
     # Create object for tracking the feature statistics
     fstats = FeatureStatistics()
 
-    filepaths = get_filepaths(raw_data_path)
-    random.shuffle(filepaths)
-    for filepath in tqdm(filepaths):
-        line_disabled, _, chronic_id, days_completed = \
-            extract_data_from_filepath(filepath.relative_to(raw_data_path))
+    for scenarios, folder_name in [(train_scenarios, 'train'),
+                                   (val_scenarios, 'val'),
+                                   (test_scenarios, 'test')]:
+        filepaths = get_filepaths(raw_data_path)
+        random.shuffle(filepaths)
 
-        # Load a single file with raw datapoints
-        raw_datapoints = np.load(filepath)
+        buffer = []
+        filepath_i = 0
 
-        # Env information specifically for a line removed
-        env_info_dict = env_info_line_disabled(env, line_disabled)
+        for filepath in tqdm(filepaths):
+            line_disabled, _, chronic_id, days_completed = \
+                extract_data_from_filepath(filepath.relative_to(raw_data_path))
 
-        # If it doesn't already exit, create action_identificator for this
-        # particular line disabled
-        # Action identificator give the action corresponding to an action index
-        if line_disabled not in action_iders:
-            action_iders[line_disabled] = action_identificator(env, line_disabled)
-
-        # Loop over the datapoints
-        for raw_dp in raw_datapoints:
-            # Extract information dictionary from the datapoint
-            dp = extract_data_from_single_ts(raw_dp,
-                                             grid2op_vect_size,
-                                             env.observation_space.from_vect,
-                                             line_disabled,
-                                             env_info_dict,
-                                             thermal_limits)
-
-            # Add the data from the filepath and environment to the data dictionary
-            dp.update({'line_disabled': line_disabled,
-                       'chronic_id': chronic_id,
-                       'dayscomp': days_completed})
-            dp.update({'sub_info': env_info_dict['sub_info'],
-                       'gen_pos_topo_vect': env_info_dict['gen_pos_topo_vect'],
-                       'load_pos_topo_vect': env_info_dict['load_pos_topo_vect'],
-                       'line_or_pos_topo_vect': env_info_dict['line_or_pos_topo_vect'],
-                       'line_ex_pos_topo_vect': env_info_dict['line_ex_pos_topo_vect'],
-                       })
-
-            # Update the feature statistics if the file is in the train partition
-            if chronic_id in train_scenarios:
-                fstats.update_feature_statistics(dp)
-
-            # Find the set action topology vector and add it to the datapoint
-            if dp['action_index'] != -1:
-                action_ider = action_iders[line_disabled]
-                dp['set_topo_vect'] = action_ider.get_set_topo_vect(dp['action_index'])
-                # Remove disables lines from topo vect objects
-                if line_disabled != -1:
-                    dp['set_topo_vect'] = np.delete(dp['set_topo_vect'], [
-                        env_info_dict['dis_line_or_tv'],
-                        env_info_dict['dis_line_ex_tv']])
-            else:
-                dp['set_topo_vect'] = np.zeros_like(dp['topo_vect'])
-
-            dp['change_topo_vect'] = np.array([0 if s == 0 else abs(t - s) for t, s in
-                                               zip(dp['topo_vect'], dp['set_topo_vect'])])
-            dp['res_topo_vect'] = np.array([t if s == 0 else s for t, s in
-                                            zip(dp['topo_vect'], dp['set_topo_vect'])])
-
-            # Skip datapoint if any other line is disabled
-            if -1 in dp['topo_vect']:
+            if chronic_id not in scenarios:
                 continue
 
-            assert len(dp['set_topo_vect']) == len(dp['topo_vect']) == len(dp['change_topo_vect']) \
-                   == len(dp['res_topo_vect']), "Not equal lengths"
-            assert len(dp['topo_vect']) == (56 if line_disabled == -1 else 54), \
-                "Incorrect length"
-            assert all([(o in [0, 1, 2]) for o in dp['set_topo_vect']]), \
-                "Incorrect element in set_topo_vect"
-            assert all([(o in [1, 2]) for o in dp['topo_vect']]), \
-                "Incorrect element in topo_vect"
-            assert all([(o in [0, 1]) for o in dp['change_topo_vect']]), \
-                "Incorrect element in change_topo_vect"
-            assert all([(o in [1, 2]) for o in dp['res_topo_vect']]), \
-                "Incorrect element in res_topo_vect"
+            # Load a single file with raw datapoints
+            raw_datapoints = np.load(filepath)
 
-            # Add the index of the connectivity matrix to the data object
-            cm_index = cmc.get_key_add_to_dict(dp['topo_vect'],
-                                               line_disabled,
-                                               env_info_dict['sub_info'],
-                                               env_info_dict['gen_pos_topo_vect'],
-                                               env_info_dict['load_pos_topo_vect'],
-                                               env_info_dict['line_or_pos_topo_vect'],
-                                               env_info_dict['line_ex_pos_topo_vect'])
-            dp['cm_index'] = cm_index
-            assert dp['cm_index'] in cmc.con_matrices
+            # Env information specifically for a line removed
+            env_info_dict = env_info_line_disabled(env, line_disabled)
 
-            # Add datapoint to random datafile
-            if chronic_id in train_scenarios:
-                datafile_number = random.randint(0, config['dataset']['n_train_datafiles'] - 1)
-                filepath = processed_data_path + f'train/data_{datafile_number}.json'
-                save_datapoint_to_file(dp, filepath)
-            elif chronic_id in val_scenarios:
-                datafile_number = random.randint(0, config['dataset']['n_val_datafiles'] - 1)
-                filepath = processed_data_path + f'val/data_{datafile_number}.json'
-                save_datapoint_to_file(dp, filepath)
-            elif chronic_id in test_scenarios:
-                datafile_number = random.randint(0, config['dataset']['n_test_datafiles'] - 1)
-                filepath = processed_data_path + f'test/data_{datafile_number}.json'
-                save_datapoint_to_file(dp, filepath)
-            else:
-                # Discard datapoint if not in any of the three partitions
-                continue
+            # If it doesn't already exit, create action_identificator for this
+            # particular line disabled
+            # Action identificator give the action corresponding to an action index
+            if line_disabled not in action_iders:
+                action_iders[line_disabled] = action_identificator(env, line_disabled)
+
+            # Loop over the datapoints
+            for raw_dp in raw_datapoints:
+                # Extract information dictionary from the datapoint
+                dp = extract_data_from_single_ts(raw_dp,
+                                                 grid2op_vect_size,
+                                                 env.observation_space.from_vect,
+                                                 line_disabled,
+                                                 env_info_dict,
+                                                 thermal_limits)
+
+                # Add the data from the filepath and environment to the data dictionary
+                dp.update({'line_disabled': line_disabled,
+                           'chronic_id': chronic_id,
+                           'dayscomp': days_completed})
+                dp.update({'sub_info': env_info_dict['sub_info'],
+                           'gen_pos_topo_vect': env_info_dict['gen_pos_topo_vect'],
+                           'load_pos_topo_vect': env_info_dict['load_pos_topo_vect'],
+                           'line_or_pos_topo_vect': env_info_dict['line_or_pos_topo_vect'],
+                           'line_ex_pos_topo_vect': env_info_dict['line_ex_pos_topo_vect'],
+                           })
+
+                # Update the feature statistics if the file is in the train partition
+                if chronic_id in train_scenarios:
+                    fstats.update_feature_statistics(dp)
+
+                # Find the set action topology vector and add it to the datapoint
+                if dp['action_index'] != -1:
+                    action_ider = action_iders[line_disabled]
+                    dp['set_topo_vect'] = action_ider.get_set_topo_vect(dp['action_index'])
+                    # Remove disables lines from topo vect objects
+                    if line_disabled != -1:
+                        dp['set_topo_vect'] = np.delete(dp['set_topo_vect'], [
+                            env_info_dict['dis_line_or_tv'],
+                            env_info_dict['dis_line_ex_tv']])
+                else:
+                    dp['set_topo_vect'] = np.zeros_like(dp['topo_vect'])
+
+                dp['change_topo_vect'] = np.array([0 if s == 0 else abs(t - s) for t, s in
+                                                   zip(dp['topo_vect'], dp['set_topo_vect'])])
+                dp['res_topo_vect'] = np.array([t if s == 0 else s for t, s in
+                                                zip(dp['topo_vect'], dp['set_topo_vect'])])
+
+                # Skip datapoint if any other line is disabled
+                if -1 in dp['topo_vect']:
+                    continue
+
+                assert len(dp['set_topo_vect']) == len(dp['topo_vect']) == len(dp['change_topo_vect']) \
+                       == len(dp['res_topo_vect']), "Not equal lengths"
+                assert len(dp['topo_vect']) == (56 if line_disabled == -1 else 54), \
+                    "Incorrect length"
+                assert all([(o in [0, 1, 2]) for o in dp['set_topo_vect']]), \
+                    "Incorrect element in set_topo_vect"
+                assert all([(o in [1, 2]) for o in dp['topo_vect']]), \
+                    "Incorrect element in topo_vect"
+                assert all([(o in [0, 1]) for o in dp['change_topo_vect']]), \
+                    "Incorrect element in change_topo_vect"
+                assert all([(o in [1, 2]) for o in dp['res_topo_vect']]), \
+                    "Incorrect element in res_topo_vect"
+
+                # Add the index of the connectivity matrix to the data object
+                cm_index = cmc.get_key_add_to_dict(dp['topo_vect'],
+                                                   line_disabled,
+                                                   env_info_dict['sub_info'],
+                                                   env_info_dict['gen_pos_topo_vect'],
+                                                   env_info_dict['load_pos_topo_vect'],
+                                                   env_info_dict['line_or_pos_topo_vect'],
+                                                   env_info_dict['line_ex_pos_topo_vect'])
+                dp['cm_index'] = cm_index
+                assert dp['cm_index'] in cmc.con_matrices
+
+                # Add the datapoint to the buffer
+                buffer.append(dp)
+
+                if len(buffer) >= buffer_size:
+                    save_dp = [buffer.pop(random.randrange(len(buffer))) for _ in
+                               range(output_file_size)]
+                    filepath = processed_data_path + f'{folder_name}/data_{filepath_i}.json'
+                    save_datapoints(save_dp, filepath)
+                    filepath_i += 1
+
+        while len(buffer) > 0:
+            save_dp = [buffer.pop(random.randrange(len(buffer))) for _ in
+                       range(min(output_file_size, len(buffer)))]
+            filepath = processed_data_path + f'{folder_name}/data_{filepath_i}.json'
+            save_datapoints(save_dp, filepath)
+            filepath_i += 1
 
     # Save auxiliary data objects
     cmc.save(processed_data_path + 'auxiliary_data_objects/con_matrix_cache.json')
     fstats.save(processed_data_path + 'auxiliary_data_objects/feature_stats.json')
 
 
-def save_datapoint_to_file(datapoint: dict, filepath: str):
+def save_datapoints(datapoints: Sequence[dict], filepath: str):
     """
-    Given a dictionary representing a data point, append it to a json datafile identified by the filepath.
-    Creates the file if it does not exist.
+    Given a list of datapoints, save it as a json file to the specified filepath.
 
     Parameters
     ----------
-    datapoint : dict
-       The datapoint.
+    datapoints : Sequence[dict]
+       The list of datapoints.
     filepath : str
        The filepath.
     """
-    if os.path.isfile(filepath):
-        with open(filepath, "r") as file:
-            data = json.load(file)
-    else:
-        data = []
-
-    data.append(datapoint)
-
     with open(filepath, "w") as file:
-        json.dump(data, file, cls=NumpyEncoder)
+        json.dump(datapoints, file, cls=NumpyEncoder)
 
 
 def create_subdirectories():
@@ -589,4 +592,3 @@ def create_subdirectories():
 
         # Create new directory
         os.mkdir(processed_path + name)
-
