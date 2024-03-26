@@ -2,21 +2,28 @@
 data/*
 !data/data_split
 
+# Git
+.git
+
+# Python environment
+env/
+
 # Python
 **/__pycache__/  
-
 # WandB
 wandb/
 
 # Jupyter notebooks
 **/*.ipynb_checkpoints
 data_preprocessing_analysis/figures/
+.ipybn_checkpoints/
 
 # Models
 models/
 
 # IDEs
-.idea/misc.xml
-.idea/*.iml
+.idea/
+.idea
+*.xml
 *.pyc
 .spyproject
