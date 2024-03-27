@@ -3,8 +3,8 @@ paths:
   evaluation_log: data/simulation/test.log
   data_split: data/data_split/
   data:
-    raw: data/raw_selection/unseen_greedy/
-    processed: data/processed/unseen_greedy/
+    raw: data/raw_selection/mixed/
+    processed: data/processed/mixed/
   wandb: data/wandb/
   model: models/error_analysis
 
@@ -44,7 +44,7 @@ training:
     val_log_freq: 20000 #How often to evaluate the validation set
     dp_per_val_log: 5000 # How many datapoints to use per val logging
     advanced_val_analysis: true
-    line_outages_considered: [-1, 0, 1, 2, 3, 4, 5, 6]
+    line_outages_considered: [-1, 0, 1, 2, 3, 4, 5, 6, 12]
   hyperparams:
     model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100

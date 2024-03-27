@@ -39,7 +39,7 @@ def get_filepaths(tutor_data_path: str) -> List[Path]:
         List of the paths of the files.
 
     """
-    return list(Path(tutor_data_path).rglob('*.npy'))
+    return list(Path(tutor_data_path).rglob('*/*.npy'))
 
 
 def extract_data_from_filepath(relat_fp: PosixPath) \
@@ -334,8 +334,8 @@ class FeatureStatistics:
     def __init__(self):
         # Initialize statistics about features
         self.N_gen, self.N_load, self.N_line = 0, 0, 0
-        self.S_gen, self.S_load, self.S_or, self.S_ex = None, None, None, None
-        self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = None, None, None, None
+        self.S_gen, self.S_load, self.S_line = None, None, None
+        self.S2_gen, self.S2_load, self.S2_line = None, None, None
 
     def update_feature_statistics(self, data: dict):
         """
@@ -355,21 +355,29 @@ class FeatureStatistics:
                                                 zip(features[:-1], [self.N_gen, self.N_load, self.N_line])]
 
         if self.S_gen is None:
-            # Initialize sum
-            self.S_gen, self.S_load, self.S_or, self.S_ex = \
-                [f.sum(axis=0) for f in features]
-            # Initialize sum of squares
-            self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = \
-                [(f ** 2).sum(axis=0) for f in features]
+            # Initialize generator statistics
+            self.S_gen = features[0].sum(axis=0)
+            self.S2_gen = (features[0] ** 2).sum(axis=0)
+
+            # Initialize load statistics
+            self.S_load = features[1].sum(axis=0)
+            self.S2_load = (features[1] ** 2).sum(axis=0)
+
+            # Initialize line statistics
+            self.S_line = features[2].sum(axis=0) + features[3].sum(axis=0)
+            self.S2_line = (features[2] ** 2).sum(axis=0) + (features[3] ** 2).sum(axis=0)
         else:
-            # Increase the sum
-            self.S_gen, self.S_load, self.S_or, self.S_ex = \
-                [s + f.sum(axis=0) for f, s in zip(features,
-                                                   [self.S_gen, self.S_load, self.S_or, self.S_ex])]
-            # Increase the sum of squares
-            self.S2_gen, self.S2_load, self.S2_or, self.S2_ex = \
-                [s2 + (f ** 2).sum(axis=0) for f, s2 in zip(features,
-                                                            [self.S2_gen, self.S2_load, self.S2_or, self.S2_ex])]
+            # Update generator statistics
+            self.S_gen += features[0].sum(axis=0)
+            self.S2_gen += (features[0] ** 2).sum(axis=0)
+
+            # Update load statistics
+            self.S_load += features[1].sum(axis=0)
+            self.S2_load += (features[1] ** 2).sum(axis=0)
+
+            # Initialize line statistics
+            self.S_line += features[2].sum(axis=0) + features[3].sum(axis=0)
+            self.S2_line += (features[2] ** 2).sum(axis=0) + (features[3] ** 2).sum(axis=0)
 
     def save(self, fpath: str):
         """
@@ -388,8 +396,7 @@ class FeatureStatistics:
         stats = {}
         for name, N, S, S2 in [('gen', self.N_gen, self.S_gen, self.S2_gen),
                                ('load', self.N_load, self.S_load, self.S2_load),
-                               ('or', self.N_line, self.S_or, self.S2_or),
-                               ('ex', self.N_line, self.S_ex, self.S2_ex)]:
+                               ('line', 2*self.N_line, self.S_line, self.S2_line)]:
             stats[name] = {'mean': S / N,
                            'std': std(N, S, S2)}
         with open(fpath, 'w') as outfile:
