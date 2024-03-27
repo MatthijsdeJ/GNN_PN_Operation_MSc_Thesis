@@ -292,12 +292,12 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
                                            device=self.device,
                                            dtype=torch.float)
         norm_or_features = (np.array(raw_dp['or_features'])
-                            - fstats['or']['mean']) / fstats['or']['std']
+                            - fstats['line']['mean']) / fstats['line']['std']
         dp['or_features'] = torch.tensor(norm_or_features,
                                          device=self.device,
                                          dtype=torch.float)
         norm_ex_features = (np.array(raw_dp['ex_features'])
-                            - fstats['ex']['mean']) / fstats['ex']['std']
+                            - fstats['line']['mean']) / fstats['line']['std']
         dp['ex_features'] = torch.tensor(norm_ex_features,
                                          device=self.device,
                                          dtype=torch.float)

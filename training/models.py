@@ -120,11 +120,8 @@ class GCN(torch.nn.Module, Model):
         self.lin_load_1 = Linear(N_f_load, N_node_hidden)
         self.lin_load_2 = Linear(N_node_hidden, N_node_hidden)
 
-        self.lin_or_1 = Linear(N_f_endpoint, N_node_hidden)
-        self.lin_or_2 = Linear(N_node_hidden, N_node_hidden)
-
-        self.lin_ex_1 = Linear(N_f_endpoint, N_node_hidden)
-        self.lin_ex_2 = Linear(N_node_hidden, N_node_hidden)
+        self.lin_line_1 = Linear(N_f_endpoint, N_node_hidden)
+        self.lin_line_2 = Linear(N_node_hidden, N_node_hidden)
 
         # Create the GCN layers
         self.GCN_layers = torch.nn.ModuleList([self.create_GCN_layer(N_node_hidden, N_node_hidden)
@@ -185,13 +182,13 @@ class GCN(torch.nn.Module, Model):
         self.activation_f(x_load)
         x_load = self.lin_load_2(x_load)
         self.activation_f(x_load)
-        x_or = self.lin_or_1(x_or)
+        x_or = self.lin_line_1(x_or)
         self.activation_f(x_or)
-        x_or = self.lin_or_2(x_or)
+        x_or = self.lin_line_2(x_or)
         self.activation_f(x_or)
-        x_ex = self.lin_ex_1(x_ex)
+        x_ex = self.lin_line_1(x_ex)
         self.activation_f(x_ex)
-        x_ex = self.lin_ex_2(x_ex)
+        x_ex = self.lin_line_2(x_ex)
         self.activation_f(x_ex)
 
         # Combining different object states into the order of the topology vector
@@ -430,13 +427,13 @@ class GCN(torch.nn.Module, Model):
         self.activation_f(x_load)
         x_load = self.lin_load_2(x_load)
         self.activation_f(x_load)
-        x_or = self.lin_or_1(x_or)
+        x_or = self.lin_line_1(x_or)
         self.activation_f(x_or)
-        x_or = self.lin_or_2(x_or)
+        x_or = self.lin_line_2(x_or)
         self.activation_f(x_or)
-        x_ex = self.lin_ex_1(x_ex)
+        x_ex = self.lin_line_1(x_ex)
         self.activation_f(x_ex)
-        x_ex = self.lin_ex_2(x_ex)
+        x_ex = self.lin_line_2(x_ex)
         self.activation_f(x_ex)
 
         # Combining different object states into the order of the
