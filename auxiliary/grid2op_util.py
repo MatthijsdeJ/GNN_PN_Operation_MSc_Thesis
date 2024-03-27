@@ -492,6 +492,13 @@ def env_step_raise_exception(env: grid2op.Environment.Environment, action: grid2
     obs, _, _, info = env.step(action)
 
     for e in info['exception']:
-        raise e
+        print(e)
+        if type(e) is grid2op.Exceptions.DivergingPowerFlow:
+            # Only return divergingpowerflow exceptions when there is no line that start a cascading failure.
+            # If there is such a line, that indicates agent failure
+            if all(info['disc_lines'] == -1):
+                raise e
+        else:
+            raise e
 
     return obs
