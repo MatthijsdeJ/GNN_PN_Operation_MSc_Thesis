@@ -18,6 +18,7 @@ from auxiliary.generate_action_space import get_env_actions
 import numpy as np
 import os
 from typing import List, Dict
+import time
 
 
 def simulate():
@@ -37,7 +38,7 @@ def simulate():
     logging.basicConfig(filename=logging_path, filemode='w', format='%(message)s', level=logging.INFO)
 
     # Initialize environment
-    env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
+    env = g2o_util.init_env(grid2op.Rules.DefaultRules)
 
     # Initialize strategy
     strategy = init_strategy(env)
@@ -76,13 +77,21 @@ def simulate():
             # Save reference topology
             reference_topo_vect = obs.topo_vect.copy()
 
+            # Capture time for analysing durations
+            start_day_time = time.thread_time_ns() / 1e9
+
             # While chronic is not completed
             while env.nb_time_step < env.chronics_handler.max_timestep():
 
                 # Reset at midnight,  add day data to chronic data
                 if env.nb_time_step % ts_in_day == ts_in_day - 1:
-                    log_and_print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed.')
+
+                    end_day_time = time.thread_time_ns() / 1e9
+
+                    log_and_print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed in '
+                                  f'{end_day_time - start_day_time:.2f} seconds.')
                     days_completed += 1
+                    start_day_time = time.thread_time_ns() / 1e9
 
                     # Reset topology
                     env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
@@ -96,10 +105,9 @@ def simulate():
 
                 # Strategy selects an action
                 obs = env.get_obs()
-                if not save_data:
-                    action, _ = strategy.select_action(obs)
-                else:
-                    action, datapoint = strategy.select_action(obs)
+                before_action_time = time.thread_time_ns() / 1e6
+                action, datapoint = strategy.select_action(obs)
+                action_duration = time.thread_time_ns() / 1e6 - before_action_time
 
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
@@ -112,8 +120,11 @@ def simulate():
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
                                                                           not any(x) or x == previous_topo_vect)
-                    log_and_print("Old max rho, new max rho, substation, set_bus: " +
-                                  str((previous_max_rho, obs.rho.max(), sub_id, list(action.set_bus[mask == 1]))))
+                    log_and_print(f"Old max rho: {previous_max_rho:.4f}, "
+                                  f"new max rho: {obs.rho.max():.4f}, "
+                                  f"substation: {sub_id}, "
+                                  f"set_bus: {list(action.set_bus[mask == 1])}, "
+                                  f"action duration in ms: {int(action_duration)}")
 
                 # Save action data
                 if save_data and datapoint is not None:
@@ -126,6 +137,7 @@ def simulate():
 
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
+                    start_day_time = time.thread_time_ns() / 1e9
 
             # At the end of a chronic, print a message, and store and reset the corresponding records
             log_and_print('Chronic exhausted! \n\n\n')
