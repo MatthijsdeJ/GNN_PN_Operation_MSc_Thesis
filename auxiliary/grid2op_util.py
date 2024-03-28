@@ -373,7 +373,7 @@ def select_single_substation_from_topovect(topo_vect: torch.Tensor,
     return selected_substation_mask, selected_substation_idx
 
 
-def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.Environment:
+def init_env() -> grid2op.Environment.Environment:
     """
     Prepares the Grid2Op environment from a dictionary containing configuration setting.
 
@@ -391,6 +391,9 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
     data_path = config['paths']['rte_case14_realistic']
     scenario_path = data_path + 'chronics/'
 
+    param = grid2op.Parameters.Parameters()
+    param.MAX_SUB_CHANGED = 14
+
     try:
         raise ImportError
         # if lightsim2grid is available, use it.
@@ -399,12 +402,14 @@ def init_env(gamerules_class: grid2op.Rules.BaseRules) -> grid2op.Environment.En
         env = grid2op.make(dataset=data_path,
                            chronics_path=scenario_path,
                            backend=backend,
-                           gamerules_class=gamerules_class,
+                           gamerules_class=grid2op.Rules.DefaultRules,
+                           param=param,
                            test=True)
     except ImportError:
         env = grid2op.make(dataset=data_path,
                            chronics_path=scenario_path,
-                           gamerules_class=gamerules_class,
+                           gamerules_class=grid2op.Rules.DefaultRules,
+                           param=param,
                            test=True)
 
     # for reproducible experiments

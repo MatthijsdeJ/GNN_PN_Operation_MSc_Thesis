@@ -115,6 +115,9 @@ def extract_data_from_single_ts(ts_vect: np.array,
 
     # Remove the disabled line from the data, if necessary
     if line_disabled != -1:
+        assert data['topo_vect'][env_info_dict['dis_line_or_tv']] == -1, 'Disabled origin should be -1'
+        assert data['topo_vect'][env_info_dict['dis_line_or_tv']] == -1, 'Disabled extremity should be -1'
+
         data['or_features'] = np.delete(data['or_features'], line_disabled, axis=0)
         data['ex_features'] = np.delete(data['ex_features'], line_disabled, axis=0)
         data['topo_vect'] = np.delete(data['topo_vect'], [
@@ -428,7 +431,7 @@ def process_raw_tutor_data():
     # fstats_path = processed_data_path + '/auxiliary_data_objects/feature_statistics.json'
 
     # Initialize environment and environment variables
-    env = g2o_util.init_env(grid2op.Rules.AlwaysLegal)
+    env = g2o_util.init_env()
     grid2op_vect_size = len(env.get_obs().to_vect())
     thermal_limits = config['rte_case14_realistic']['thermal_limits']
 

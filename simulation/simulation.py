@@ -38,7 +38,7 @@ def simulate():
     logging.basicConfig(filename=logging_path, filemode='w', format='%(message)s', level=logging.INFO)
 
     # Initialize environment
-    env = g2o_util.init_env(grid2op.Rules.DefaultRules)
+    env = g2o_util.init_env()
 
     # Initialize strategy
     strategy = init_strategy(env)
