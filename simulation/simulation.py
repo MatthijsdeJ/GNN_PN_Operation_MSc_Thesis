@@ -61,7 +61,7 @@ def simulate():
         env.reset()
 
         try:
-            log_and_print('current chronic: %s' % env.chronics_handler.get_name())
+            log_and_print(f'{env.nb_time_step}: Current chronic: %s' % env.chronics_handler.get_name())
 
             # (Re)set variables
             days_completed = 0
@@ -88,7 +88,7 @@ def simulate():
 
                     end_day_time = time.thread_time_ns() / 1e9
 
-                    log_and_print(f'Day {ts_to_day(env.nb_time_step, ts_in_day)} completed in '
+                    log_and_print(f'{env.nb_time_step}: Day {ts_to_day(env.nb_time_step, ts_in_day)} completed in '
                                   f'{end_day_time - start_day_time:.2f} seconds.')
                     days_completed += 1
                     start_day_time = time.thread_time_ns() / 1e9
@@ -121,10 +121,12 @@ def simulate():
                                                                           select_nothing_condition=lambda x:
                                                                           not any(x) or x == previous_topo_vect)
                     log_and_print(f"Old max rho: {previous_max_rho:.4f}, "
+                    log_and_print(f"{env.nb_time_step}: Action selected. "
+                                  f"Old max rho: {previous_max_rho:.4f}, "
                                   f"new max rho: {obs.rho.max():.4f}, "
                                   f"substation: {sub_id}, "
                                   f"set_bus: {list(action.set_bus[mask == 1])}, "
-                                  f"action duration in ms: {int(action_duration)}")
+                                  f"action duration in ms: {int(action_duration)}.")
 
                 # Save action data
                 if save_data and datapoint is not None:
@@ -140,14 +142,14 @@ def simulate():
                     start_day_time = time.thread_time_ns() / 1e9
 
             # At the end of a chronic, print a message, and store and reset the corresponding records
-            log_and_print('Chronic exhausted! \n\n\n')
+            log_and_print(f'{env.nb_time_step}: Chronic exhausted! \n\n\n')
 
             # Saving and resetting the data
             if save_data:
                 save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
-        except grid2op.Exceptions.DivergingPowerFlow:
-            log_and_print(f'Diverging-powerflow exception encountered at step {env.nb_time_step} on '
-                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}. Skipping this scenario.')
+        except (grid2op.Exceptions.DivergingPowerFlow, grid2op.Exceptions.BackendError) as e:
+            log_and_print(f'{env.nb_time_step}: Diverging-powerflow exception encountered on '
+                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}: {e}. Skipping this scenario.')
 
 
 def log_and_print(msg: str):
