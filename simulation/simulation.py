@@ -119,8 +119,8 @@ def simulate():
                     mask, sub_id = select_single_substation_from_topovect(torch.tensor(action.set_bus),
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
-                                                                          not any(x) or x == previous_topo_vect)
-                    log_and_print(f"Old max rho: {previous_max_rho:.4f}, "
+                                                                          not any(x) or
+                                                                          all(x.numpy() == previous_topo_vect))
                     log_and_print(f"{env.nb_time_step}: Action selected. "
                                   f"Old max rho: {previous_max_rho:.4f}, "
                                   f"new max rho: {obs.rho.max():.4f}, "
@@ -135,7 +135,7 @@ def simulate():
                 # If the game is done at this point, this indicated a (failed) game over.
                 # If so, reset the environment to the start of next day and discard the records
                 if env.done:
-                    log_and_print(f'Failure at step {env.nb_time_step} on day {ts_to_day(env.nb_time_step, ts_in_day)}')
+                    log_and_print(f'{env.nb_time_step}: Failure of day {ts_to_day(env.nb_time_step, ts_in_day)}.')
 
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
