@@ -13,107 +13,9 @@ from grid2op.dtypes import dt_int
 import math
 import auxiliary.util as util
 from auxiliary.config import get_config
-
-
-def extract_gen_features(obs_dict: dict) -> np.array:
-    """
-    Given the grid2op observation in dictionary form,
-    return the generator features.
-
-    Parameters
-    ----------
-    obs_dict : dict
-        Dictionary representation of the grid2op observation. Can be obtained
-        with obs.to_dict().
-
-    Returns
-    -------
-    X : np.array
-        Array representation of the features; rows correspond to the different
-        objects. Columns represent the 'p', 'q', 'v' features.
-    """
-    X = np.array(list(obs_dict['gens'].values())).T
-    return X
-
-
-def extract_load_features(obs_dict: dict) -> np.array:
-    """
-    Given the grid2op observation in dictionary form,
-    return the generator features.
-
-    Parameters
-    ----------
-    obs_dict : dict
-        Dictionary representation of the grid2op observation. Can be obtained
-        with obs.to_dict().
-
-    Returns
-    -------
-    X : np.array
-        Array representation of the features; rows correspond to the different
-        objects. Columns represent the 'p', 'q', 'v' features.
-    """
-    X = np.array(list(obs_dict['loads'].values())).T
-    return X
-
-
-def extract_or_features(obs_dict: dict, thermal_limits: Sequence[int]) \
-        -> np.array:
-    """
-    Given the grid2op observation in dictionary form,
-    return the load features.
-
-    Parameters
-    ----------
-    obs_dict : dict
-        Dictionary representation of the grid2op observation. Can be obtained
-        with obs.to_dict().
-    thermal_limits : Sequence[int]
-        Sequence with the thermal limits of the lines.
-
-    Returns
-    -------
-    X : np.array
-        Array representation of the features;  rows correspond to the different
-        objects. Columns represent the 'p', 'q', 'v', 'a', 'line_rho',
-        'line_capacity' features.
-    """
-    X = np.array(list(obs_dict['lines_or'].values())).T
-    with np.errstate(divide='ignore', invalid='ignore'):
-        X = np.concatenate((X,
-                            np.reshape(np.array(obs_dict['rho']), (-1, 1)),
-                            np.reshape(np.array(thermal_limits), (-1, 1))),
-                           axis=1)
-    return X
-
-
-def extract_ex_features(obs_dict: dict, thermal_limits: Sequence[int]) \
-        -> np.array:
-    """
-    Given the grid2op observation in dictionary form,
-    return the generator features.
-
-    Parameters
-    ----------
-    obs_dict : dict
-        Dictionary representation of the grid2op observation. Can be obtained
-        with obs.to_dict().
-    thermal_limits : Sequence[int]
-        Sequence with the thermal limits of the lines.
-    Returns
-    -------
-    X : np.array
-        Array representation of the features; rows correspond to the different
-        objects. Columns represent the 'p', 'q', 'v', 'a', 'line_rho',
-        'line_capacity' features.
-    """
-    X = np.array(list(obs_dict['lines_ex'].values())).T
-    with np.errstate(divide='ignore', invalid='ignore'):
-        X = np.concatenate((X,
-                            np.reshape(np.array(obs_dict['rho']), (-1, 1)),
-                            np.reshape(np.array(thermal_limits), (-1, 1))),
-                           axis=1)
-    return X
+from grid2op.Opponent import RandomLineOpponent, BaseActionBudget
+from grid2op.Action import PowerlineSetAction
+from simulation.opponent import ReconnectingOpponentSpace
 
 
 def connectivity_matrices(sub_info: Sequence[int],
@@ -373,7 +275,7 @@ def select_single_substation_from_topovect(topo_vect: torch.Tensor,
     return selected_substation_mask, selected_substation_idx
 
 
-def init_env() -> grid2op.Environment.Environment:
+def init_env(use_opponent: bool = False) -> grid2op.Environment.Environment:
     """
     Prepares the Grid2Op environment from a dictionary containing configuration setting.
 
@@ -494,15 +396,24 @@ def env_step_raise_exception(env: grid2op.Environment.Environment, action: grid2
     obs : grid2op.Observation.CompleteObservation
         The observation resulting from the action.
     """
+    old_topology = env.get_obs().topo_vect
     obs, _, _, info = env.step(action)
 
     for e in info['exception']:
-        print(e)
-        if type(e) is grid2op.Exceptions.DivergingPowerFlow:
+        if type(e) in [grid2op.Exceptions.DivergingPowerFlow, grid2op.Exceptions.BackendError]:
             # Only return divergingpowerflow exceptions when there is no line that start a cascading failure.
             # If there is such a line, that indicates agent failure
             if all(info['disc_lines'] == -1):
+                print(info)
                 raise e
+        elif type(e) is grid2op.Exceptions.illegalActionExceptions.IllegalAction:
+            if (old_topology == -1).sum() <= 2:
+                print(e)
+                print(action)
+                print(old_topology)
+                print(info)
+                raise e
+            # Otherwise it indicates failure
         else:
             raise e
 
