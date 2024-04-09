@@ -534,11 +534,14 @@ def extract_or_features(obs_dict: dict) \
     -------
     X : np.array
         Array representation of the features;  rows correspond to the different objects. Columns represent the
-        'p', 'q', 'v', 'a', and 'line_rho' features.
+        'p', 'q', 'v', 'a', 'line_rho', 'thermal limit' features.
     """
     X = np.array(list(obs_dict['lines_or'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
-        X = np.concatenate((X, np.reshape(np.array(obs_dict['rho']), (-1, 1))), axis=1)
+        X = np.concatenate((X,
+                            np.reshape(np.array(obs_dict['rho']), (-1, 1)),
+                            np.reshape(np.array(obs_dict['lines_or']['p']) / np.array(obs_dict['rho']), (-1, 1))),
+                           axis=1)
     return X
 
 
@@ -557,11 +560,14 @@ def extract_ex_features(obs_dict: dict) \
     -------
     X : np.array
         Array representation of the features; rows correspond to the different objects. Columns represent the
-        'p', 'q', 'v', 'a', 'line_rho' features.
+        'p', 'q', 'v', 'a', 'line_rho', 'thermal limit' features.
     """
     X = np.array(list(obs_dict['lines_ex'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
-        X = np.concatenate((X, np.reshape(np.array(obs_dict['rho']), (-1, 1))), axis=1)
+        X = np.concatenate((X,
+                            np.reshape(np.array(obs_dict['rho']), (-1, 1)),
+                            np.reshape(np.array(obs_dict['lines_ex']['p']) / np.array(obs_dict['rho']), (-1, 1))),
+                           axis=1)
     return X
 
 
@@ -634,7 +640,7 @@ def reduced_env_variables(lines_disabled: list[int]) -> dict:
     assert set(lines_disabled).issubset(set(range(len(line_or_pos_topo_vect)))), "Incorrect disabled line index."
 
     # Reduce variables if there are disconnected lines
-    if lines_disabled:
+    if len(lines_disabled) > 0:
 
         # Find the indices in the topology vector of the disabled line endpoints
         disabled_ors_idxs = [line_or_pos_topo_vect[line] for line in lines_disabled]

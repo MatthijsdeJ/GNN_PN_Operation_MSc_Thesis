@@ -9,12 +9,12 @@ import torch
 import torch_geometric.nn
 from torch_geometric.nn import SAGEConv, Linear, HeteroConv, GINConv
 from typing import Dict, List, Optional
+
 from auxiliary.config import NetworkType, AggrType, LayerType
 from typing import Sequence
 import numpy as np
 import grid2op
 from abc import ABC, abstractmethod
-import auxiliary.grid2op_util as g2o_util
 
 
 class Model(ABC):
@@ -33,23 +33,6 @@ class Model(ABC):
         ----------
         weight_init_std : float
             The standard deviation of the normal distribution.
-        """
-        pass
-
-    @abstractmethod
-    def predict_observation(self, obs: grid2op.Observation.CompleteObservation) -> torch.Tensor:
-        """
-        Make a prediction based on Grid2Op observation.
-
-        Parameters
-        ----------
-        obs : grid2op.Observation.CompleteObservation
-            The grid2op observation.
-
-        Returns
-        -------
-        P : float
-            The prediction.
         """
         pass
 
@@ -494,69 +477,6 @@ class GCN(torch.nn.Module, Model):
         MAD = mean_cos_dist_node_to_neighbours.mean().item()
 
         return MAD
-
-    def predict_observation(self,
-                            obs: grid2op.Observation.CompleteObservation,
-                            feature_statistics: dict) -> torch.Tensor:
-        """
-        Make a prediction based on Grid2Op observation.
-
-        Parameters
-        ----------
-        obs : grid2op.Observation.CompleteObservation
-            The grid2op observation.
-        feature_statistics : dict[dict[float]]
-            The statistics (meand, stds) per object type (gen, load, or, ex).
-        Returns
-        -------
-        P : float
-            The prediction.
-        """
-        obs_dict = obs.to_dict()
-
-        # Extract features
-        x_gen = torch.tensor(g2o_util.extract_gen_features(obs_dict))
-        x_load = torch.tensor(g2o_util.extract_load_features(obs_dict))
-        x_or = torch.tensor(g2o_util.extract_or_features(obs_dict, obs.thermal_limit))
-        x_ex = torch.tensor(g2o_util.extract_ex_features(obs_dict, obs.thermal_limit))
-        object_ptv = torch.tensor(np.argsort(np.concatenate([
-            obs.gen_pos_topo_vect,
-            obs.load_pos_topo_vect,
-            obs.line_or_pos_topo_vect,
-            obs.line_ex_pos_topo_vect])))
-
-        # Normalize features
-        x_gen = ((x_gen - torch.tensor(feature_statistics['gen']['mean'])) /
-                 torch.tensor(feature_statistics['gen']['std']))
-        x_load = ((x_load - torch.tensor(feature_statistics['load']['mean'])) /
-                  torch.tensor(feature_statistics['load']['std']))
-        x_or = ((x_or - torch.tensor(feature_statistics['or']['mean'])) /
-                torch.tensor(feature_statistics['or']['std']))
-        x_ex = ((x_ex - torch.tensor(feature_statistics['ex']['mean'])) /
-                torch.tensor(feature_statistics['ex']['std']))
-
-        # Extract connectivity matrix
-        same_busbar_e, other_busbar_e, line_e = g2o_util.connectivity_matrices(obs.sub_info.astype(int),
-                                                                               obs.topo_vect.astype(int),
-                                                                               obs.line_or_pos_topo_vect.astype(int),
-                                                                               obs.line_ex_pos_topo_vect.astype(int))
-        if self.network_type == NetworkType.HOMO:
-            edge_index = torch.tensor(np.append(same_busbar_e, line_e, axis=1),
-                                      dtype=torch.long)
-        elif self.network_type == NetworkType.HETERO:
-            edge_index = {('object', 'line', 'object'):
-                              torch.tensor(line_e,
-                                           dtype=torch.long),
-                          ('object', 'same_busbar', 'object'):
-                              torch.tensor(same_busbar_e,
-                                           dtype=torch.long),
-                          ('object', 'other_busbar', 'object'):
-                              torch.tensor(other_busbar_e,
-                                           dtype=torch.long)}
-
-        # Creating and returning the prediction
-        P = self.forward(x_gen, x_load, x_or, x_ex, edge_index, object_ptv)
-        return P
 
 
 class FCNN(torch.nn.Module, Model):

@@ -4,8 +4,14 @@ import torch
 import auxiliary.grid2op_util as g2o_util
 import numpy as np
 from typing import Tuple, Optional, Sequence
-from training.models import Model
+
 import warnings
+
+from auxiliary.config import get_config, NetworkType
+import training.models
+from training.models import Model
+from data_preprocessing_analysis.data_preprocessing import reduced_env_variables, extract_gen_features, \
+    extract_load_features, extract_or_features, extract_ex_features
 
 
 class AgentStrategy(ABC):
@@ -457,14 +463,7 @@ class NaiveStrategy(AgentStrategy):
             An optional dictionary which contains information about the action. Not provided by this subclass.
         """
         if observation.rho.max() > self.dn_threshold:
-            P = torch.flatten(self.model.predict_observation(observation, self.feature_statistics)).detach()
-            P_sub_mask, _ = g2o_util.select_single_substation_from_topovect(P,
-                                                                            observation.sub_info,
-                                                                            f=lambda x: torch.sum(torch.clamp(x - 0.5,
-                                                                                                              min=0)))
-            P = np.array([1 if (m and p > 0.5) else 0 for m, p in zip(P_sub_mask, P)])
-            set_action = 1 + (observation.topo_vect - 1 + P) % 2
-            # TODO: Fix with disabled lines
+            set_action = predict_observation(self.model, observation, self.feature_statistics)
 
             action = self.action_space({'set_bus': set_action})
         else:
@@ -715,3 +714,101 @@ class VerifyNMinusOneHybridStrategy(AgentStrategy):
         else:
             action, _ = self.verify_strategy.select_action(observation)
             return action, None
+
+
+def predict_observation(model: training.models.Model,
+                        obs: grid2op.Observation.CompleteObservation,
+                        feature_statistics: dict) -> grid2op.Action.BaseAction:
+    # Initialize variables
+    config = get_config()
+    network_type = config['training']['GCN']['hyperparams']['network_type']
+
+    obs_dict = obs.to_dict()
+
+    # Finding disabled lines
+    disabled_lines = np.where(~obs.line_status)[0]
+
+    # Extract gen, load features
+    x_gen = torch.tensor(extract_gen_features(obs_dict))
+    x_load = torch.tensor(extract_load_features(obs_dict))
+
+    # Obtain the reduced env variables for this line disabled
+    env_var_dict = reduced_env_variables(disabled_lines)
+    line_or_pos_topo_vect = env_var_dict['line_or_pos_topo_vect']
+    line_ex_pos_topo_vect = env_var_dict['line_ex_pos_topo_vect']
+    object_ptv = env_var_dict['pos_topo_vect']
+    sub_info = env_var_dict['sub_info']
+
+    # Extract full origin/extremity features and topo_vect
+    x_or = extract_or_features(obs_dict)
+    x_ex = extract_ex_features(obs_dict)
+    topo_vect = obs.topo_vect
+
+    # Reduce origin/extremity features and topo_vect if there are any disabled lines
+    if len(disabled_lines) > 0:
+        config = get_config()
+        full_line_or_pos_tv = np.array(config['rte_case14_realistic']['line_or_pos_topo_vect'])
+        full_line_ex_pos_tv = np.array(config['rte_case14_realistic']['line_ex_pos_topo_vect'])
+
+        # Check and reduce the topo_vect variable
+        assert (topo_vect[full_line_or_pos_tv[disabled_lines]] == -1).all(), 'Disabled origins should be -1.'
+        assert (topo_vect[full_line_ex_pos_tv[disabled_lines]] == -1).all(), 'Disabled extremities should be -1.'
+        topo_vect = np.delete(topo_vect, [idx for line in disabled_lines for idx in
+                                         (full_line_or_pos_tv[line], full_line_ex_pos_tv[line])])
+        # Check and reduce the line endpoint features
+        assert np.isclose(x_or[disabled_lines, :-1], 0).all(), ("All features except the last "
+                                                                "of the disabled origins must be "
+                                                                "zero.")
+        assert np.isclose(x_ex[disabled_lines, :-1], 0).all(), ("All features except the last "
+                                                                "of the disabled extremities must be"
+                                                                " zero.")
+        x_or = np.delete(x_or, disabled_lines, axis=0)
+        x_ex = np.delete(x_ex, disabled_lines, axis=0)
+        assert x_or.shape == x_ex.shape, "Origin and extremities' features should have the same shape."
+
+    # Convert origin/extremity features to torch.tensor
+    x_or, x_ex = torch.tensor(x_or), torch.tensor(x_ex)
+
+    # Extract connectivity matrix
+    same_busbar_e, other_busbar_e, line_e = g2o_util.connectivity_matrices(sub_info.astype(int),
+                                                                           topo_vect.astype(int),
+                                                                           line_or_pos_topo_vect.astype(int),
+                                                                           line_ex_pos_topo_vect.astype(int))
+
+    # Normalize features
+    x_gen = ((x_gen - torch.tensor(feature_statistics['gen']['mean'])) / torch.tensor(feature_statistics['gen']['std']))
+    x_load = ((x_load - torch.tensor(feature_statistics['load']['mean'])) /
+              torch.tensor(feature_statistics['load']['std']))
+    x_or = ((x_or - torch.tensor(feature_statistics['line']['mean'])) / torch.tensor(feature_statistics['line']['std']))
+    x_ex = ((x_ex - torch.tensor(feature_statistics['line']['mean'])) / torch.tensor(feature_statistics['line']['std']))
+
+    # Creating edge_index
+    if network_type == NetworkType.HOMO:
+        edge_index = torch.tensor(np.append(same_busbar_e, line_e, axis=1), dtype=torch.long)
+    elif network_type == NetworkType.HETERO:
+        edge_index = {('object', 'line', 'object'): torch.tensor(line_e, dtype=torch.long),
+                      ('object', 'same_busbar', 'object'): torch.tensor(same_busbar_e, dtype=torch.long),
+                      ('object', 'other_busbar', 'object'): torch.tensor(other_busbar_e, dtype=torch.long)}
+
+    # Creating and returning the prediction, finding the selected substation
+    P = torch.flatten(model.forward(x_gen, x_load, x_or, x_ex, edge_index, object_ptv)).detach()
+    P_sub_mask, _ = g2o_util.select_single_substation_from_topovect(P, sub_info,
+                                                                    f=lambda x: torch.sum(torch.clamp(x - 0.5, min=0)))
+
+    # Selecting a single substation
+    P = np.array([1 if (m and p > 0.5) else 0 for m, p in zip(P_sub_mask, P)])
+
+    # Convert prediction to set_action
+    set_action = 1 + (topo_vect - 1 + P) % 2
+
+    # Unreduce set_action if any lines were disabled
+    if len(disabled_lines) > 0:
+        # Adjust the indices to account for index shifting when inserting multiple elements
+        add_idxs = [idx for line in disabled_lines for idx in (full_line_or_pos_tv[line], full_line_ex_pos_tv[line])]
+        add_idxs.sort()
+        add_idxs = [idx - i for i, idx in enumerate(add_idxs)]
+
+        # Unreduce set_action
+        set_action = np.insert(set_action, add_idxs, -1)
+
+    return set_action
