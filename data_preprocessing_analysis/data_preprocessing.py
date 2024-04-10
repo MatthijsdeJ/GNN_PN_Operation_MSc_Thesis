@@ -540,7 +540,7 @@ def extract_or_features(obs_dict: dict) \
     with np.errstate(divide='ignore', invalid='ignore'):
         X = np.concatenate((X,
                             np.reshape(np.array(obs_dict['rho']), (-1, 1)),
-                            np.reshape(np.array(obs_dict['lines_or']['p']) / np.array(obs_dict['rho']), (-1, 1))),
+                            np.reshape(np.array(obs_dict['lines_or']['a']) / np.array(obs_dict['rho']), (-1, 1))),
                            axis=1)
     return X
 
@@ -566,7 +566,7 @@ def extract_ex_features(obs_dict: dict) \
     with np.errstate(divide='ignore', invalid='ignore'):
         X = np.concatenate((X,
                             np.reshape(np.array(obs_dict['rho']), (-1, 1)),
-                            np.reshape(np.array(obs_dict['lines_ex']['p']) / np.array(obs_dict['rho']), (-1, 1))),
+                            np.reshape(np.array(obs_dict['lines_ex']['a']) / np.array(obs_dict['rho']), (-1, 1))),
                            axis=1)
     return X
 
@@ -663,8 +663,8 @@ def reduced_env_variables(lines_disabled: list[int]) -> dict:
         line_ex_pos_topo_vect = np.array([i - sum(i > combined_disabled_idxs) for i in line_ex_pos_topo_vect]).flatten()
 
     # Concatenating the pos_topo_vect variables
-    pos_topo_vect = np.concatenate([gen_pos_topo_vect, load_pos_topo_vect,
-                                    line_or_pos_topo_vect, line_ex_pos_topo_vect])
+    pos_topo_vect = np.argsort(np.concatenate([gen_pos_topo_vect, load_pos_topo_vect, line_or_pos_topo_vect,
+            line_ex_pos_topo_vect]))
 
     # Asserting postconditions
     assert sum(sub_info) == len(pos_topo_vect), "The sub_info and pos_topo_vect imply a different number of objects."
