@@ -10,7 +10,7 @@ import torch
 import wandb
 import training.metrics as metrics
 from training.models import GCN, FCNN
-from training.dataloader import TutorDataLoader
+from training.dataloader import DataLoader
 from tqdm import tqdm
 import collections
 import numpy as np
@@ -97,20 +97,20 @@ class Run:
         # Initialize dataloaders
         network_type = train_config['GCN']['hyperparams']['network_type']
         model_type = train_config['hyperparams']['model_type']
-        self.train_dl = TutorDataLoader(processed_data_path + '/train',
-                                        matrix_cache_path,
-                                        feature_statistics_path,
-                                        device=self.device,
-                                        model_type=model_type,
-                                        network_type=network_type,
-                                        train=True)
-        self.val_dl = TutorDataLoader(processed_data_path + '/val',
-                                      matrix_cache_path,
-                                      feature_statistics_path,
-                                      device=self.device,
-                                      model_type=model_type,
-                                      network_type=network_type,
-                                      train=False)
+        self.train_dl = DataLoader(processed_data_path + '/train',
+                                   matrix_cache_path,
+                                   feature_statistics_path,
+                                   device=self.device,
+                                   model_type=model_type,
+                                   network_type=network_type,
+                                   train=True)
+        self.val_dl = DataLoader(processed_data_path + '/val',
+                                 matrix_cache_path,
+                                 feature_statistics_path,
+                                 device=self.device,
+                                 model_type=model_type,
+                                 network_type=network_type,
+                                 train=False)
 
         # Initialize metrics objects
         IA = metrics.IncrementalAverage

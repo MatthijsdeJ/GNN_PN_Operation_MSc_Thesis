@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from auxiliary.config import get_config, NetworkType, ModelType
 
 
-class TutorDataLoader:
+class DataLoader:
     """
     Object for loading the tutor dataset.
     """
