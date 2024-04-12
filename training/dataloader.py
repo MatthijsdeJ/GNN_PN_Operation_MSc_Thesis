@@ -57,13 +57,11 @@ class DataLoader:
             assert isinstance(network_type, NetworkType), 'Invalid network type'
             matrix_cache = idp.ConMatrixCache.load(matrix_cache_path)
             self.process_dp_strategy = ProcessDataPointGCN(device,
-                                                           train,
                                                            feature_statistics,
                                                            network_type,
                                                            matrix_cache)
         elif model_type == ModelType.FCNN:
             self.process_dp_strategy = ProcessDataPointFCNN(device,
-                                                            train,
                                                             feature_statistics)
         else:
             raise ValueError("Invalid model_type value.")
@@ -141,20 +139,16 @@ class ProcessDataPointStrategy(ABC):
 
     def __init__(self,
                  device: torch.device,
-                 train: bool,
                  feature_statistics: dict):
         """
         Parameters
         ----------
         device : torch.device
             The device to set torch tensors to.
-        train : bool
-            Whether to process the datapoint for training or not. More information is included for validation/testing.
         feature_statistics : dict
             Dictionary with information (mean, std) used to normalize features.
         """
         self.device = device
-        self.train = train
         self.feature_statistics = feature_statistics
         config = get_config()
 
@@ -213,10 +207,6 @@ class ProcessDataPointStrategy(ABC):
             dp : dict
                 The processed datapoint with the processed simulation information added.
         """
-        dp['line_disabled'] = raw_dp['line_disabled']
-        dp['topo_vect'] = torch.tensor(raw_dp['topo_vect'],
-                                       device=self.device,
-                                       dtype=torch.long)
         return dp
 
 
@@ -227,7 +217,6 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
 
     def __init__(self,
                  device: torch.device,
-                 train: bool,
                  feature_statistics: dict,
                  network_type: NetworkType,
                  matrix_cache: idp.ConMatrixCache):
@@ -236,14 +225,12 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
         ----------
         device : torch.device
             The device to set torch tensors to.
-        train : bool
-            Whether to process the datapoint for training or not. More information is included for validation/testing.
         feature_statistics : dict
             Dictionary with information (mean, std) used to normalize features.
         network_type : NetworkType
             The type of the GCN network.
         """
-        super().__init__(device, train, feature_statistics)
+        super().__init__(device, feature_statistics)
         self.network_type = network_type
         self.matrix_cache = matrix_cache
 
@@ -324,10 +311,8 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
                                             device=self.device,
                                             dtype=torch.long)}
 
-        # If the data is not for training, add information used in
-        # validation analysis
-        if not self.train:
-            dp = self.add_val_info(raw_dp, dp)
+        dp['line_disabled'] = raw_dp['line_disabled']
+        dp['topo_vect'] = torch.tensor(raw_dp['topo_vect'], device=self.device, dtype=torch.long)
 
         return dp
 
@@ -338,7 +323,6 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
 
     def __init__(self,
                  device: torch.device,
-                 train: bool,
                  feature_statistics: dict):
         """
         Parameters
@@ -350,7 +334,7 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
         feature_statistics : dict
             Dictionary with information (mean, std) used to normalize features.
         """
-        super().__init__(device, train, feature_statistics)
+        super().__init__(device, feature_statistics)
 
     def process_datapoint(self, raw_dp: dict):
         """
@@ -395,9 +379,7 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
                                      device=self.device,
                                      dtype=torch.float)
 
-        # If the data is not for training, add information used in
-        # validation analysis
-        if not self.train:
-            dp = self.add_val_info(raw_dp, dp)
+        dp['line_disabled'] = raw_dp['line_disabled']
+        dp['topo_vect'] = torch.tensor(raw_dp['topo_vect'], device=self.device, dtype=torch.long)
 
         return dp
