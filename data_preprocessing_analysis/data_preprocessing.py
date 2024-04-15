@@ -150,7 +150,7 @@ class FeatureStatistics:
         self.S_gen, self.S_load, self.S_line = None, None, None
         self.S2_gen, self.S2_load, self.S2_line = None, None, None
 
-    def update_feature_statistics(self, data: dict):
+    def update_feature_statistics(self, datapoint: dict):
         """
         Update the statistics (number, sum, sum of squares) of the feature
         values.
@@ -160,8 +160,8 @@ class FeatureStatistics:
         data : np.array
             Dictionary representing the datapoints, containing the features.
         """
-        features = [data['gen_features'], data['load_features'],
-                    data['or_features'], data['ex_features']]
+        features = [datapoint['gen_features'], datapoint['load_features'],
+                    datapoint['reduced']['or_features'], datapoint['reduced']['ex_features']]
 
         # Update number of objects
         self.N_gen, self.N_load, self.N_line = [n + f.shape[0] for f, n in
@@ -275,71 +275,77 @@ def process_raw_data():
                 action_iders[line_disabled] = action_identificator(env, line_disabled)
 
             # Obtain the reduced env variables for this line disabled
-            env_var_dict = reduced_env_variables([line_disabled] if line_disabled != -1 else [])
+            reduced_env_vars = reduced_env_variables([line_disabled] if line_disabled != -1 else [])
 
             # Loop over the raw datapoints in file
             for raw_dp in raw_datapoints:
-                # Extract data from raw datapoint
+                # Extract data from raw datapoint, add filepath data
                 dp = extract_raw_dp_data(raw_dp, grid2op_vect_size, env.observation_space.from_vect)
-
-                # Add the filepath and environment data to the datapoint
                 dp.update({'line_disabled': line_disabled, 'chronic_id': chronic_id, 'dayscomp': days_completed})
-                dp.update({'sub_info': env_var_dict['sub_info'],
-                           'gen_pos_topo_vect': env_var_dict['gen_pos_topo_vect'],
-                           'load_pos_topo_vect': env_var_dict['load_pos_topo_vect'],
-                           'line_or_pos_topo_vect': env_var_dict['line_or_pos_topo_vect'],
-                           'line_ex_pos_topo_vect': env_var_dict['line_ex_pos_topo_vect']
-                           })
+
+                """ Add the full variables """
+                dp['full'] = {
+                    'topo_vect': dp['topo_vect'],
+                    'or_features': dp['or_features'],
+                    'ex_features': dp['ex_features'],
+                }
+                del dp['topo_vect'], dp['or_features'], dp['ex_features']
+                dp_full = dp['full']
+
+                # Create the set_topo_vect vector
+                if dp['action_index'] != -1:
+                    action_ider = action_iders[line_disabled]
+                    dp_full['set_topo_vect'] = action_ider.get_set_topo_vect(dp['action_index'])
+                else:
+                    dp_full['set_topo_vect'] = np.zeros_like(dp_full['topo_vect'])
+
+                # Create the change_topo_vect and res_topo_vect vector
+                zip_tv_set_tv = list(zip(dp_full['topo_vect'], dp_full['set_topo_vect']))
+                dp_full['change_topo_vect'] = np.array([0 if (s == 0 or t == -1) else abs(t - s) for t, s in
+                                                        zip_tv_set_tv])
+                dp_full['res_topo_vect'] = np.array([t if (s == 0 or t == -1) else s for t, s in zip_tv_set_tv])
+
+                # Postconditions on the created topo_vect variables
+                assert len(dp_full['set_topo_vect']) == len(dp_full['topo_vect']) == len(
+                    dp_full['change_topo_vect']) == len(dp_full['res_topo_vect']), "Not equal lengths"
+                assert all( [(o in [0, 1, 2]) for o in dp_full['set_topo_vect']]), \
+                    "Incorrect element in set_topo_vect"
+                assert all([(o in [-1, 1, 2]) for o in dp_full['topo_vect']]), "Incorrect element in topo_vect"
+                assert all( [(o in [0, 1]) for o in dp_full['change_topo_vect']]), \
+                    "Incorrect element in change_topo_vect"
+                assert all([(o in [-1, 1, 2]) for o in dp_full['res_topo_vect']]), "Incorrect element in res_topo_vect"
+
+                """ Add the reduced variables """
+                # Add the filepath and environment data to the datapoint
+                dp['reduced'] = {'sub_info': reduced_env_vars['sub_info'],
+                                 'gen_pos_topo_vect': reduced_env_vars['gen_pos_topo_vect'],
+                                 'load_pos_topo_vect': reduced_env_vars['load_pos_topo_vect'],
+                                 'line_or_pos_topo_vect': reduced_env_vars['line_or_pos_topo_vect'],
+                                 'line_ex_pos_topo_vect': reduced_env_vars['line_ex_pos_topo_vect']}
+                dp_reduced = dp['reduced']
 
                 # Remove disabled lines in datapoint by reducing variables
                 reduce_variables_datapoint(dp)
 
+                # Add the index of the connectivity matrix to the datapoint
+                con_matrix_index = con_matrix_cache.get_key_add_to_dict(dp['reduced']['topo_vect'],
+                                                                        line_disabled,
+                                                                        reduced_env_vars['sub_info'],
+                                                                        reduced_env_vars['gen_pos_topo_vect'],
+                                                                        reduced_env_vars['load_pos_topo_vect'],
+                                                                        reduced_env_vars['line_or_pos_topo_vect'],
+                                                                        reduced_env_vars['line_ex_pos_topo_vect'])
+                dp['reduced']['cm_index'] = con_matrix_index
+                assert dp['reduced']['cm_index'] in con_matrix_cache.con_matrices
+
+                """ Save datapoint """
+                # Skip datapoint if any other line is disabled
+                if -1 in dp['reduced']['topo_vect']:
+                    continue
+
                 # Update the feature statistics if the file is in the train partition
                 if (folder_name == 'train') and (chronic_id in train_scenarios):
                     feature_stats.update_feature_statistics(dp)
-
-                # Retrieve the set-action, potentially reduce it
-                if dp['action_index'] != -1:
-                    action_ider = action_iders[line_disabled]
-                    dp['set_topo_vect'] = action_ider.get_set_topo_vect(dp['action_index'])
-
-                    # Reduce the set-action vector if any lines are disabled
-                    if line_disabled != -1:
-                        dis_line_or_tv = config['rte_case14_realistic']['line_or_pos_topo_vect'][dp['line_disabled']]
-                        dis_line_ex_tv = config['rte_case14_realistic']['line_ex_pos_topo_vect'][dp['line_disabled']]
-
-                        dp['set_topo_vect'] = np.delete(dp['set_topo_vect'], (dis_line_or_tv, dis_line_ex_tv))
-                else:
-                    dp['set_topo_vect'] = np.zeros_like(dp['topo_vect'])
-
-                # Calculate the change-action and the resulting topology
-                dp['change_topo_vect'] = np.array([0 if s == 0 else abs(t - s) for t, s in
-                                                   zip(dp['topo_vect'], dp['set_topo_vect'])])
-                dp['res_topo_vect'] = np.array([t if s == 0 else s for t, s in
-                                                zip(dp['topo_vect'], dp['set_topo_vect'])])
-
-                # Skip datapoint if any other line is disabled
-                if -1 in dp['topo_vect']:
-                    continue
-
-                # Postconditions on the created variables
-                assert len(dp['set_topo_vect']) == len(dp['topo_vect']) == len(dp['change_topo_vect']) \
-                       == len(dp['res_topo_vect']), "Not equal lengths"
-                assert all([(o in [0, 1, 2]) for o in dp['set_topo_vect']]), "Incorrect element in set_topo_vect"
-                assert all([(o in [1, 2]) for o in dp['topo_vect']]), "Incorrect element in topo_vect"
-                assert all([(o in [0, 1]) for o in dp['change_topo_vect']]), "Incorrect element in change_topo_vect"
-                assert all([(o in [1, 2]) for o in dp['res_topo_vect']]), "Incorrect element in res_topo_vect"
-
-                # Add the index of the connectivity matrix to the datapoint
-                con_matrix_index = con_matrix_cache.get_key_add_to_dict(dp['topo_vect'],
-                                                                        line_disabled,
-                                                                        env_var_dict['sub_info'],
-                                                                        env_var_dict['gen_pos_topo_vect'],
-                                                                        env_var_dict['load_pos_topo_vect'],
-                                                                        env_var_dict['line_or_pos_topo_vect'],
-                                                                        env_var_dict['line_ex_pos_topo_vect'])
-                dp['cm_index'] = con_matrix_index
-                assert dp['cm_index'] in con_matrix_cache.con_matrices
 
                 # Add the datapoint to the buffer
                 buffer.append(dp)
@@ -579,28 +585,34 @@ def reduce_variables_datapoint(datapoint: dict):
     """
     config = get_config()
     line_disabled = datapoint['line_disabled']
+    dp_full = datapoint['full']
+    dp_reduced = datapoint['reduced']
 
     # Reduce variables if a line is disabled
-    if line_disabled != -1:
+    if line_disabled == -1:
+        dp_reduced['or_features'] = dp_full['or_features']
+        dp_reduced['ex_features'] = dp_full['ex_features']
+        dp_reduced['topo_vect'] = dp_full['topo_vect']
+    else:
         dis_line_or_tv = config['rte_case14_realistic']['line_or_pos_topo_vect'][datapoint['line_disabled']]
         dis_line_ex_tv = config['rte_case14_realistic']['line_ex_pos_topo_vect'][datapoint['line_disabled']]
 
-        # Check and reduce the topo_vect variable
-        assert datapoint['topo_vect'][dis_line_or_tv] == -1, 'Disabled origin should be -1.'
-        assert datapoint['topo_vect'][dis_line_ex_tv] == -1, 'Disabled extremity should be -1.'
-        datapoint['topo_vect'] = np.delete(datapoint['topo_vect'], (dis_line_or_tv, dis_line_ex_tv))
-
         # Check and reduce the line endpoint features
-        assert np.isclose(datapoint['or_features'][line_disabled, :-1], 0).all(), ("All features except the last "
+        assert np.isclose(dp_full['or_features'][line_disabled, :-1], 0).all(), ("All features except the last "
                                                                                    "of the disabled origin must be "
                                                                                    "zero.")
-        assert np.isclose(datapoint['ex_features'][line_disabled, :-1], 0).all(), ("All features except the last "
+        assert np.isclose(dp_full['ex_features'][line_disabled, :-1], 0).all(), ("All features except the last "
                                                                                    "of the disabled extremity must be "
                                                                                    "zero.")
-        datapoint['or_features'] = np.delete(datapoint['or_features'], line_disabled, axis=0)
-        datapoint['ex_features'] = np.delete(datapoint['ex_features'], line_disabled, axis=0)
-        assert datapoint['or_features'].shape == datapoint['ex_features'].shape, ("Origin and extremities' features "
-                                                                                  "should have the same shape.")
+        dp_reduced['or_features'] = np.delete(dp_full['or_features'], line_disabled, axis=0)
+        dp_reduced['ex_features'] = np.delete(dp_full['ex_features'], line_disabled, axis=0)
+        assert dp_reduced['or_features'].shape == dp_reduced['ex_features'].shape, \
+            ("Origin and extremities features should have the same shape.")
+
+        # Check and reduce the topo_vect variable
+        assert dp_full['topo_vect'][dis_line_or_tv] == -1, 'Disabled origin should be -1.'
+        assert dp_full['topo_vect'][dis_line_ex_tv] == -1, 'Disabled extremity should be -1.'
+        dp_reduced['topo_vect'] = np.delete(dp_full['topo_vect'], (dis_line_or_tv, dis_line_ex_tv))
 
 
 def reduced_env_variables(lines_disabled: list[int]) -> dict:
