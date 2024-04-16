@@ -5,7 +5,7 @@ Created on Thu Oct 28 08:11:12 2021
 
 @author: matthijs
 """
-from typing import Optional, Dict, Callable, List, Tuple
+from typing import Optional, Dict, Callable, List, Tuple, Unpack
 import torch
 import wandb
 
@@ -64,7 +64,7 @@ class IncrementalAverageMetrics:
         """
         self.metrics_dict = metrics_dict
 
-    def log(self, **kwargs: dict):
+    def log(self, **kwargs: Unpack):
         """
         Update the incremental averages.
 

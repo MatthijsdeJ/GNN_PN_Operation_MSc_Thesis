@@ -24,7 +24,8 @@ class ActSpaceCache:
 
     def __init__(self,
                  env: Optional[grid2op.Environment.Environment] = None,
-                 line_outages_considered: Sequence[int] = [-1]):
+                 line_outages_considered: Sequence[int] = [-1],
+                 reduce: bool = False):
         """
         Parameters
         ----------
@@ -43,9 +44,12 @@ class ActSpaceCache:
                 [a._set_topo_vect for a in get_env_actions(env, lo)])
 
             if lo != -1:
-                indices = [i for i in range(self.set_act_space_per_lo[lo].shape[1])
-                           if i not in [env.line_or_pos_topo_vect[lo], env.line_ex_pos_topo_vect[lo]]]
-                self.set_act_space_per_lo[lo] = self.set_act_space_per_lo[lo][:, indices]
+                if reduce:
+                    indices = [i for i in range(self.set_act_space_per_lo[lo].shape[1])
+                               if i not in [env.line_or_pos_topo_vect[lo], env.line_ex_pos_topo_vect[lo]]]
+                    self.set_act_space_per_lo[lo] = self.set_act_space_per_lo[lo][:, indices]
+                else:
+                    self.set_act_space_per_lo[lo][:, (env.line_or_pos_topo_vect[lo], env.line_ex_pos_topo_vect[lo])] = 0
 
     def get_change_actspace_by_nearness_pred(self,
                                              line_disabled: int,
@@ -91,12 +95,8 @@ class ActSpaceCache:
         # Remove all do-nothing actions
         change_act_space = change_act_space[change_act_space.sum(dim=1) != 0]
 
-
         # Add back a single do-nothing action
-        change_act_space = torch.cat([torch.zeros((1,
-                                                   change_act_space.shape[1]),
-                                                  device=device),
-                                      change_act_space])
+        change_act_space = torch.cat([torch.zeros((1, change_act_space.shape[1]), device=device), change_act_space])
 
         # Calculate the row-wise abs. difference between the predicted action
         # and the 'change' action space

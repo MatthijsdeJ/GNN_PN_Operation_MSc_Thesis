@@ -10,11 +10,10 @@ import os
 import json
 import random
 import data_preprocessing_analysis.data_preprocessing as idp
-from typing import List, Optional, Type
+from typing import List, Optional, Any
 import numpy as np
-from training.models import GCN, FCNN
 from abc import ABC, abstractmethod
-from auxiliary.config import get_config, NetworkType, ModelType
+from auxiliary.config import NetworkType, ModelType
 
 
 class DataLoader:
@@ -28,8 +27,7 @@ class DataLoader:
                  feature_statistics_path: str,
                  device: torch.device,
                  model_type: ModelType,
-                 network_type: Optional[NetworkType],
-                 train: bool):
+                 network_type: Optional[NetworkType]):
         """
         Parameters
         ----------
@@ -44,33 +42,24 @@ class DataLoader:
         network_type : NetworkType
             The type of network. Based on this, data needs to be delivered
             in a different format.
-        train : bool
-            Whether the loaded data is used for training or validation.
-            More information is included in validation.
         """
         self._file_names = os.listdir(root)
         self._file_paths = [os.path.join(root, fn) for fn in self._file_names]
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
-
         if model_type == ModelType.GCN:
             assert isinstance(network_type, NetworkType), 'Invalid network type'
             matrix_cache = idp.ConMatrixCache.load(matrix_cache_path)
-            self.process_dp_strategy = ProcessDataPointGCN(device,
-                                                           feature_statistics,
-                                                           network_type,
-                                                           matrix_cache)
+            self.process_dp_strategy = ProcessDataPointGCN(device, feature_statistics, network_type, matrix_cache)
         elif model_type == ModelType.FCNN:
-            self.process_dp_strategy = ProcessDataPointFCNN(device,
-                                                            feature_statistics)
+            self.process_dp_strategy = ProcessDataPointFCNN(device, feature_statistics)
         else:
             raise ValueError("Invalid model_type value.")
 
-
     def get_file_datapoints(self, idx: int) -> List[dict]:
         """
-        Load the datapoints in a particular file. The file is indexed by an
-        int, representing the index of the file in the list of file paths.
+        Load the datapoints in a particular file. The file is indexed by an int, representing the index of the file in
+        the list of file paths.
 
         Parameters
         ----------
@@ -82,24 +71,14 @@ class DataLoader:
         processed_datapoints : List[dict]
             The list of datapoints. Each datapoint is a dictionary.
         """
-        # 'raw' is not fully true, as these datapoints should already have been
-        # preprocessed
+        # 'raw' is not fully true, as these datapoints should already have been preprocessed
         with open(self._file_paths[idx], 'r') as file:
             raw_datapoints = json.loads(file.read())
 
         processed_datapoints = []
         for raw_dp in raw_datapoints:
-
-            # skip datapoints that occur too infrequently in the dataset
-            # TODO: decide whether to keep this frequency check in
-            # act_freq = self._action_counter[str(raw_dp['act_hash'])]
-            # if act_freq < self.action_frequency_threshold:
-            #    continue
-
-            # process datapoint
+            # process datapoint and add it to the file list
             dp = self.process_dp_strategy.process_datapoint(raw_dp)
-
-            # add processed datapoint to file list
             processed_datapoints.append(dp)
 
         return processed_datapoints
@@ -126,7 +105,7 @@ class DataLoader:
 
         for idx in file_idxs:
             datapoints = self.get_file_datapoints(idx)
-            for i, dp in enumerate(datapoints):
+            for dp in datapoints:
                 yield dp
 
 
@@ -150,7 +129,6 @@ class ProcessDataPointStrategy(ABC):
         """
         self.device = device
         self.feature_statistics = feature_statistics
-        config = get_config()
 
     @abstractmethod
     def process_datapoint(self, raw_dp: int):
@@ -169,45 +147,6 @@ class ProcessDataPointStrategy(ABC):
             The resulting datapoint.
         """
         pass
-
-    def add_processed_label(self, raw_dp: dict, dp: dict):
-        """
-        Extract the label from raw_dp, process it, and store it in dp.
-
-        Parameters
-        ----------
-        raw_dp : dict
-            The raw datapoint.
-        dp : dict
-            The processed datapoint to add information to.
-
-        Returns
-        -------
-            dp : dict
-                The processed datapoint with the processed label added.
-        """
-        dp['change_topo_vect'] = torch.tensor(raw_dp['change_topo_vect'],
-                                              device=self.device,
-                                              dtype=torch.float)
-        return dp
-
-    def add_val_info(self, raw_dp: dict, dp: dict):
-        """
-        Extract information used during simulation from raw_dp, process it, and store it in dp.
-
-        Parameters
-        ----------
-        raw_dp : dict
-            The raw datapoint.
-        dp : dict
-            The processed datapoint to add information to.
-
-        Returns
-        -------
-            dp : dict
-                The processed datapoint with the processed simulation information added.
-        """
-        return dp
 
 
 class ProcessDataPointGCN(ProcessDataPointStrategy):
@@ -249,72 +188,55 @@ class ProcessDataPointGCN(ProcessDataPointStrategy):
         dp : dict
             The resulting datapoint.
         """
-        dp = {}
+        dp_reduced = raw_dp['reduced']
+        dp: dict[str, Any] = {}
 
         # Add the label
-        dp = self.add_processed_label(raw_dp, dp)
+        dp['full_change_topo_vect'] = torch.tensor(raw_dp['full']['change_topo_vect'],
+                                                   device=self.device, dtype=torch.float)
 
-        # Create the object position topology vector, which relates the
-        # objects ordered by type to their position in the topology vector
-        dp['object_ptv'] = np.argsort(np.concatenate(
-            [raw_dp['gen_pos_topo_vect'],
-             raw_dp['load_pos_topo_vect'],
-             raw_dp['line_or_pos_topo_vect'],
-             raw_dp['line_ex_pos_topo_vect']]))
+        # Create the position topology vector, which relates the objects ordered by type to their position in
+        # the topology vector
+        dp['reduced_pos_topo_vect'] = dp_reduced['pos_topo_vect']
 
-        # Load the sub info array, which contains info about to which
-        # substation each object belongs
-        dp['sub_info'] = raw_dp['sub_info']
+        # Load the sub info array, which contains info about to which substation each object belongs
+        dp['reduced_sub_info'] = dp_reduced['sub_info']
 
         # Load, normalize features, turn them into tensors
         fstats = self.feature_statistics
-        norm_gen_features = (np.array(raw_dp['gen_features'])
-                             - fstats['gen']['mean']) / fstats['gen']['std']
-        dp['gen_features'] = torch.tensor(norm_gen_features,
-                                          device=self.device,
-                                          dtype=torch.float)
-        norm_load_features = (np.array(raw_dp['load_features'])
-                              - fstats['load']['mean']) / fstats['load']['std']
-        dp['load_features'] = torch.tensor(norm_load_features,
-                                           device=self.device,
-                                           dtype=torch.float)
-        norm_or_features = (np.array(raw_dp['or_features'])
-                            - fstats['line']['mean']) / fstats['line']['std']
-        dp['or_features'] = torch.tensor(norm_or_features,
-                                         device=self.device,
-                                         dtype=torch.float)
-        norm_ex_features = (np.array(raw_dp['ex_features'])
-                            - fstats['line']['mean']) / fstats['line']['std']
-        dp['ex_features'] = torch.tensor(norm_ex_features,
-                                         device=self.device,
-                                         dtype=torch.float)
+        norm_gen_features = (np.array(raw_dp['gen_features']) - fstats['gen']['mean']) / fstats['gen']['std']
+        dp['gen_features'] = torch.tensor(norm_gen_features, device=self.device, dtype=torch.float)
+        norm_load_features = (np.array(raw_dp['load_features']) - fstats['load']['mean']) / fstats['load']['std']
+        dp['load_features'] = torch.tensor(norm_load_features, device=self.device, dtype=torch.float)
+        norm_or_features = (np.array(dp_reduced['or_features']) - fstats['line']['mean']) / fstats['line']['std']
+        dp['reduced_or_features'] = torch.tensor(norm_or_features, device=self.device, dtype=torch.float)
+        norm_ex_features = (np.array(dp_reduced['ex_features']) - fstats['line']['mean']) / fstats['line']['std']
+        dp['reduced_ex_features'] = torch.tensor(norm_ex_features, device=self.device, dtype=torch.float)
 
-        # Load the connectivity matrix, combine the edges for the specified
-        # network type
-        same_busbar_e, other_busbar_e, line_e = \
-            self.matrix_cache.con_matrices[str(raw_dp['cm_index'])][1]
+        # Load the connectivity matrix, combine the edges for the specified network type
+        con_matrix_hash = str(dp_reduced['cm_index'])
+        same_busbar_e, other_busbar_e, line_e = self.matrix_cache.con_matrices[con_matrix_hash][1]
         if self.network_type == NetworkType.HOMO:
-            dp['edges'] = torch.tensor(np.append(same_busbar_e, line_e, axis=1),
-                                       device=self.device,
-                                       dtype=torch.long)
+            # noinspection PyTypeChecker
+            dp['edges'] = torch.tensor(np.append(same_busbar_e, line_e, axis=1), device=self.device, dtype=torch.long)
         elif self.network_type == NetworkType.HETERO:
             dp['edges'] = {('object', 'line', 'object'):
-                               torch.tensor(line_e,
-                                            device=self.device,
-                                            dtype=torch.long),
+                           torch.tensor(line_e, device=self.device, dtype=torch.long),
                            ('object', 'same_busbar', 'object'):
-                               torch.tensor(same_busbar_e,
-                                            device=self.device,
-                                            dtype=torch.long),
+                           torch.tensor(same_busbar_e, device=self.device, dtype=torch.long),
                            ('object', 'other_busbar', 'object'):
-                               torch.tensor(other_busbar_e,
-                                            device=self.device,
-                                            dtype=torch.long)}
+                           torch.tensor(other_busbar_e, device=self.device, dtype=torch.long)}
 
+        # Load line_disabled, line_or_pos, line_ex_pos, and topo_vect
         dp['line_disabled'] = raw_dp['line_disabled']
-        dp['topo_vect'] = torch.tensor(raw_dp['topo_vect'], device=self.device, dtype=torch.long)
+        if dp['line_disabled'] != -1:
+            dp['disabled_or_pos'] = raw_dp['full']['disabled_or_pos']
+            dp['disabled_ex_pos'] = raw_dp['full']['disabled_ex_pos']
+        dp['reduced_topo_vect'] = torch.tensor(dp_reduced['topo_vect'], device=self.device, dtype=torch.long)
+        dp['full_topo_vect'] = torch.tensor(raw_dp['full']['topo_vect'], device=self.device, dtype=torch.long)
 
         return dp
+
 
 class ProcessDataPointFCNN(ProcessDataPointStrategy):
     """
@@ -329,8 +251,6 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
         ----------
         device : torch.device
             The device to set torch tensors to.
-        train : bool
-            Whether to process the datapoint for training or not. More information is included for validation/testing.
         feature_statistics : dict
             Dictionary with information (mean, std) used to normalize features.
         """
@@ -351,35 +271,30 @@ class ProcessDataPointFCNN(ProcessDataPointStrategy):
         dp : dict
             The resulting datapoint.
         """
-        dp = {}
+        dp_full = raw_dp['full']
+        dp: dict[str, Any] = {}
 
         # Add the label
-        dp = self.add_processed_label(raw_dp, dp)
-
-        # Load the sub info array, which contains info about to which
-        # substation each object belongs
-        dp['sub_info'] = raw_dp['sub_info']
+        dp['full_change_topo_vect'] = torch.tensor(dp_full['change_topo_vect'], device=self.device, dtype=torch.float)
 
         # Load, normalize features (including the topology vector), turn them into a single tensor
         fstats = self.feature_statistics
-        norm_gen_features = (np.array(raw_dp['gen_features'])
-                             - fstats['gen']['mean']) / fstats['gen']['std']
-        norm_load_features = (np.array(raw_dp['load_features'])
-                              - fstats['load']['mean']) / fstats['load']['std']
-        norm_or_features = (np.array(raw_dp['or_features'])
-                            - fstats['or']['mean']) / fstats['or']['std']
-        norm_ex_features = (np.array(raw_dp['ex_features'])
-                            - fstats['ex']['mean']) / fstats['ex']['std']
-        topo_vect = raw_dp['topo_vect']
+        norm_gen_features = (np.array(raw_dp['gen_features']) - fstats['gen']['mean']) / fstats['gen']['std']
+        norm_load_features = (np.array(raw_dp['load_features']) - fstats['load']['mean']) / fstats['load']['std']
+        norm_or_features = (np.array(dp_full['or_features']) - fstats['line']['mean']) / fstats['line']['std']
+        norm_ex_features = (np.array(dp_full['ex_features']) - fstats['line']['mean']) / fstats['line']['std']
+        full_topo_vect = dp_full['topo_vect']
         dp['features'] = torch.tensor(np.concatenate((norm_gen_features.flatten(),
                                                       norm_load_features.flatten(),
                                                       norm_or_features.flatten(),
                                                       norm_ex_features.flatten(),
-                                                      topo_vect)),
-                                     device=self.device,
-                                     dtype=torch.float)
+                                                      full_topo_vect)),
+                                      device=self.device, dtype=torch.float)
 
         dp['line_disabled'] = raw_dp['line_disabled']
-        dp['topo_vect'] = torch.tensor(raw_dp['topo_vect'], device=self.device, dtype=torch.long)
+        if dp['line_disabled'] != -1:
+            dp['disabled_or_pos'] = dp_full['disabled_or_pos']
+            dp['disabled_ex_pos'] = dp_full['disabled_ex_pos']
+        dp['full_topo_vect'] = torch.tensor(full_topo_vect, device=self.device, dtype=torch.long)
 
         return dp

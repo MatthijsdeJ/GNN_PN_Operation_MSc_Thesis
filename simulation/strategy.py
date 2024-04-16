@@ -401,7 +401,7 @@ class NMinusOneStrategy(AgentStrategy):
                 "One of the output variables is None."
             assert sel_rho >= 0, "Sel_rho cannot be negative"
             assert len(self.reduced_action_list) > action_idx >= -1, "Action idx is outside of it's possible range."
-            assert action_idx == -1 if sel_rho == np.float("inf") else True, \
+            assert action_idx == -1 if sel_rho == np.inf else True, \
                 "If sel_rho is infinite, the action should be do_nothing."
 
             return action_chosen, self.create_datapoint_dict(action_idx, observation, dn_rho, sel_rho)
@@ -756,11 +756,8 @@ def predict_observation(model: training.models.Model,
         topo_vect = np.delete(topo_vect, [idx for line in disabled_lines for idx in
                                          (full_line_or_pos_tv[line], full_line_ex_pos_tv[line])])
         # Check and reduce the line endpoint features
-        assert np.isclose(x_or[disabled_lines, :-1], 0).all(), ("All features except the last "
-                                                                "of the disabled origins must be "
-                                                                "zero.")
-        assert np.isclose(x_ex[disabled_lines, :-1], 0).all(), ("All features except the last "
-                                                                "of the disabled extremities must be"
+        assert np.isclose(x_or[disabled_lines, :], 0).all(), ("All features of the disabled origins must be zero.")
+        assert np.isclose(x_ex[disabled_lines, :], 0).all(), ("All features of the disabled extremities must be"
                                                                 " zero.")
         x_or = np.delete(x_or, disabled_lines, axis=0)
         x_ex = np.delete(x_ex, disabled_lines, axis=0)

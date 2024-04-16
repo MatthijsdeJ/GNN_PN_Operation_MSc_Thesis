@@ -17,7 +17,7 @@ import auxiliary.util as util
 from auxiliary.util import NumpyEncoder
 from auxiliary.config import get_config
 from tqdm import tqdm
-from auxiliary.generate_action_space import action_identificator
+from auxiliary.generate_action_space import ActionIdentifier
 import os
 import shutil
 
@@ -157,7 +157,7 @@ class FeatureStatistics:
 
         Parameters
         ----------
-        data : np.array
+        datapoint : np.array
             Dictionary representing the datapoints, containing the features.
         """
         features = [datapoint['gen_features'], datapoint['load_features'],
@@ -242,8 +242,8 @@ def process_raw_data():
 
     # Create an object for caching connectivity matrices
     con_matrix_cache = ConMatrixCache()
-    # Create a dictionary of action_identificators for retrieving Grid2Op actions from action indices
-    action_iders = {}
+    # Create a dictionary of ActionIdentifiers for retrieving Grid2Op actions from action indices
+    action_IDers = {}
     # Create object for tracking the feature statistics
     feature_stats = FeatureStatistics()
 
@@ -270,9 +270,9 @@ def process_raw_data():
             # Load a single file containing raw datapoints
             raw_datapoints = np.load(filepath)
 
-            # If not yet existing, create an action_identificator for this particular line disabled
-            if line_disabled not in action_iders:
-                action_iders[line_disabled] = action_identificator(env, line_disabled)
+            # If not yet existing, create an ActionIdentifier for this particular line disabled
+            if line_disabled not in action_IDers:
+                action_IDers[line_disabled] = ActionIdentifier(env, line_disabled)
 
             # Obtain the reduced env variables for this line disabled
             reduced_env_vars = reduced_env_variables([line_disabled] if line_disabled != -1 else [])
@@ -281,21 +281,26 @@ def process_raw_data():
             for raw_dp in raw_datapoints:
                 # Extract data from raw datapoint, add filepath data
                 dp = extract_raw_dp_data(raw_dp, grid2op_vect_size, env.observation_space.from_vect)
-                dp.update({'line_disabled': line_disabled, 'chronic_id': chronic_id, 'dayscomp': days_completed})
+                dp.update({'line_disabled': line_disabled, 'chronic_id': chronic_id, 'days_comp': days_completed})
 
                 """ Add the full variables """
                 dp['full'] = {
                     'topo_vect': dp['topo_vect'],
                     'or_features': dp['or_features'],
-                    'ex_features': dp['ex_features'],
+                    'ex_features': dp['ex_features']
                 }
+                if line_disabled != -1:
+                    dp['full'].update({
+                        'disabled_or_pos': config['rte_case14_realistic']['line_or_pos_topo_vect'][line_disabled],
+                        'disabled_ex_pos': config['rte_case14_realistic']['line_ex_pos_topo_vect'][line_disabled]
+                    })
                 del dp['topo_vect'], dp['or_features'], dp['ex_features']
                 dp_full = dp['full']
 
                 # Create the set_topo_vect vector
                 if dp['action_index'] != -1:
-                    action_ider = action_iders[line_disabled]
-                    dp_full['set_topo_vect'] = action_ider.get_set_topo_vect(dp['action_index'])
+                    action_IDer = action_IDers[line_disabled]
+                    dp_full['set_topo_vect'] = action_IDer.get_set_topo_vect(dp['action_index'])
                 else:
                     dp_full['set_topo_vect'] = np.zeros_like(dp_full['topo_vect'])
 
@@ -308,21 +313,17 @@ def process_raw_data():
                 # Postconditions on the created topo_vect variables
                 assert len(dp_full['set_topo_vect']) == len(dp_full['topo_vect']) == len(
                     dp_full['change_topo_vect']) == len(dp_full['res_topo_vect']), "Not equal lengths"
-                assert all( [(o in [0, 1, 2]) for o in dp_full['set_topo_vect']]), \
+                assert all([(o in [0, 1, 2]) for o in dp_full['set_topo_vect']]), \
                     "Incorrect element in set_topo_vect"
                 assert all([(o in [-1, 1, 2]) for o in dp_full['topo_vect']]), "Incorrect element in topo_vect"
-                assert all( [(o in [0, 1]) for o in dp_full['change_topo_vect']]), \
+                assert all([(o in [0, 1]) for o in dp_full['change_topo_vect']]), \
                     "Incorrect element in change_topo_vect"
                 assert all([(o in [-1, 1, 2]) for o in dp_full['res_topo_vect']]), "Incorrect element in res_topo_vect"
 
                 """ Add the reduced variables """
                 # Add the filepath and environment data to the datapoint
                 dp['reduced'] = {'sub_info': reduced_env_vars['sub_info'],
-                                 'gen_pos_topo_vect': reduced_env_vars['gen_pos_topo_vect'],
-                                 'load_pos_topo_vect': reduced_env_vars['load_pos_topo_vect'],
-                                 'line_or_pos_topo_vect': reduced_env_vars['line_or_pos_topo_vect'],
-                                 'line_ex_pos_topo_vect': reduced_env_vars['line_ex_pos_topo_vect']}
-                dp_reduced = dp['reduced']
+                                 'pos_topo_vect': reduced_env_vars['pos_topo_vect']}
 
                 # Remove disabled lines in datapoint by reducing variables
                 reduce_variables_datapoint(dp)
@@ -377,7 +378,7 @@ def create_subdirectories():
 
     Raises
     ------
-    AssertationError
+    AssertionError
         Whenever there are files in the existing train/val/test folders which are not .json files.
     """
     config = get_config()
@@ -409,14 +410,14 @@ def get_filepaths(tutor_data_path: str) -> List[Path]:
 
     Returns
     -------
-    List
+    List : List
         List of the paths of the files.
 
     """
     return list(Path(tutor_data_path).rglob('*/*.npy'))
 
 
-def extract_data_from_filepath(relat_fp: PosixPath) \
+def extract_data_from_filepath(relative_fp: PosixPath) \
         -> Tuple[int, float, int, int]:
     """
     Given a relative filepath, extract the information contained in this
@@ -424,7 +425,7 @@ def extract_data_from_filepath(relat_fp: PosixPath) \
 
     Parameters
     ----------
-    relat_fp : PosixPath
+    relative_fp : PosixPath
         The relative filepath.
 
     Returns
@@ -434,12 +435,10 @@ def extract_data_from_filepath(relat_fp: PosixPath) \
         the threshold at which no actions were taken, the id of the chronic,
         and the number of days completed.
     """
-    regex_str = 'records_chronics_lout_(.*)_dnthreshold_(.*)' + \
-                '/records_chronic_(.*)_dayscomp_(.*).npy'
-    line_disabled, dn_threshold, chronic_id, dayscomp = \
-        re.search(regex_str, str(relat_fp)).groups()
-    return int(line_disabled), float(dn_threshold), int(chronic_id), \
-        int(dayscomp)
+    regex_str = 'records_chronics_lout_(.*)_dnthreshold_(.*)/records_chronic_(.*)_dayscomp_(.*).npy'
+    line_disabled, dn_threshold, chronic_id, days_comp = re.search(regex_str, str(relative_fp)).groups()
+
+    return int(line_disabled), float(dn_threshold), int(chronic_id), int(days_comp)
 
 
 def extract_raw_dp_data(ts_vect: np.array, grid2op_vect_len: int, vect2obs_func: Callable) -> dict:
@@ -544,9 +543,12 @@ def extract_or_features(obs_dict: dict) \
     """
     X = np.array(list(obs_dict['lines_or'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
+        thermal_limits = np.array(obs_dict['lines_or']['a']) / np.array(obs_dict['rho'])
+        thermal_limits = np.nan_to_num(thermal_limits)
+        # noinspection PyTypeChecker
         X = np.concatenate((X,
                             np.reshape(np.array(obs_dict['rho']), (-1, 1)),
-                            np.reshape(np.array(obs_dict['lines_or']['a']) / np.array(obs_dict['rho']), (-1, 1))),
+                            np.reshape(thermal_limits, (-1, 1))),
                            axis=1)
     return X
 
@@ -570,9 +572,12 @@ def extract_ex_features(obs_dict: dict) \
     """
     X = np.array(list(obs_dict['lines_ex'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
+        thermal_limits = np.array(obs_dict['lines_ex']['a']) / np.array(obs_dict['rho'])
+        thermal_limits = np.nan_to_num(thermal_limits)
+        # noinspection PyTypeChecker
         X = np.concatenate((X,
                             np.reshape(np.array(obs_dict['rho']), (-1, 1)),
-                            np.reshape(np.array(obs_dict['lines_ex']['a']) / np.array(obs_dict['rho']), (-1, 1))),
+                            np.reshape(thermal_limits, (-1, 1))),
                            axis=1)
     return X
 
@@ -598,20 +603,21 @@ def reduce_variables_datapoint(datapoint: dict):
         dis_line_ex_tv = config['rte_case14_realistic']['line_ex_pos_topo_vect'][datapoint['line_disabled']]
 
         # Check and reduce the line endpoint features
-        assert np.isclose(dp_full['or_features'][line_disabled, :-1], 0).all(), ("All features except the last "
-                                                                                   "of the disabled origin must be "
-                                                                                   "zero.")
-        assert np.isclose(dp_full['ex_features'][line_disabled, :-1], 0).all(), ("All features except the last "
-                                                                                   "of the disabled extremity must be "
-                                                                                   "zero.")
+        assert np.isclose(dp_full['or_features'][line_disabled, :-1], 0).all(), \
+            "All features except the last of the disabled origin must be zero."
+        assert np.isclose(dp_full['ex_features'][line_disabled, :-1], 0).all(), \
+            "All features except the last of the disabled extremity must be zero."
+        # noinspection PyTypeChecker
         dp_reduced['or_features'] = np.delete(dp_full['or_features'], line_disabled, axis=0)
+        # noinspection PyTypeChecker
         dp_reduced['ex_features'] = np.delete(dp_full['ex_features'], line_disabled, axis=0)
         assert dp_reduced['or_features'].shape == dp_reduced['ex_features'].shape, \
-            ("Origin and extremities features should have the same shape.")
+            "Origin and extremities features should have the same shape."
 
         # Check and reduce the topo_vect variable
         assert dp_full['topo_vect'][dis_line_or_tv] == -1, 'Disabled origin should be -1.'
         assert dp_full['topo_vect'][dis_line_ex_tv] == -1, 'Disabled extremity should be -1.'
+        # noinspection PyTypeChecker
         dp_reduced['topo_vect'] = np.delete(dp_full['topo_vect'], (dis_line_or_tv, dis_line_ex_tv))
 
 
@@ -675,13 +681,13 @@ def reduced_env_variables(lines_disabled: list[int]) -> dict:
         line_ex_pos_topo_vect = np.array([i - sum(i > combined_disabled_idxs) for i in line_ex_pos_topo_vect]).flatten()
 
     # Concatenating the pos_topo_vect variables
-    pos_topo_vect = np.argsort(np.concatenate([gen_pos_topo_vect, load_pos_topo_vect, line_or_pos_topo_vect,
-            line_ex_pos_topo_vect]))
+    pos_topo_vect = np.argsort(np.concatenate([gen_pos_topo_vect, load_pos_topo_vect,
+                                               line_or_pos_topo_vect, line_ex_pos_topo_vect]))
 
     # Asserting postconditions
     assert sum(sub_info) == len(pos_topo_vect), "The sub_info and pos_topo_vect imply a different number of objects."
     assert np.all(np.sort(pos_topo_vect) == np.arange(0, len(pos_topo_vect))), ("The elements of pos_topo_vect must "
-                                                                                "map onto the indices of it's range.")
+                                                                                "map onto the indices of its range.")
 
     # Returning the dictionary of variables
     var_dict = {'sub_info': sub_info,

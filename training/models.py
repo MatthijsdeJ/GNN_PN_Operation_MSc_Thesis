@@ -17,7 +17,7 @@ import grid2op
 from abc import ABC, abstractmethod
 
 
-class Model(ABC):
+class Model(ABC, torch.nn.Module):
     """
     Base class for the models.
     """
@@ -37,7 +37,7 @@ class Model(ABC):
         pass
 
 
-class GCN(torch.nn.Module, Model):
+class GCN(Model):
     """
     Graph convolutional network model.
     Consists of: two embedding layers that should embed the different object
@@ -479,7 +479,7 @@ class GCN(torch.nn.Module, Model):
         return MAD
 
 
-class FCNN(torch.nn.Module, Model):
+class FCNN(Model):
     """
     Fully connected neural network. Consists of multiple feedforward layers.
     """

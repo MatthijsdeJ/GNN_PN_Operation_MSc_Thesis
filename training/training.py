@@ -5,11 +5,11 @@ Created on Wed Jan  5 15:47:34 2022
 
 @author: matthijs
 """
-from typing import Tuple
 
-import ipdb
 import torch
 import wandb
+from torch import Tensor
+
 from training.models import Model, GCN, FCNN
 from training.dataloader import DataLoader
 import training.evaluation as metrics
@@ -19,7 +19,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay
 import auxiliary.util as util
-from auxiliary.config import get_config, ModelType, LayerType, LabelWeightsType
+from auxiliary.config import ModelType, LayerType, LabelWeightsType
 import auxiliary.grid2op_util as g2o_util
 from training.postprocessing import ActSpaceCache
 from auxiliary.config import get_config
@@ -64,7 +64,7 @@ class Run:
         feature_statistics_path = processed_data_path + 'auxiliary_data_objects/feature_stats.json'
 
         # Specify device to use
-        self.device = 'cpu'  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cpu')  # torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # Init model
         if train_config['hyperparams']['model_type'] == ModelType.GCN:
@@ -104,15 +104,13 @@ class Run:
                                    feature_statistics_path,
                                    device=self.device,
                                    model_type=model_type,
-                                   network_type=network_type,
-                                   train=False)
+                                   network_type=network_type)
         self.val_dl = DataLoader(processed_data_path + '/val',
                                  matrix_cache_path,
                                  feature_statistics_path,
                                  device=self.device,
                                  model_type=model_type,
-                                 network_type=network_type,
-                                 train=False)
+                                 network_type=network_type)
 
         # Initialize metrics objects
         IA = metrics.IncrementalAverage
@@ -127,14 +125,10 @@ class Run:
             'accuracy_predicted_substation':
                 (metrics.accuracy_predicted_substation, IA())
         }
-        train_metrics_dict = dict([('train_' + k, v) for
-                                   k, v in metrics_dict.items()])
-        val_metrics_dict = dict([('val_' + k, v) for
-                                 k, v in metrics_dict.items()])
-        val_metrics_dict['val_macro_accuracy_valid'] = \
-            (metrics.macro_accuracy_valid, IA())
-        val_metrics_dict['val_micro_accuracy_valid'] = \
-            (metrics.micro_accuracy_valid, IA())
+        train_metrics_dict = dict([('train_' + k, v) for k, v in metrics_dict.items()])
+        val_metrics_dict = dict([('val_' + k, v) for k, v in metrics_dict.items()])
+        val_metrics_dict['val_macro_accuracy_valid'] = (metrics.macro_accuracy_valid, IA())
+        val_metrics_dict['val_micro_accuracy_valid'] = (metrics.micro_accuracy_valid, IA())
         IAM = metrics.IncrementalAverageMetrics
         self.train_metrics = IAM(train_metrics_dict)
         self.val_metrics = IAM(val_metrics_dict)
@@ -291,21 +285,35 @@ def predict_datapoint(dp: dict, model: Model) -> torch.Tensor:
         # Extract features
         X_gen = dp['gen_features']
         X_load = dp['load_features']
-        X_or = dp['or_features']
-        X_ex = dp['ex_features']
+        X_or = dp['reduced_or_features']
+        X_ex = dp['reduced_ex_features']
 
         # Extract the position topology vector, which relates the
         # objects ordered by type to their position in the topology vector
-        object_ptv = dp['object_ptv']
+        pos_topo_vect = dp['reduced_pos_topo_vect']
 
         # Extract the edges
         E = dp['edges']
 
         # Pass through the model
-        P = model(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape((-1))
+        P = model(X_gen, X_load, X_or, X_ex, E, pos_topo_vect).reshape((-1))
+
+        # Unreduce P to full length
+        if dp['line_disabled'] != -1:
+            min_disabled_endpoint_pos = min(dp['disabled_or_pos'], dp['disabled_ex_pos'])
+            max_disabled_endpoint_pos = max(dp['disabled_or_pos'], dp['disabled_ex_pos'])
+            P = torch.cat((P[:min_disabled_endpoint_pos], torch.tensor([0]),
+                           P[min_disabled_endpoint_pos:max_disabled_endpoint_pos-1], torch.tensor([0]),
+                           P[max_disabled_endpoint_pos-1:]))
+            assert torch.count_nonzero(P[(min_disabled_endpoint_pos, max_disabled_endpoint_pos),]) == 0, \
+                ("Disabled line endpoints must be zero in the topo_vect after unreducing.")
+
     elif type(model) is FCNN:
         # Pass through the model
         P = model(dp['features']).reshape((-1))
+    else:
+        raise ValueError('Invalid model type.')
+
     return P
 
 
@@ -314,7 +322,7 @@ def process_datapoint(dp: dict,
                       as_cache: ActSpaceCache,
                       running_metrics: metrics.IncrementalAverageMetrics,
                       device: torch.device = 'cpu') \
-        -> Tuple[torch.Tensor, torch.tensor, int, torch.tensor, int, torch.Tensor]:
+        -> tuple[Tensor, Tensor, Tensor, Tensor, int | None, Tensor, int | None, Tensor]:
     """
     Process a single validation datapoint. This involves:
         (1) Making a model prediction
@@ -358,20 +366,23 @@ def process_datapoint(dp: dict,
         nearness to the prediction actions. Rows indicate actions.
         Should have dimensions (n_actions, n_objects).
     """
-    train_config = get_config()['training']
+    config = get_config()
+    train_config = config['training']
 
     # Make model prediction
     P = predict_datapoint(dp, model)
+    assert len(P) == config['rte_case14_realistic']['n_objects'], "P has the wrong length; should be full, not reduced."
 
     # Extract the label, apply label smoothing
-    Y = dp['change_topo_vect']
+    Y = dp['full_change_topo_vect']
     label_smth_alpha = train_config['hyperparams']['label_smoothing_alpha']
-    Y_smth = ((1 - label_smth_alpha) * dp['change_topo_vect'] +
+    Y_smth = ((1 - label_smth_alpha) * dp['full_change_topo_vect'] +
               label_smth_alpha * 0.5 * torch.ones_like(Y, device=device))
 
     # Compute the weights for the loss
-    Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, dp['sub_info'])
-    P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, dp['sub_info'],
+    sub_info = config['rte_case14_realistic']['sub_info']
+    Y_sub_mask, Y_sub_idx = g2o_util.select_single_substation_from_topovect(Y, sub_info)
+    P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P, sub_info,
                                                                             f=lambda x:
                                                                             torch.sum(torch.clamp(x - 0.5, min=0)))
     weights = get_label_weights(Y_sub_mask, P_sub_mask)
@@ -383,10 +394,7 @@ def process_datapoint(dp: dict,
     one_sub_P = torch.zeros_like(P)
     one_sub_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
     get_cabnp = as_cache.get_change_actspace_by_nearness_pred
-    nearest_valid_actions = get_cabnp(dp['line_disabled'],
-                                      dp['topo_vect'],
-                                      P,
-                                      device)
+    nearest_valid_actions = get_cabnp(dp['line_disabled'], dp['full_topo_vect'], P, device)
     nearest_valid_P = nearest_valid_actions[0]
 
     # Update metrics, if any
@@ -459,10 +467,14 @@ def evaluate_dataset(model: Model,
         for dp in dataloader:
             l, Y, P, nearest_valid_P, Y_sub_idx, Y_sub_mask, P_subchanged_idx, \
                 nearest_valid_actions = process_datapoint(dp, model, as_cache, running_metrics)
+            sub_Y = Y[Y_sub_mask.bool()] if Y_sub_idx is not None else torch.tensor([])
+            topo_vect = dp['full_topo_vect']
 
             if not train_config['settings']['advanced_val_analysis']:
                 continue
 
+            # TODO: remove?
+            '''
             # Create 'expanded' version of vectors - expanded vertors have the size of the topovect without. This
             # line disabled. This is necessary for comparisons of topologies with different lines disabled.
             if dp['line_disabled'] == -1:
@@ -484,23 +496,24 @@ def evaluate_dataset(model: Model,
                                               ins, nearest_valid_P[big_idx:]], 0)
                 expanded_topo_vect = torch.cat([dp['topo_vect'][:smll_idx], ins, dp['topo_vect'][smll_idx:big_idx],
                                                 ins, dp['topo_vect'][big_idx:]], 0)
-
+                
                 if Y_sub_idx is not None:
                     expanded_sub_Y = g2o_util.tv_groupby_subst(expanded_Y,
                                                                config['rte_case14_realistic']['sub_info'])[
                         Y_sub_idx]
                 else:
                     expanded_sub_Y = torch.tensor([])
+                '''
 
             # Increment the counters for counting the number of (in)correct classifications of each label
             # and topology vector
             if torch.equal(nearest_valid_P, torch.round(Y)):
-                correct_counter_label[(Y_sub_idx, tuple(expanded_sub_Y.tolist()))] += 1
-                correct_counter_topovect[(Y_sub_idx, tuple(expanded_topo_vect.tolist()))] += 1
+                correct_counter_label[(Y_sub_idx, tuple(sub_Y.tolist()))] += 1
+                correct_counter_topovect[(Y_sub_idx, tuple(topo_vect.tolist()))] += 1
                 correct_counter_lineout[dp['line_disabled']] += 1
             else:
-                wrong_counter_label[(Y_sub_idx, tuple(expanded_sub_Y.tolist()))] += 1
-                wrong_counter_topovect[(Y_sub_idx, tuple(expanded_topo_vect.tolist()))] += 1
+                wrong_counter_label[(Y_sub_idx, tuple(sub_Y.tolist()))] += 1
+                wrong_counter_topovect[(Y_sub_idx, tuple(topo_vect.tolist()))] += 1
                 wrong_counter_lineout[dp['line_disabled']] += 1
 
             # Update lists for tracking the predicted/true substations
@@ -509,13 +522,13 @@ def evaluate_dataset(model: Model,
 
             # Update distributions for the true/predicted/postprocessed-predicted objects
             if Y_obs is None:
-                Y_obs = expanded_Y.clip(0)
-                P_obs = 1 * (expanded_P > 0.5)
-                nearest_valid_P_obs = expanded_valid_P.clip(0)
+                Y_obs = Y.clip(0)
+                P_obs = 1 * (P > 0.5)
+                nearest_valid_P_obs = nearest_valid_P.clip(0)
             else:
-                Y_obs += expanded_Y.clip(0)
-                P_obs += expanded_P > 0.5
-                nearest_valid_P_obs += expanded_valid_P.clip(0)
+                Y_obs += Y.clip(0)
+                P_obs += P > 0.5
+                nearest_valid_P_obs += nearest_valid_P.clip(0)
 
             # Update lists for tracking the ranks of the true actions in
             # the list of valid actions sorted by nearness to the predicted
@@ -525,25 +538,25 @@ def evaluate_dataset(model: Model,
 
             # For the first 100 datapoints, compute the mads
             i += 1
-            if i < 100 and train_config['hyperparams']['model_type'] == ModelType.GCN:
+            if i <= 100 and train_config['hyperparams']['model_type'] == ModelType.GCN:
                 # Extract features
                 X_gen = dp['gen_features']
                 X_load = dp['load_features']
-                X_or = dp['or_features']
-                X_ex = dp['ex_features']
+                X_or = dp['reduced_or_features']
+                X_ex = dp['reduced_ex_features']
 
                 # Extract the position topology vector, which relates the
                 # objects ordered by type to their position in the topology vector
-                object_ptv = dp['object_ptv']
+                pos_topo_vect = dp['reduced_pos_topo_vect']
 
                 # Extract the edges
                 E = dp['edges']
 
                 # Pass through the model
                 if MAD_scores is None:
-                    MAD_scores = model.get_MADs(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape(1, -1)
+                    MAD_scores = model.get_MADs(X_gen, X_load, X_or, X_ex, E, pos_topo_vect).reshape(1, -1)
                 else:
-                    MAD = model.get_MADs(X_gen, X_load, X_or, X_ex, E, object_ptv).reshape(1, -1)
+                    MAD = model.get_MADs(X_gen, X_load, X_or, X_ex, E, pos_topo_vect).reshape(1, -1)
                     MAD_scores = np.concatenate((MAD_scores, MAD), axis=0)
 
             # Stop evaluating validation datapoints

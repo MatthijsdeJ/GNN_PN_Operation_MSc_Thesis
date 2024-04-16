@@ -138,7 +138,7 @@ def connectivity_matrices_to_hetero_connectivity_matrices(gen_pos_topo_vect: np.
                                                           line_or_pos_topo_vect: np.array,
                                                           line_ex_pos_topo_vect: np.array,
                                                           edges_dict: Dict[str, Tuple[List, List]]) \
-        -> List[Tuple[int, int]]:
+        -> Dict[Tuple[str, str, str], List[Tuple[int, int]]]:
     """
     Given a dictionary of edge types and their corresponding edges, split these edges into edges based on
     the edge type and the endpoint types. The point of this class is to store the data in such a way that makes

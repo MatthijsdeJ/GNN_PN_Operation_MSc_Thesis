@@ -431,7 +431,7 @@ def create_action_space(env,substation_ids=list(range(14)), disable_line=-1):
 
     return all_actions
 
-class action_identificator():
+class ActionIdentifier():
     '''
     Class for identifying action IDs as originating from Medha's model and
     retrieving the corresponding Grid2Op actions. The actions are limited
