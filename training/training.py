@@ -216,6 +216,7 @@ class Run:
                             best_score = val_macro_accuracy_valid
                             stop_countdown = self.train_config['hyperparams']['early_stopping_patience']
                             torch.save(self.model.state_dict(), "models/" + run.name)
+                            run.log({'best_val_macro_accuracy_valid': best_score}, step=step)
                         else:
                             stop_countdown -= 1
                         if stop_countdown < 1:
