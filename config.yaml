@@ -58,7 +58,7 @@ training:
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
     weight_init_std: 3
     weight_decay: 0
-    early_stopping_patience: 20 #stop training when max. val. macro accuracy
+    early_stopping_patience: 50 #stop training when max. val. macro accuracy
     #valid hasn't improved
     very_early_filter_step: 300000
     very_early_filter_threshold: 0.4
