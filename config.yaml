@@ -28,6 +28,7 @@ rte_case14_realistic:
   thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,381,380,760,380,760,380,380,380,2000,2000]
   ts_in_day: 288 #Number of timesteps in a grid2op day
   n_subs: 14
+  n_objects: 56
   sub_info: [3, 6, 4, 6, 5, 6, 3, 2, 5, 3, 3, 3, 4, 3]
   gen_pos_topo_vect: [ 7, 11, 28, 34,  2]
   load_pos_topo_vect: [ 8, 12, 18, 23, 29, 39, 42, 45, 48, 52, 55]
@@ -43,8 +44,8 @@ data_processing:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 20000 #How often to evaluate the validation set
-    dp_per_val_log: 5000 # How many datapoints to use per val logging
+    val_log_freq: 50000 #How often to evaluate the validation set
+    dp_per_val_log: 20000 # How many datapoints to use per val logging
     advanced_val_analysis: true
     line_outages_considered: [-1, 0, 1, 2, 3, 4, 5, 6, 12]
   hyperparams:
@@ -57,8 +58,10 @@ training:
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
     weight_init_std: 3
     weight_decay: 0
-    early_stopping_patience: 50 #stop training when max. val. macro accuracy
+    early_stopping_patience: 20 #stop training when max. val. macro accuracy
     #valid hasn't improved
+    very_early_filter_step: 200000
+    very_early_filter_threshold: 0.4
     label_weights:
       type: Y_AND_P
       non_masked_weight: 0.1
