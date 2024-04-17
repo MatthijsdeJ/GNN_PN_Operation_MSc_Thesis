@@ -13,7 +13,6 @@ from typing import Dict, List, Optional
 from auxiliary.config import NetworkType, AggrType, LayerType
 from typing import Sequence
 import numpy as np
-import grid2op
 from abc import ABC, abstractmethod
 
 
@@ -573,19 +572,3 @@ class FCNN(Model):
                     m.bias.data.fill_(0)
 
         self.apply(layer_weights_normal)
-
-    def predict_observation(self, obs: grid2op.Observation.CompleteObservation) -> torch.Tensor:
-        """
-        Make a prediction based on Grid2Op observation.
-
-        Parameters
-        ----------
-        obs : grid2op.Observation.CompleteObservation
-            The grid2op observation.
-
-        Returns
-        -------
-        P : float
-            The prediction.
-        """
-        pass
