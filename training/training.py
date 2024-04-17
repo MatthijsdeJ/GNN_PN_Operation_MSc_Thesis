@@ -221,6 +221,13 @@ class Run:
                         if stop_countdown < 1:
                             quit()
 
+                        # Check the very early stopping filter
+                        very_early_filter_step = self.train_config['hyperparams']['very_early_filter_step']
+                        very_early_filter_threshold = self.train_config['hyperparams']['very_early_filter_threshold']
+                        if very_early_filter_step <= step < very_early_filter_step + val_log_freq:
+                            if best_score < very_early_filter_threshold:
+                                quit()
+
                         self.val_metrics.reset()
 
                     step += 1
