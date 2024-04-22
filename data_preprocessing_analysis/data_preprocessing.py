@@ -572,6 +572,7 @@ def extract_ex_features(obs_dict: dict) \
     """
     X = np.array(list(obs_dict['lines_ex'].values())).T
     with np.errstate(divide='ignore', invalid='ignore'):
+        # TODO: investigate why lines_or and lines_ex are different
         thermal_limits = np.array(obs_dict['lines_ex']['a']) / np.array(obs_dict['rho'])
         thermal_limits = np.nan_to_num(thermal_limits)
         # noinspection PyTypeChecker
@@ -621,7 +622,7 @@ def reduce_variables_datapoint(datapoint: dict):
         dp_reduced['topo_vect'] = np.delete(dp_full['topo_vect'], (dis_line_or_tv, dis_line_ex_tv))
 
 
-def reduced_env_variables(lines_disabled: list[int]) -> dict:
+def reduced_env_variables(lines_disabled: Sequence[int]) -> dict:
     """
     Returns Grid2Op variables that reflect completely removing the disables lines (given by 'lines_disabled') from the
     environment. This consists of altering the 'sub_info' and '[...]_pos_topo_vect' variables. If 'lines_disabled' is

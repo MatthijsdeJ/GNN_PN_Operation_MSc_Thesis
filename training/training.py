@@ -604,10 +604,8 @@ def evaluate_dataset(model: Model,
 
         # Logging label counters as stacked histogram
         comb_counter_mc = (correct_counter_label + wrong_counter_label).most_common()
-        correct_indices = util.flatten([correct_counter_label[a] * [i] for i, (a, _)
-                                        in enumerate(comb_counter_mc)])
-        wrong_indices = util.flatten([wrong_counter_label[a] * [i] for i, (a, _)
-                                      in enumerate(comb_counter_mc)])
+        correct_indices = util.flatten([correct_counter_label[a] * [i] for i, (a, _) in enumerate(comb_counter_mc)])
+        wrong_indices = util.flatten([wrong_counter_label[a] * [i] for i, (a, _) in enumerate(comb_counter_mc)])
         accuracy_per_label_figure, ax = plt.subplots()
         n_bins = max(correct_indices + wrong_indices) + 1
         ax.hist([correct_indices, wrong_indices], color=['lime', 'red'], bins=n_bins, stacked=True)

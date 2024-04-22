@@ -40,8 +40,7 @@ class ActSpaceCache:
 
         self.set_act_space_per_lo = {}
         for lo in line_outages_considered:
-            self.set_act_space_per_lo[lo] = torch.tensor(
-                [a._set_topo_vect for a in get_env_actions(env, lo)])
+            self.set_act_space_per_lo[lo] = torch.tensor([a._set_topo_vect for a in get_env_actions(env, lo)])
 
             if lo != -1:
                 if reduce:
@@ -89,10 +88,11 @@ class ActSpaceCache:
         set_act_space = self.set_act_space_per_lo[line_disabled].to(device)
 
         # Compute the 'change' action space
+        topo_vect = topo_vect.reshape((1, -1))
         topo_vect_rpt = topo_vect.repeat(set_act_space.shape[0], 1)
         change_act_space = (set_act_space != 0) * (set_act_space != topo_vect_rpt)
 
-        # Remove all do-nothing actions
+        # Remove all do-nothing action
         change_act_space = change_act_space[change_act_space.sum(dim=1) != 0]
 
         # Add back a single do-nothing action
