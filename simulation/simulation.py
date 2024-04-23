@@ -45,7 +45,7 @@ def simulate():
 
     # Specify scenarios
     if partition == 'train':
-        scenarios = np.load(config['paths']['data_split'] + 'train_scenarios.py')
+        scenarios = np.load(config['paths']['data_split'] + 'train_scenarios.npy')
     elif partition == 'val':
         scenarios = np.load(config['paths']['data_split'] + 'val_scenarios.npy')
     elif partition == 'test':
@@ -109,6 +109,10 @@ def simulate():
                 action, datapoint = strategy.select_action(obs)
                 action_duration = time.thread_time_ns() / 1e6 - before_action_time
 
+                # Assert not more than one substation is changed
+                assert (action._sub_impacted is None) or (sum(action._sub_impacted) < 2), ("Action should only impact"
+                                                                                           " a single substation.")
+
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
                 previous_topo_vect = obs.topo_vect
@@ -116,16 +120,17 @@ def simulate():
 
                 # Potentially log action information
                 if previous_max_rho > config['simulation']['activity_threshold']:
-                    mask, sub_id = select_single_substation_from_topovect(torch.tensor(action.set_bus),
+                    topo_vect_diff = 1 - np.equal(previous_topo_vect, obs.topo_vect)
+                    mask, sub_id = select_single_substation_from_topovect(torch.tensor(topo_vect_diff),
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
-                                                                          not any(x) or
-                                                                          all(x.numpy() == previous_topo_vect))
+                                                                          (not any(x)) or all(x)
+                                                                          )
                     log_and_print(f"{env.nb_time_step}: Action selected. "
                                   f"Old max rho: {previous_max_rho:.4f}, "
                                   f"new max rho: {obs.rho.max():.4f}, "
                                   f"substation: {sub_id}, "
-                                  f"set_bus: {list(action.set_bus[mask == 1])}, "
+                                  f"configuration: {list(obs.topo_vect[mask == 1])}, "
                                   f"action duration in ms: {int(action_duration)}.")
 
                 # Save action data

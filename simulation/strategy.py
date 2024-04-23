@@ -9,7 +9,8 @@ import warnings
 
 from auxiliary.config import get_config, NetworkType
 import training.models
-from training.models import Model
+from training import postprocessing
+from training.models import Model, FCNN, GCN
 from data_preprocessing_analysis.data_preprocessing import reduced_env_variables, extract_gen_features, \
     extract_load_features, extract_or_features, extract_ex_features
 
@@ -441,6 +442,11 @@ class NaiveStrategy(AgentStrategy):
         self.action_space = action_space
         self.dn_threshold = dn_threshold
 
+        # Initialize action space cache used for
+        config = get_config()
+        lout_considered = config['training']['settings']['line_outages_considered']
+        self.as_cache = postprocessing.ActSpaceCache(line_outages_considered=lout_considered)
+
         if not suppress_warning:
             warnings.warn("\nSaving actions as datapoints is not supported by class NaiveStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
@@ -463,9 +469,10 @@ class NaiveStrategy(AgentStrategy):
             An optional dictionary which contains information about the action. Not provided by this subclass.
         """
         if observation.rho.max() > self.dn_threshold:
-            set_action = predict_observation(self.model, observation, self.feature_statistics)
+            P = ML_predict_obs(self.model, observation, self.feature_statistics, self.as_cache)
+            P = P.numpy().astype(int)
 
-            action = self.action_space({'set_bus': set_action})
+            action = self.action_space({'change_bus': np.where(P)[0]})
         else:
             action = self.action_space({})
 
@@ -509,6 +516,11 @@ class VerifyStrategy(AgentStrategy):
         self.dn_threshold = dn_threshold
         self.reject_action_threshold = reject_action_threshold
 
+        # Initialize action space cache used for
+        config = get_config()
+        lout_considered = config['training']['settings']['line_outages_considered']
+        self.as_cache = postprocessing.ActSpaceCache(line_outages_considered=lout_considered)
+
         if not suppress_warning:
             warnings.warn("\nSaving actions as datapoints is not supported by class VerifyStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
@@ -531,16 +543,10 @@ class VerifyStrategy(AgentStrategy):
             An optional dictionary which contains information about the action. Not provided by this subclass.
         """
         if observation.rho.max() > self.dn_threshold:
-            P = torch.flatten(self.model.predict_observation(observation, self.feature_statistics)).detach()
-            P_sub_mask, _ = g2o_util.select_single_substation_from_topovect(P,
-                                                                            observation.sub_info,
-                                                                            f=lambda x: torch.sum(torch.clamp(x - 0.5,
-                                                                                                              min=0)))
-            P = np.array([1 if (m and p > 0.5) else 0 for m, p in zip(P_sub_mask, P)])
-            set_action = 1 + (observation.topo_vect - 1 + P) % 2
-            # TODO: Test with disabled lines
+            P = ML_predict_obs(self.model, observation, self.feature_statistics, self.as_cache)
+            P = P.numpy().astype(int)
 
-            action = self.action_space({'set_bus': set_action})
+            action = self.action_space({'change_bus': np.where(P)[0]})
 
             # Verify the action; if failed, use a do_nothing action
             simulation_max_rho = self.get_max_rho_simulated(observation, action)
@@ -655,8 +661,6 @@ class VerifyNMinusOneHybridStrategy(AgentStrategy):
             The machine learning model that predicts actions.
         feature_statistics : dict
             Dictionary with information (mean, std) per object type used to normalize features.
-        action_space : grid2op.Action.ActionSpace
-            The action space of the environment in which the agent operates.
         dn_threshold : float
             The threshold below which do-nothing actions are always selected and no datapoints are returned.
         reject_action_threshold : float
@@ -716,96 +720,232 @@ class VerifyNMinusOneHybridStrategy(AgentStrategy):
             return action, None
 
 
-def predict_observation(model: training.models.Model,
-                        obs: grid2op.Observation.CompleteObservation,
-                        feature_statistics: dict) -> grid2op.Action.BaseAction:
-    # Initialize variables
-    config = get_config()
-    network_type = config['training']['GCN']['hyperparams']['network_type']
+def ML_predict_obs(model: training.models.Model,
+                   obs: grid2op.Observation.CompleteObservation,
+                   fstats: dict,
+                   as_cache: postprocessing.ActSpaceCache) -> \
+        torch.Tensor:
+    """
+    Make a model prediction from an observation.
 
+    Parameters
+    ----------
+    model : training.models.Model
+        The model to predict with.
+    obs : grid2op.Observation.CompleteObservation
+        The observation to predict from.
+    fstats : dict
+        The feature statistics used to normalize the environment features.
+    as_cache : postprocessing.ActSpaceCache
+        The action space cache, which postprocesses the prediction so that it is a valid action.
+
+    Returns
+    -------
+    torch.Tensor
+        The postprocessed prediction.
+    """
     obs_dict = obs.to_dict()
+    device = 'cpu'
 
-    # Finding disabled lines
-    disabled_lines = np.where(~obs.line_status)[0]
-
-    # Extract gen, load features
-    x_gen = torch.tensor(extract_gen_features(obs_dict))
-    x_load = torch.tensor(extract_load_features(obs_dict))
-
-    # Obtain the reduced env variables for this line disabled
-    env_var_dict = reduced_env_variables(disabled_lines)
-    line_or_pos_topo_vect = env_var_dict['line_or_pos_topo_vect']
-    line_ex_pos_topo_vect = env_var_dict['line_ex_pos_topo_vect']
-    object_ptv = env_var_dict['pos_topo_vect']
-    sub_info = env_var_dict['sub_info']
-
-    # Extract full origin/extremity features and topo_vect
-    x_or = extract_or_features(obs_dict)
-    x_ex = extract_ex_features(obs_dict)
+    # Extract and normalize gen, load, or, ex features and topo_vect
+    gen_features = extract_gen_features(obs_dict)
+    norm_gen_features = (gen_features - fstats['gen']['mean']) / fstats['gen']['std']
+    load_features = extract_load_features(obs_dict)
+    norm_load_features = (load_features - fstats['load']['mean']) / fstats['load']['std']
+    or_features = extract_or_features(obs_dict)
+    norm_or_features = (or_features - fstats['line']['mean']) / fstats['line']['std']
+    ex_features = extract_ex_features(obs_dict)
+    norm_ex_features = (ex_features - fstats['line']['mean']) / fstats['line']['std']
     topo_vect = obs.topo_vect
 
-    # Reduce origin/extremity features and topo_vect if there are any disabled lines
+    # Make a prediction with the model
+    if type(model) is FCNN:
+        P = _predict_FCNN(model, norm_gen_features, norm_load_features, norm_or_features, norm_ex_features,
+                          topo_vect)
+    elif type(model) is GCN:
+        P = _predict_GCN(model, obs, norm_gen_features, norm_load_features, norm_or_features, norm_ex_features,
+                         topo_vect)
+    else:
+        raise TypeError("Model had invalid type.")
+
+    # Match prediction to nearest valid action or the single affected subtation
+    disabled_lines = np.where(~obs.line_status)[0]
+    if len(disabled_lines) > 1 or (len(disabled_lines) == 1
+                                   and disabled_lines[0] not in as_cache.set_act_space_per_lo.keys()):
+        # Select a single substation
+        P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P,
+                                                                                obs.sub_info,
+                                                                                f=lambda x:
+                                                                                torch.sum(torch.clamp(x - 0.5, min=0)))
+        postprocessed_P = torch.zeros_like(P)
+        postprocessed_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
+    else:
+        # Match to the closest action
+        get_cabnp = as_cache.get_change_actspace_by_nearness_pred
+        postprocessed_P = get_cabnp(-1 if len(disabled_lines) == 0 else disabled_lines[0],
+                                    torch.tensor(obs.topo_vect, device=device), P, device)[0]
+
+    return postprocessed_P
+
+
+def _predict_FCNN(model: FCNN,
+                  norm_gen_features: np.ndarray,
+                  norm_load_features: np.ndarray,
+                  norm_or_features: np.ndarray,
+                  norm_ex_features: np.ndarray,
+                  topo_vect: np.ndarray):
+    """
+    Makes a prediction with a FCNN model.
+
+    Parameters
+    ----------
+    model : FCNN
+        The FCNN model.
+    norm_gen_features : np.ndarray
+        The normalized generator features.
+    norm_load_features : np.ndarray
+        The normalized load features.
+    norm_or_features : np.ndarray
+        The normalized origin features.
+    norm_ex_features : np.ndarray
+        The normalized extremity features.
+    topo_vect : np.ndarray
+        The topology vector.
+
+    Returns
+    -------
+    torch.Tensor
+        The prediction.
+    """
+    device = 'cpu'
+    # Combine gen, load, or, ex features and topo_vect into a single vector
+    features = torch.tensor(np.concatenate((norm_gen_features.flatten(),
+                                            norm_load_features.flatten(),
+                                            norm_or_features.flatten(),
+                                            norm_ex_features.flatten(),
+                                            topo_vect)),
+                            device=device, dtype=torch.float)
+
+    # Return prediction
+    P = model(features).reshape((-1))
+
+    return P
+
+
+def _predict_GCN(model: GCN,
+                 obs: grid2op.Observation.CompleteObservation,
+                 norm_gen_features: np.ndarray,
+                 norm_load_features: np.ndarray,
+                 norm_or_features: np.ndarray,
+                 norm_ex_features: np.ndarray,
+                 topo_vect: np.ndarray):
+    """
+    Makes a prediction with a GCN model.
+
+    Parameters
+    ----------
+    model : GCN
+        The GCN model.
+    obs : grid2op.Observation.CompleteObservation
+        The observation to predict from.
+    norm_gen_features : np.ndarray
+        The normalized generator features.
+    norm_load_features : np.ndarray
+        The normalized load features.
+    norm_or_features : np.ndarray
+        The normalized origin features.
+    norm_ex_features : np.ndarray
+        The normalized extremity features.
+    topo_vect : np.ndarray
+        The topology vector.
+
+    Returns
+    -------
+    torch.Tensor
+        The prediction.
+    """
+    config = get_config()
+    disabled_lines = np.where(~obs.line_status)[0]
+    device = 'cpu'
+
+    # Obtain the reduced env variables for this line disabled
+    # TODO: this might be too slow, and should perhaps be cached
+    reduced_env_vars = reduced_env_variables(disabled_lines)
+
+    # Concatenating the pos_topo_vect variables
+    reduced_pos_topo_vect = np.argsort(np.concatenate([obs.gen_pos_topo_vect,
+                                                       obs.load_pos_topo_vect,
+                                                       reduced_env_vars['line_or_pos_topo_vect'],
+                                                       reduced_env_vars['line_ex_pos_topo_vect']]))
+
     if len(disabled_lines) > 0:
-        config = get_config()
-        full_line_or_pos_tv = np.array(config['rte_case14_realistic']['line_or_pos_topo_vect'])
-        full_line_ex_pos_tv = np.array(config['rte_case14_realistic']['line_ex_pos_topo_vect'])
+        dis_lines_or_tv = [config['rte_case14_realistic']['line_or_pos_topo_vect'][line] for line in disabled_lines]
+        dis_lines_ex_tv = [config['rte_case14_realistic']['line_ex_pos_topo_vect'][line] for line in disabled_lines]
+        dis_endpoint_tv = dis_lines_or_tv + dis_lines_ex_tv
+
+        # Check and reduce the line endpoint features
+        assert np.isclose(norm_or_features[disabled_lines, :], 0).all(), \
+            "All features except the last of the disabled origin must be zero."
+        assert np.isclose(norm_ex_features[disabled_lines, :], 0).all(), \
+            "All features except the last of the disabled extremity must be zero."
+        # noinspection PyTypeChecker
+        reduced_or_features = np.delete(norm_or_features, disabled_lines, axis=0)
+        # noinspection PyTypeChecker
+        reduced_ex_features = np.delete(norm_ex_features, disabled_lines, axis=0)
+        assert norm_or_features.shape == norm_ex_features.shape, ("Origin and extremities features should have the "
+                                                                  "same shape.")
 
         # Check and reduce the topo_vect variable
-        assert (topo_vect[full_line_or_pos_tv[disabled_lines]] == -1).all(), 'Disabled origins should be -1.'
-        assert (topo_vect[full_line_ex_pos_tv[disabled_lines]] == -1).all(), 'Disabled extremities should be -1.'
-        topo_vect = np.delete(topo_vect, [idx for line in disabled_lines for idx in
-                                         (full_line_or_pos_tv[line], full_line_ex_pos_tv[line])])
-        # Check and reduce the line endpoint features
-        assert np.isclose(x_or[disabled_lines, :], 0).all(), ("All features of the disabled origins must be zero.")
-        assert np.isclose(x_ex[disabled_lines, :], 0).all(), ("All features of the disabled extremities must be"
-                                                                " zero.")
-        x_or = np.delete(x_or, disabled_lines, axis=0)
-        x_ex = np.delete(x_ex, disabled_lines, axis=0)
-        assert x_or.shape == x_ex.shape, "Origin and extremities' features should have the same shape."
+        assert all(topo_vect[dis_lines_or_tv] == -1), 'Disabled origins and extremities should be -1.'
+        # noinspection PyTypeChecker
+        reduced_topo_vect = np.delete(topo_vect, dis_endpoint_tv)
+    else:
+        reduced_or_features = norm_or_features
+        reduced_ex_features = norm_ex_features
+        reduced_topo_vect = obs.topo_vect
 
-    # Convert origin/extremity features to torch.tensor
-    x_or, x_ex = torch.tensor(x_or), torch.tensor(x_ex)
+    same_busbar_e, other_busbar_e, line_e = g2o_util.connectivity_matrices(reduced_env_vars['sub_info'],
+                                                                           reduced_topo_vect,
+                                                                           reduced_env_vars['line_or_pos_topo_vect'],
+                                                                           reduced_env_vars['line_ex_pos_topo_vect'])
 
-    # Extract connectivity matrix
-    same_busbar_e, other_busbar_e, line_e = g2o_util.connectivity_matrices(sub_info.astype(int),
-                                                                           topo_vect.astype(int),
-                                                                           line_or_pos_topo_vect.astype(int),
-                                                                           line_ex_pos_topo_vect.astype(int))
+    if model.network_type == NetworkType.HOMO:
+        # noinspection PyTypeChecker
+        edges = torch.tensor(np.append(same_busbar_e, line_e, axis=1), device=device, dtype=torch.long)
+    elif model.network_type == NetworkType.HETERO:
+        edges = {('object', 'line', 'object'): torch.tensor(line_e, device=device, dtype=torch.long),
+                 ('object', 'same_busbar', 'object'):
+                     torch.tensor(same_busbar_e, device=device, dtype=torch.long),
+                 ('object', 'other_busbar', 'object'):
+                     torch.tensor(other_busbar_e, device=device, dtype=torch.long)}
+    else:
+        raise ValueError('Invalid network_type value.')
 
-    # Normalize features
-    x_gen = ((x_gen - torch.tensor(feature_statistics['gen']['mean'])) / torch.tensor(feature_statistics['gen']['std']))
-    x_load = ((x_load - torch.tensor(feature_statistics['load']['mean'])) /
-              torch.tensor(feature_statistics['load']['std']))
-    x_or = ((x_or - torch.tensor(feature_statistics['line']['mean'])) / torch.tensor(feature_statistics['line']['std']))
-    x_ex = ((x_ex - torch.tensor(feature_statistics['line']['mean'])) / torch.tensor(feature_statistics['line']['std']))
+    norm_gen_features = torch.tensor(norm_gen_features, dtype=torch.float)
+    norm_load_features = torch.tensor(norm_load_features, dtype=torch.float)
+    reduced_or_features = torch.tensor(reduced_or_features, dtype=torch.float)
+    reduced_ex_features = torch.tensor(reduced_ex_features, dtype=torch.float)
 
-    # Creating edge_index
-    if network_type == NetworkType.HOMO:
-        edge_index = torch.tensor(np.append(same_busbar_e, line_e, axis=1), dtype=torch.long)
-    elif network_type == NetworkType.HETERO:
-        edge_index = {('object', 'line', 'object'): torch.tensor(line_e, dtype=torch.long),
-                      ('object', 'same_busbar', 'object'): torch.tensor(same_busbar_e, dtype=torch.long),
-                      ('object', 'other_busbar', 'object'): torch.tensor(other_busbar_e, dtype=torch.long)}
+    # Make a prediction
+    P = model(norm_gen_features,
+              norm_load_features,
+              reduced_or_features,
+              reduced_ex_features,
+              edges,
+              reduced_pos_topo_vect).reshape((-1))
 
-    # Creating and returning the prediction, finding the selected substation
-    P = torch.flatten(model.forward(x_gen, x_load, x_or, x_ex, edge_index, object_ptv)).detach()
-    P_sub_mask, _ = g2o_util.select_single_substation_from_topovect(P, sub_info,
-                                                                    f=lambda x: torch.sum(torch.clamp(x - 0.5, min=0)))
-
-    # Selecting a single substation
-    P = np.array([1 if (m and p > 0.5) else 0 for m, p in zip(P_sub_mask, P)])
-
-    # Convert prediction to set_action
-    set_action = 1 + (topo_vect - 1 + P) % 2
-
-    # Unreduce set_action if any lines were disabled
+    # Unreduce prediction
     if len(disabled_lines) > 0:
         # Adjust the indices to account for index shifting when inserting multiple elements
-        add_idxs = [idx for line in disabled_lines for idx in (full_line_or_pos_tv[line], full_line_ex_pos_tv[line])]
+        add_idxs = dis_endpoint_tv.copy()
         add_idxs.sort()
         add_idxs = [idx - i for i, idx in enumerate(add_idxs)]
 
         # Unreduce set_action
-        set_action = np.insert(set_action, add_idxs, -1)
+        P = P.detach().numpy()
+        P = np.insert(P, add_idxs, -1)
+        P = torch.tensor(P, device=device)
+        assert torch.count_nonzero(P[dis_endpoint_tv,]) == 0, \
+            "Disabled line endpoints must be zero in the topo_vect after unreducing."
 
-    return set_action
+    return P
