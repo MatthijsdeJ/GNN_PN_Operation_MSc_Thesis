@@ -6,7 +6,7 @@ Created on Thu Jan 27 10:04:10 2022
 @author: matthijs
 """
 
-from typing import Sequence, Optional
+from typing import Sequence, Optional, Union
 import torch
 from auxiliary.generate_action_space import get_env_actions
 import auxiliary.grid2op_util as g2o_util
@@ -54,7 +54,7 @@ class ActSpaceCache:
                                              line_disabled: int,
                                              topo_vect: torch.Tensor,
                                              P: torch.Tensor,
-                                             device: torch.device) -> torch.Tensor:
+                                             device: Union[torch.device, str]) -> torch.Tensor:
         """
         Given a prediction from the model:
             (1) compute the corresponding 'change' action space

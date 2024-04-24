@@ -56,7 +56,7 @@ def simulate():
         raise ValueError()
 
     # Loop over chronics
-    for num in scenarios:
+    for num in [46]: #scenarios:
         env.set_id(num)
         env.reset()
 
@@ -109,22 +109,24 @@ def simulate():
                 action, datapoint = strategy.select_action(obs)
                 action_duration = time.thread_time_ns() / 1e6 - before_action_time
 
-                # Assert not more than one substation is changed
-                assert (action._sub_impacted is None) or (sum(action._sub_impacted) < 2), ("Action should only impact"
-                                                                                           " a single substation.")
+                # Assert not more than one substation is changed and no lines are changed
+                assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
+                    ("Actions should at most impact a single substation.")
+                assert (action._lines_impacted is None) or (sum(action._lines_impacted) == 0), \
+                    ("Action should not impact the line status.")
 
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
                 previous_topo_vect = obs.topo_vect
-                obs = env_step_raise_exception(env, action)
+                obs = env_step_evaluate_exceptions(env, action)
 
                 # Potentially log action information
-                if previous_max_rho > config['simulation']['activity_threshold']:
+                if previous_max_rho > config['simulation']['activity_threshold'] and not env.done:
                     topo_vect_diff = 1 - np.equal(previous_topo_vect, obs.topo_vect)
                     mask, sub_id = select_single_substation_from_topovect(torch.tensor(topo_vect_diff),
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
-                                                                          (not any(x)) or all(x)
+                                                                          not any(x)
                                                                           )
                     log_and_print(f"{env.nb_time_step}: Action selected. "
                                   f"Old max rho: {previous_max_rho:.4f}, "
@@ -153,8 +155,10 @@ def simulate():
             if save_data:
                 save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
         except (grid2op.Exceptions.DivergingPowerFlow, grid2op.Exceptions.BackendError) as e:
-            log_and_print(f'{env.nb_time_step}: Diverging-powerflow exception encountered on '
-                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}: {e}. Skipping this scenario.')
+            log_and_print(f'{env.nb_time_step}: Uncaught exception encountered on ' +
+                          f'day {ts_to_day(env.nb_time_step, ts_in_day)}: {e}.' +
+                          ("" if not hasattr(e, '__notes__') else " ".join(e.__notes__)) +
+                          ". Skipping this scenario. \n\n\n")
 
 
 def log_and_print(msg: str):
@@ -347,3 +351,31 @@ def save_records(datapoints: List[Dict],
         os.mkdir(os.path.join(save_path, folder_name))
     np.save(os.path.join(save_path, folder_name, file_name), dp_matrix)
     print('# records are saved! #')
+
+def env_step_evaluate_exceptions(env: grid2op.Environment.Environment, action: grid2op.Action.BaseAction) \
+    -> grid2op.Observation.CompleteObservation:
+
+    old_topology = env.get_obs().topo_vect
+    obs, _, done, info = env.step(action)
+
+    if len(info['exception']) > 1:
+        raise ExceptionGroup('Exceptions', info['exception'])
+    elif len(info['exception']) == 1:
+        exception = info['exception'][0]
+        exception_str = str(exception)
+        failure = False
+
+        failure_conditions = [
+            isinstance(exception, grid2op.Exceptions.BackendError) and "Isolated bus" in exception_str, # Isolated bus
+            isinstance(exception, grid2op.Exceptions.BackendError) and "powerflow diverged" in exception_str
+                and not all(info['disc_lines'] == -1) # Powerflow divergence caused by a cascading failure
+        ]
+        failure = any(failure_conditions)
+
+        if failure:
+            log_and_print(f'{env.nb_time_step}: Interpreting exception {exception} as failure.')
+        else:
+            exception.add_note("\nInfo: " + str(info).strip())
+            raise exception
+
+    return obs

@@ -389,32 +389,18 @@ def env_step_raise_exception(env: grid2op.Environment.Environment, action: grid2
 
     Raises
     -------
-    grid2op.Exception.DivergingPowerFlowException
+    ExceptionGroup
 
     Returns
     -------
     obs : grid2op.Observation.CompleteObservation
         The observation resulting from the action.
     """
-    old_topology = env.get_obs().topo_vect
     obs, _, _, info = env.step(action)
 
-    for e in info['exception']:
-        if type(e) in [grid2op.Exceptions.DivergingPowerFlow, grid2op.Exceptions.BackendError]:
-            # Only return divergingpowerflow exceptions when there is no line that start a cascading failure.
-            # If there is such a line, that indicates agent failure
-            if all(info['disc_lines'] == -1):
-                print(info)
-                raise e
-        elif type(e) is grid2op.Exceptions.illegalActionExceptions.IllegalAction:
-            if (old_topology == -1).sum() <= 2:
-                print(e)
-                print(action)
-                print(old_topology)
-                print(info)
-                raise e
-            # Otherwise it indicates failure
-        else:
-            raise e
+    if len(info['exception']) > 1:
+        raise ExceptionGroup('Exceptions', info['exception'])
+    elif len(info['exception']) == 1:
+        raise info['exception'][0]
 
     return obs
