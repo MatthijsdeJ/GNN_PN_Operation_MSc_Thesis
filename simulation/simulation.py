@@ -4,7 +4,6 @@ Created on Fri Jan 28 13:51:31 2022
 
 @author: matthijs
 """
-import random
 
 import grid2op
 import auxiliary.grid2op_util as g2o_util
@@ -27,9 +26,6 @@ def simulate():
     Generate imitation learning data from the tutor model.
     """
     # Load constants, settings, hyperparameters, arguments
-    global config
-    global ts_in_day
-
     config = get_config()
     n_chronics = config['simulation']['n_chronics']
     partition = config['simulation']['partition']
@@ -152,12 +148,10 @@ def simulate():
                 # If so, reset the environment to the start of next day and discard the records
                 if env.done:
                     log_and_print(f'{env.nb_time_step}: Failure of day {ts_to_day(env.nb_time_step, ts_in_day)}.')
+
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
                     start_day_time = time.thread_time_ns() / 1e9
-                    # Reset opponent
-                    attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
-                        = _create_opponent_variables(env.nb_time_step)
 
             # At the end of a chronic, print a message, and store and reset the corresponding records
             log_and_print(f'{env.nb_time_step}: Chronic exhausted! \n\n\n')
@@ -171,54 +165,6 @@ def simulate():
                           f'day {ts_to_day(env.nb_time_step, ts_in_day)}: {e}.' +
                           ("" if not hasattr(e, '__notes__') else " ".join(e.__notes__)) +
                           ". Skipping this scenario. \n\n\n")
-
-
-def _create_opponent_variables(day_offset: int = 0):
-    """
-    Create the opponent variables:
-    attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line
-
-
-    Parameters
-    ----------
-    day_offset : int
-        The timestep that denotes the start of the day.
-
-    Returns
-    -------
-    attack1_begin : int
-        The timestep where the first attack starts.
-    attack1_end : int
-        The timestep where the first attack ends.
-    attack1_line : int
-        The line disabled by the first attack.
-    attack2_begin : int
-        The timestep where the second attack ends.
-    attack2_end : int
-        The timestep where the second attack ends.
-    attack2_line : int
-        The line disabled by the second attack.
-    """
-    config = get_config()
-    attack_lines = config['simulation']['opponent']['attack_lines']
-    attack_duration = config['simulation']['opponent']['attack_duration']
-    attack_cooldown = config['simulation']['opponent']['attack_cooldown']
-
-    attack1_begin = min(random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown),
-                        random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown))
-    attack1_end = attack1_begin + attack_duration
-    attack1_line = random.choice(attack_lines)
-
-    attack2_begin = random.randint(attack1_end + attack_cooldown, ts_in_day - attack_duration)
-    attack2_end = attack2_begin + attack_duration
-    attack2_line = random.choice(attack_lines)
-
-    attack1_begin += day_offset
-    attack1_end += day_offset
-    attack2_begin += day_offset
-    attack2_end += day_offset
-
-    return attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line
 
 
 def log_and_print(msg: str):
@@ -411,7 +357,6 @@ def save_records(datapoints: List[Dict],
         os.mkdir(os.path.join(save_path, folder_name))
     np.save(os.path.join(save_path, folder_name, file_name), dp_matrix)
     print('# records are saved! #')
-
 
 def env_step_evaluate_exceptions(env: grid2op.Environment.Environment, action: grid2op.Action.BaseAction) \
         -> grid2op.Observation.CompleteObservation:
