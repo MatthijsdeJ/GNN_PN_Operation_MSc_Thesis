@@ -4,6 +4,7 @@ Created on Fri Jan 28 13:51:31 2022
 
 @author: matthijs
 """
+import random
 
 import grid2op
 import auxiliary.grid2op_util as g2o_util
@@ -26,6 +27,9 @@ def simulate():
     Generate imitation learning data from the tutor model.
     """
     # Load constants, settings, hyperparameters, arguments
+    global config
+    global ts_in_day
+
     config = get_config()
     n_chronics = config['simulation']['n_chronics']
     partition = config['simulation']['partition']
@@ -55,8 +59,11 @@ def simulate():
     else:
         raise ValueError()
 
+    # Log config
+    log_and_print(f'Config: {config}')
+
     # Loop over chronics
-    for num in [46]: #scenarios:
+    for num in scenarios:
         env.set_id(num)
         env.reset()
 
@@ -80,6 +87,10 @@ def simulate():
             # Capture time for analysing durations
             start_day_time = time.thread_time_ns() / 1e9
 
+            # Create opponent action
+            attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
+                = _create_opponent_variables()
+
             # While chronic is not completed
             while env.nb_time_step < env.chronics_handler.max_timestep():
 
@@ -96,6 +107,10 @@ def simulate():
                     # Reset topology
                     env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
 
+                    # Reset opponent
+                    attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
+                        = _create_opponent_variables(env.nb_time_step)
+
                     # Save and reset data
                     if save_data:
                         chronic_datapoints += day_datapoints
@@ -105,9 +120,9 @@ def simulate():
 
                 # Strategy selects an action
                 obs = env.get_obs()
-                before_action_time = time.thread_time_ns() / 1e6
+                before_action_time = time.thread_time_ns() / 1e3
                 action, datapoint = strategy.select_action(obs)
-                action_duration = time.thread_time_ns() / 1e6 - before_action_time
+                action_duration = time.thread_time_ns() / 1e3 - before_action_time
 
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
@@ -115,10 +130,34 @@ def simulate():
                 assert (action._lines_impacted is None) or (sum(action._lines_impacted) == 0), \
                     ("Action should not impact the line status.")
 
+                timestep = env.nb_time_step
+
+                # Disable lines
+                if env.nb_time_step in [attack1_begin, attack2_begin]:
+                    attack_line = attack1_line if env.nb_time_step == attack1_begin else attack2_line
+                    line_status_copy = action.set_line_status.copy()
+                    line_status_copy[attack_line] = -1
+                    action.set_line_status = line_status_copy
+                    log_and_print(f"{env.nb_time_step}: Line {attack_line} disabled by attack.")
+
+                # Assert check disabled lines
+                if attack1_begin < timestep < attack1_end:
+                    assert obs.line_status[attack1_line] == False
+                if attack2_begin < timestep < attack2_end:
+                    assert obs.line_status[attack2_line] == False
+
+                # Re-enable lines
+                if env.nb_time_step in [attack1_end, attack2_end]:
+                    attack_line = attack1_line if env.nb_time_step == attack1_end else attack2_line
+                    line_status_copy = action.set_line_status.copy()
+                    line_status_copy[attack_line] = 1
+                    action.set_line_status = line_status_copy
+                    log_and_print(f"{env.nb_time_step}: Line {attack_line} no longer disabled by attack.")
+
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
                 previous_topo_vect = obs.topo_vect
-                obs = env_step_evaluate_exceptions(env, action)
+                obs, _, _, _ = env.step(action)
 
                 # Potentially log action information
                 if previous_max_rho > config['simulation']['activity_threshold'] and not env.done:
@@ -133,7 +172,7 @@ def simulate():
                                   f"new max rho: {obs.rho.max():.4f}, "
                                   f"substation: {sub_id}, "
                                   f"configuration: {list(obs.topo_vect[mask == 1])}, "
-                                  f"action duration in ms: {int(action_duration)}.")
+                                  f"action duration in microsecond: {int(action_duration)}.")
 
                 # Save action data
                 if save_data and datapoint is not None:
@@ -143,10 +182,12 @@ def simulate():
                 # If so, reset the environment to the start of next day and discard the records
                 if env.done:
                     log_and_print(f'{env.nb_time_step}: Failure of day {ts_to_day(env.nb_time_step, ts_in_day)}.')
-
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
                     start_day_time = time.thread_time_ns() / 1e9
+                    # Reset opponent
+                    attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
+                        = _create_opponent_variables(env.nb_time_step)
 
             # At the end of a chronic, print a message, and store and reset the corresponding records
             log_and_print(f'{env.nb_time_step}: Chronic exhausted! \n\n\n')
@@ -154,11 +195,60 @@ def simulate():
             # Saving and resetting the data
             if save_data:
                 save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
+
         except (grid2op.Exceptions.DivergingPowerFlow, grid2op.Exceptions.BackendError) as e:
             log_and_print(f'{env.nb_time_step}: Uncaught exception encountered on ' +
                           f'day {ts_to_day(env.nb_time_step, ts_in_day)}: {e}.' +
                           ("" if not hasattr(e, '__notes__') else " ".join(e.__notes__)) +
                           ". Skipping this scenario. \n\n\n")
+
+
+def _create_opponent_variables(day_offset: int = 0):
+    """
+    Create the opponent variables:
+    attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line
+
+
+    Parameters
+    ----------
+    day_offset : int
+        The timestep that denotes the start of the day.
+
+    Returns
+    -------
+    attack1_begin : int
+        The timestep where the first attack starts.
+    attack1_end : int
+        The timestep where the first attack ends.
+    attack1_line : int
+        The line disabled by the first attack.
+    attack2_begin : int
+        The timestep where the second attack ends.
+    attack2_end : int
+        The timestep where the second attack ends.
+    attack2_line : int
+        The line disabled by the second attack.
+    """
+    config = get_config()
+    attack_lines = config['simulation']['opponent']['attack_lines']
+    attack_duration = config['simulation']['opponent']['attack_duration']
+    attack_cooldown = config['simulation']['opponent']['attack_cooldown']
+
+    attack1_begin = min(random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown),
+                        random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown))
+    attack1_end = attack1_begin + attack_duration
+    attack1_line = random.choice(attack_lines)
+
+    attack2_begin = random.randint(attack1_end + attack_cooldown, ts_in_day - attack_duration)
+    attack2_end = attack2_begin + attack_duration
+    attack2_line = random.choice(attack_lines)
+
+    attack1_begin += day_offset
+    attack1_end += day_offset
+    attack2_begin += day_offset
+    attack2_end += day_offset
+
+    return attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line
 
 
 def log_and_print(msg: str):
@@ -352,30 +442,16 @@ def save_records(datapoints: List[Dict],
     np.save(os.path.join(save_path, folder_name, file_name), dp_matrix)
     print('# records are saved! #')
 
-def env_step_evaluate_exceptions(env: grid2op.Environment.Environment, action: grid2op.Action.BaseAction) \
-    -> grid2op.Observation.CompleteObservation:
 
-    old_topology = env.get_obs().topo_vect
+def env_step_evaluate_exceptions(env: grid2op.Environment.Environment, action: grid2op.Action.BaseAction) \
+        -> grid2op.Observation.CompleteObservation:
     obs, _, done, info = env.step(action)
 
     if len(info['exception']) > 1:
         raise ExceptionGroup('Exceptions', info['exception'])
     elif len(info['exception']) == 1:
         exception = info['exception'][0]
-        exception_str = str(exception)
-        failure = False
-
-        failure_conditions = [
-            isinstance(exception, grid2op.Exceptions.BackendError) and "Isolated bus" in exception_str, # Isolated bus
-            isinstance(exception, grid2op.Exceptions.BackendError) and "powerflow diverged" in exception_str
-                and not all(info['disc_lines'] == -1) # Powerflow divergence caused by a cascading failure
-        ]
-        failure = any(failure_conditions)
-
-        if failure:
-            log_and_print(f'{env.nb_time_step}: Interpreting exception {exception} as failure.')
-        else:
-            exception.add_note("\nInfo: " + str(info).strip())
-            raise exception
+        exception.add_note("\nInfo: " + str(info).strip())
+        raise exception
 
     return obs
