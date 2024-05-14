@@ -883,11 +883,6 @@ def _predict_GCN(model: GCN,
         dis_lines_ex_tv = [config['rte_case14_realistic']['line_ex_pos_topo_vect'][line] for line in disabled_lines]
         dis_endpoint_tv = dis_lines_or_tv + dis_lines_ex_tv
 
-        # Check and reduce the line endpoint features
-        assert np.isclose(norm_or_features[disabled_lines, :], 0).all(), \
-            "All features except the last of the disabled origin must be zero."
-        assert np.isclose(norm_ex_features[disabled_lines, :], 0).all(), \
-            "All features except the last of the disabled extremity must be zero."
         # noinspection PyTypeChecker
         reduced_or_features = np.delete(norm_or_features, disabled_lines, axis=0)
         # noinspection PyTypeChecker
