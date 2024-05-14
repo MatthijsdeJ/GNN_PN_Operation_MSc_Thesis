@@ -1,12 +1,12 @@
 paths:
   rte_case14_realistic: data/rte_case14_realistic/
-  evaluation_log: data/simulation/test.log
+  evaluation_log: data/simulation/test_outages.log
   data_split: data/data_split/
   data:
     raw: data/raw_selection/mixed/
     processed: data/processed/mixed/
   wandb: data/wandb/
-  model: models/error_analysis
+  model: models/FCNN_1
 
 simulation:
   disable_line: -1 # Index of line to be disabled; -1 indicates no line
@@ -15,7 +15,7 @@ simulation:
   seed: 1 # Environment seed
   save_data: false # Whether to save action datapoinst
   activity_threshold: 0.97 # Threshold below which agents take do-nothing actions; also used as a threshold for logging
-  strategy: greedy
+  strategy: naive_ml
   NMinusOne_strategy:
     N0_rho_threshold: 1.0 # N-0 rho robustness threshold
     line_idxs_to_consider_N-1: [0, 1, 2, 3, 4, 5, 6, 10, 12, 13, 15, 16, 19] # Lines to consider in N-1 calculations
@@ -23,6 +23,10 @@ simulation:
     reject_action_threshold: 1.0 # Threshold for the simulated max. rho of action, above which it is rejected
   hybrid_strategies:
     take_the_wheel_threshold: 1.0 # Threshold below which the ML model takes actions for the hybrid agents
+  opponent:
+    attack_lines: [1, 3]
+    attack_duration: 48
+    attack_cooldown: 12
 
 rte_case14_realistic:
   thermal_limits: [1000,1000,1000,1000,1000,1000,1000, 760,450, 760,381,380,760,380,760,380,380,380,2000,2000]
@@ -44,15 +48,15 @@ data_processing:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 50000 #How often to evaluate the validation set
-    dp_per_val_log: 20000 # How many datapoints to use per val logging
+    val_log_freq: 5000 #How often to evaluate the validation set
+    dp_per_val_log: 25000 # How many datapoints to use per val logging
     advanced_val_analysis: true
     line_outages_considered: [-1, 0, 1, 2, 3, 4, 5, 6, 12]
   hyperparams:
-    model_type: GCN  #Should be GCN or FCNN
+    model_type: FCNN #Should be GCN or FCNN
     n_epoch: 100
     lr: 5.0E-4
-    N_node_hidden: 128 #Size of hidden layers in model
+    N_node_hidden: 230 #Size of hidden layers in model
     LReLu_neg_slope: 0.1
     batch_size: 64
     label_smoothing_alpha: 0 #Controls the extent of label smoothing
@@ -80,7 +84,7 @@ training:
       N_f_endpoint: 6 #Number of endpoint (origin/extremity) features
   FCNN:
     hyperparams:
-      N_layers: 4
+      N_layers: 5
     constants:
       size_in: 344
       size_out: 56

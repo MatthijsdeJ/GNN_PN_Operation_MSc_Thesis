@@ -13,9 +13,6 @@ from grid2op.dtypes import dt_int
 import math
 import auxiliary.util as util
 from auxiliary.config import get_config
-from grid2op.Opponent import RandomLineOpponent, BaseActionBudget
-from grid2op.Action import PowerlineSetAction
-from simulation.opponent import ReconnectingOpponentSpace
 
 
 def connectivity_matrices(sub_info: Sequence[int],
