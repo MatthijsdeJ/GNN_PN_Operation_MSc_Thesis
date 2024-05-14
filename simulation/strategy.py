@@ -938,7 +938,7 @@ def _predict_GCN(model: GCN,
 
         # Unreduce set_action
         P = P.detach().numpy()
-        P = np.insert(P, add_idxs, -1)
+        P = np.insert(P, add_idxs, 0)
         P = torch.tensor(P, device=device)
         assert torch.count_nonzero(P[dis_endpoint_tv,]) == 0, \
             "Disabled line endpoints must be zero in the topo_vect after unreducing."
