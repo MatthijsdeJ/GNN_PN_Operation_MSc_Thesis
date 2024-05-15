@@ -1,6 +1,6 @@
 paths:
   rte_case14_realistic: data/rte_case14_realistic/
-  evaluation_log: data/simulation/test_outages.log
+  evaluation_log: data/simulation/unseen_outage_FCNN_1
   data_split: data/data_split/
   data:
     raw: data/raw_selection/mixed/
@@ -24,7 +24,7 @@ simulation:
   hybrid_strategies:
     take_the_wheel_threshold: 1.0 # Threshold below which the ML model takes actions for the hybrid agents
   opponent:
-    attack_lines: [1, 3]
+    attack_lines: [0, 2, 4, 5, 6, 12]
     attack_duration: 48
     attack_cooldown: 12
 
