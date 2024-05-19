@@ -349,11 +349,6 @@ class NMinusOneStrategy(AgentStrategy):
             action_chosen = sel_rho = action_idx = None
             dn_rho = self.get_max_rho_simulated(observation, self.action_space({}))
 
-            # Predicting N-1 networks with the N-1 agent is not implemented, so select a do-nothing action when
-            # a line is disabled
-            if not all(observation.line_status):
-                return self.action_space({}), None
-
             # Select the do-something actions
             actions = [(idx, a) for idx, a in enumerate(self.reduced_action_list)
                        if not self.is_do_nothing_set_bus(observation.topo_vect, a.set_bus)]
