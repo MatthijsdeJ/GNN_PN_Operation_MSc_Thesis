@@ -115,7 +115,7 @@ def simulate():
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
                     ("Actions should at most impact a single substation.")
-                assert (action._lines_impacted is None) or (sum(action._lines_impacted) == 0), \
+                assert np.array_equal(obs.line_status, (obs + action).line_status), \
                     ("Action should not impact the line status.")
 
                 timestep = env.nb_time_step
