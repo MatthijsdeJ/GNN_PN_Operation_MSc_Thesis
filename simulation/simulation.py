@@ -279,7 +279,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
     elif strategy_type == StrategyType.VERIFY_GREEDY_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
-        feature_statistics_path = config['paths']['feature_statistics']
+        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
@@ -296,7 +296,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
     elif strategy_type == StrategyType.VERIFY_N_MINUS_ONE_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
-        feature_statistics_path = config['paths']['feature_statistics']
+        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
