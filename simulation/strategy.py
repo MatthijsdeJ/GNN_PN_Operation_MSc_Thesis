@@ -227,6 +227,11 @@ class GreedyStrategy(AgentStrategy):
 
             # Simulate each action
             for index, action in enumerate(self.reduced_action_list):
+
+                # Skip any action that tries to change a line status
+                if (not action._lines_impacted is None) and sum(action._lines_impacted) > 0:
+                    continue
+
                 # Obtain the max. rho of the observation resulting from the simulated action
                 action_rho = self.get_max_rho_simulated(observation, action)
 
@@ -343,6 +348,11 @@ class NMinusOneStrategy(AgentStrategy):
         if observation.rho.max() > self.do_nothing_threshold:
             action_chosen = sel_rho = action_idx = None
             dn_rho = self.get_max_rho_simulated(observation, self.action_space({}))
+
+            # Predicting N-1 networks with the N-1 agent is not implemented, so select a do-nothing action when
+            # a line is disabled
+            if not all(observation.line_status):
+                return self.action_space({}), None
 
             # Select the do-something actions
             actions = [(idx, a) for idx, a in enumerate(self.reduced_action_list)
