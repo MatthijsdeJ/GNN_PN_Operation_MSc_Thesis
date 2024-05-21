@@ -127,7 +127,7 @@ def simulate():
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
                     ("Actions should at most impact a single substation.")
-                assert (action._lines_impacted is None) or (sum(action._lines_impacted) == 0), \
+                assert np.array_equal(obs.line_status, (obs + action).line_status), \
                     ("Action should not impact the line status.")
 
                 timestep = env.nb_time_step
@@ -171,20 +171,8 @@ def simulate():
                 previous_topo_vect = obs.topo_vect
                 obs, _, _, _ = env.step(action)
 
-                timestep = env.nb_time_step
-                try:
-                    # Assert check disabled lines
-                    if attack1_begin < timestep < attack1_end:
-                        assert obs.line_status[attack1_line] == False
-                    if attack2_begin < timestep < attack2_end:
-                        assert obs.line_status[attack2_line] == False
-                except AssertionError as e:
-                    import ipdb
-                    ipdb.set_trace()
-                    print(e)
-
                 # Potentially log action information
-                if previous_max_rho > config['simulation']['activity_threshold'] and not env.done:
+                if previous_max_rho > config['simulation']['activity_threshold']: #and not env.done:
                     topo_vect_diff = 1 - np.equal(previous_topo_vect, obs.topo_vect)
                     mask, sub_id = select_single_substation_from_topovect(torch.tensor(topo_vect_diff),
                                                                           torch.tensor(obs.sub_info),
@@ -258,12 +246,12 @@ def _create_opponent_variables(day_offset: int = 0):
     attack_duration = config['simulation']['opponent']['attack_duration']
     attack_cooldown = config['simulation']['opponent']['attack_cooldown']
 
-    attack1_begin = min(random.randint(1, ts_in_day - 2 * attack_duration - attack_cooldown - 2),
-                        random.randint(1, ts_in_day - 2 * attack_duration - attack_cooldown - 2))
+    attack1_begin = min(random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown),
+                        random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown))
     attack1_end = attack1_begin + attack_duration
     attack1_line = random.choice(attack_lines)
 
-    attack2_begin = random.randint(attack1_end + attack_cooldown, ts_in_day - attack_duration - 1)
+    attack2_begin = random.randint(attack1_end + attack_cooldown, ts_in_day - attack_duration)
     attack2_end = attack2_begin + attack_duration
     attack2_line = random.choice(attack_lines)
 
