@@ -126,7 +126,7 @@ def simulate():
                 obs, _, _, _ = env.step(action)
 
                 # Potentially log action information
-                if previous_max_rho > config['simulation']['activity_threshold'] and not env.done:
+                if previous_max_rho > config['simulation']['activity_threshold']: #and not env.done:
                     topo_vect_diff = 1 - np.equal(previous_topo_vect, obs.topo_vect)
                     mask, sub_id = select_single_substation_from_topovect(torch.tensor(topo_vect_diff),
                                                                           torch.tensor(obs.sub_info),
