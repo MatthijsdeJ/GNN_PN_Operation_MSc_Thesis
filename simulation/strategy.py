@@ -878,10 +878,7 @@ def _predict_GCN(model: GCN,
     reduced_env_vars = reduced_env_variables(disabled_lines)
 
     # Concatenating the pos_topo_vect variables
-    reduced_pos_topo_vect = np.argsort(np.concatenate([obs.gen_pos_topo_vect,
-                                                       obs.load_pos_topo_vect,
-                                                       reduced_env_vars['line_or_pos_topo_vect'],
-                                                       reduced_env_vars['line_ex_pos_topo_vect']]))
+    reduced_pos_topo_vect = reduced_env_vars['pos_topo_vect']
 
     if len(disabled_lines) > 0:
         dis_lines_or_tv = [config['rte_case14_realistic']['line_or_pos_topo_vect'][line] for line in disabled_lines]
