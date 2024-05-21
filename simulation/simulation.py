@@ -140,6 +140,12 @@ def simulate():
                     action.set_line_status = line_status_copy
                     log_and_print(f"{env.nb_time_step}: Line {attack_line} disabled by attack.")
 
+                    # Ensure that the action doesn't interfere with disabling the line
+                    # If so, take a do-nothing action
+                    if 1 in [action.change_bus[env.line_or_pos_topo_vect[attack_line]],
+                             action.change_bus[env.line_ex_pos_topo_vect[attack_line]]]:
+                        action = env.action_space({'set_line_status': line_status_copy})
+
                 # Assert check disabled lines
                 if attack1_begin < timestep < attack1_end:
                     assert obs.line_status[attack1_line] == False
@@ -153,6 +159,12 @@ def simulate():
                     line_status_copy[attack_line] = 1
                     action.set_line_status = line_status_copy
                     log_and_print(f"{env.nb_time_step}: Line {attack_line} no longer disabled by attack.")
+
+                    # Ensure that the action doesn't interfere with disabling the line
+                    # If so, take a do-nothing action
+                    if 1 in [action.change_bus[env.line_or_pos_topo_vect[attack_line]],
+                             action.change_bus[env.line_ex_pos_topo_vect[attack_line]]]:
+                        action = env.action_space({'set_line_status': line_status_copy})
 
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
