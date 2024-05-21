@@ -138,21 +138,12 @@ def simulate():
                     line_status_copy = action.set_line_status.copy()
                     line_status_copy[attack_line] = -1
                     action.set_line_status = line_status_copy
-                    # Ensure change_bus vector is zero at disabled line endpoints
-                    if 1 in [action.change_bus[env.line_or_pos_topo_vect[attack_line]],
-                             action.change_bus[env.line_ex_pos_topo_vect[attack_line]]]:
-                        action = env.action_space({'set_line_status': line_status_copy})
-                    log_and_print(f"{env.nb_time_step}: Line {attack_line} disabled by attack.")
-                try:
-                    # Assert check disabled lines
-                    if attack1_begin < timestep < attack1_end:
-                        assert obs.line_status[attack1_line] == False
-                    if attack2_begin < timestep < attack2_end:
-                        assert obs.line_status[attack2_line] == False
-                except AssertionError as e:
-                    import ipdb
-                    ipdb.set_trace()
-                    print(e)
+
+                # Assert check disabled lines
+                if attack1_begin < timestep < attack1_end:
+                    assert obs.line_status[attack1_line] == False
+                if attack2_begin < timestep < attack2_end:
+                    assert obs.line_status[attack2_line] == False
 
                 # Re-enable lines
                 if env.nb_time_step in [attack1_end, attack2_end]:
@@ -160,11 +151,6 @@ def simulate():
                     line_status_copy = action.set_line_status.copy()
                     line_status_copy[attack_line] = 1
                     action.set_line_status = line_status_copy
-                    # Ensure change_bus vector is zero at disabled line endpoints
-                    if 1 in [action.change_bus[env.line_or_pos_topo_vect[attack_line]],
-                             action.change_bus[env.line_ex_pos_topo_vect[attack_line]]]:
-                        action = env.action_space({'set_line_status': line_status_copy})
-                    log_and_print(f"{env.nb_time_step}: Line {attack_line} no longer disabled by attack.")
 
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
