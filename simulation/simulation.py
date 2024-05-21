@@ -246,12 +246,12 @@ def _create_opponent_variables(day_offset: int = 0):
     attack_duration = config['simulation']['opponent']['attack_duration']
     attack_cooldown = config['simulation']['opponent']['attack_cooldown']
 
-    attack1_begin = min(random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown),
-                        random.randint(0, ts_in_day - 2 * attack_duration - attack_cooldown))
+    attack1_begin = min(random.randint(1, ts_in_day - 2 * attack_duration - attack_cooldown - 2),
+                        random.randint(1, ts_in_day - 2 * attack_duration - attack_cooldown - 2))
     attack1_end = attack1_begin + attack_duration
     attack1_line = random.choice(attack_lines)
 
-    attack2_begin = random.randint(attack1_end + attack_cooldown, ts_in_day - attack_duration)
+    attack2_begin = random.randint(attack1_end + attack_cooldown, ts_in_day - attack_duration - 1)
     attack2_end = attack2_begin + attack_duration
     attack2_line = random.choice(attack_lines)
 
