@@ -4,10 +4,21 @@ Created on Fri Jan 28 13:51:31 2022
 
 @author: matthijs
 """
+# Standard library imports
+import logging
+import os
+from typing import List, Dict
+import time
 import random
 
+# Third-part library imports
 import grid2op
 import auxiliary.grid2op_util as g2o_util
+import torch
+import json
+import numpy as np
+
+# Project imports
 from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect, env_step_raise_exception
 from auxiliary.config import get_config, StrategyType, ModelType
 import torch
@@ -27,9 +38,6 @@ def simulate():
     Generate imitation learning data from the tutor model.
     """
     # Load constants, settings, hyperparameters, arguments
-    global config
-    global ts_in_day
-
     config = get_config()
     n_chronics = config['simulation']['n_chronics']
     partition = config['simulation']['partition']
@@ -124,11 +132,10 @@ def simulate():
                 action, datapoint = strategy.select_action(obs)
                 action_duration = time.thread_time_ns() / 1e3 - before_action_time
 
-
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
                     ("Actions should at most impact a single substation.")
-                assert np.array_equal(obs.line_status, (obs + action).line_status), \
+                assert (action._lines_impacted is None) or (sum(action._lines_impacted) < 1), \
                     ("Action should not impact the line status.")
 
                 timestep = env.nb_time_step
@@ -200,6 +207,7 @@ def simulate():
                 # If so, reset the environment to the start of next day and discard the records
                 if env.done:
                     log_and_print(f'{env.nb_time_step}: Failure of day {ts_to_day(env.nb_time_step, ts_in_day)}.')
+
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
                     start_day_time = time.thread_time_ns() / 1e9
@@ -386,8 +394,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
             feature_statistics = json.loads(file.read())
 
         # Initialize strategy
-        strategy = strat.VerifyGreedyHybridStrategy(env,
-                                                    model,
+        strategy = strat.VerifyGreedyHybridStrategy(model,
                                                     feature_statistics,
                                                     env.action_space,
                                                     config['simulation']['activity_threshold'],
@@ -399,7 +406,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
     elif strategy_type == StrategyType.VERIFY_N_MINUS_ONE_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
-        feature_statistics_path = config['paths']['feature_statistics']
+        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
