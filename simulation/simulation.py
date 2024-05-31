@@ -4,21 +4,25 @@ Created on Fri Jan 28 13:51:31 2022
 
 @author: matthijs
 """
-
-import grid2op
-import auxiliary.grid2op_util as g2o_util
-from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect, env_step_raise_exception
-from auxiliary.config import get_config, StrategyType, ModelType
-import torch
-import simulation.strategy as strat
-from training.models import GCN, FCNN, Model
-import json
+# Standard library imports
 import logging
-from auxiliary.generate_action_space import get_env_actions
-import numpy as np
 import os
 from typing import List, Dict
 import time
+
+# Third-part library imports
+import grid2op
+import auxiliary.grid2op_util as g2o_util
+import torch
+import json
+import numpy as np
+
+# Project imports
+from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect, env_step_raise_exception
+from auxiliary.config import get_config, StrategyType, ModelType
+import simulation.strategy as strat
+from training.models import GCN, FCNN, Model
+from auxiliary.generate_action_space import get_env_actions
 
 
 def simulate():
@@ -115,7 +119,7 @@ def simulate():
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
                     ("Actions should at most impact a single substation.")
-                assert np.array_equal(obs.line_status, (obs + action).line_status), \
+                assert (action._lines_impacted is None) or (sum(action._lines_impacted) < 1), \
                     ("Action should not impact the line status.")
 
                 timestep = env.nb_time_step

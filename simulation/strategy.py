@@ -1,12 +1,15 @@
+# Standard library imports
 from abc import ABC, abstractmethod
-import grid2op
-import torch
-import auxiliary.grid2op_util as g2o_util
-import numpy as np
-from typing import Tuple, Optional, Sequence
-
+from typing import Tuple, Optional, Sequence, Callable
 import warnings
 
+# Third-party imports
+import grid2op
+import torch
+import numpy as np
+
+# Project imports
+import auxiliary.grid2op_util as g2o_util
 from auxiliary.config import get_config, NetworkType
 import training.models
 from training import postprocessing
@@ -19,14 +22,6 @@ class AgentStrategy(ABC):
     """
     Base class for the strategy used for simulation.
     """
-
-    # @property
-    # @abstractmethod
-    # def model(self):
-    #     """
-    #     Require declaration of the model attribute.
-    #     """
-    #     pass
 
     @abstractmethod
     def select_action(self,
@@ -112,6 +107,38 @@ class AgentStrategy(ABC):
         return datapoint
 
     @staticmethod
+    def check_impacts_line_decorator(select_action_method: Callable):
+        """
+        Decorator that ensures an action does not try to change a line endpoint that has been disabled. This can
+        happen with incidental outages. If an action does try to change such an endpoint, it is replaced by a
+        do-nothing action.
+
+        Parameters
+        -------
+        select_action_method :  Callable
+            The select_action method.
+
+        Returns
+        -------
+        action_chosen : grid2op.Action.BaseAction
+            The selected action.
+        datapoint_dict : Optional[dict]
+            A dictionary which contains information about the action. Used to save imitation learning tutor datapoints.
+            The format of the dictionary is described in create_datapoint_dict(). It is the responsibility of the
+            strategy to determine which actions are saved as datapoints; actions that should not be saved should return
+            None.
+        """
+        def wrapper(self, obs: grid2op.Observation.CompleteObservation):
+            action, datapoint_dict = select_action_method(self, obs)
+
+            if (action._lines_impacted is not None) and (sum(action._lines_impacted) > 0):
+                action.reset()
+
+            return action, datapoint_dict
+
+        return wrapper
+
+    @staticmethod
     def is_do_nothing_set_bus(topo_vect: np.array, set_bus: np.array) -> bool:
         """
         Checks if a set_bus act results in the same topo vect (i.e. is a do-nothing action).
@@ -152,6 +179,7 @@ class IdleStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class IdleStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -200,6 +228,7 @@ class GreedyStrategy(AgentStrategy):
             warnings.warn("\nSaving inference durations in datapoints is not implemented; " +
                           "\nthe value in datapoint_dict is always 0.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self,
                       observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
@@ -229,7 +258,7 @@ class GreedyStrategy(AgentStrategy):
             for index, action in enumerate(self.reduced_action_list):
 
                 # Skip any action that tries to change a line status
-                if (not action._lines_impacted is None) and sum(action._lines_impacted) > 0:
+                if (action._lines_impacted is not None) and sum(action._lines_impacted) > 0:
                     continue
 
                 # Obtain the max. rho of the observation resulting from the simulated action
@@ -320,6 +349,7 @@ class NMinusOneStrategy(AgentStrategy):
 
         return max(max_rhos)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self,
                       observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
@@ -461,6 +491,7 @@ class NaiveStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class NaiveStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -535,6 +566,7 @@ class VerifyStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class VerifyStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -621,6 +653,7 @@ class VerifyGreedyHybridStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class VerifyGreedyHybridStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -705,6 +738,7 @@ class VerifyNMinusOneHybridStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class VerifyNMinusOneHybridStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
