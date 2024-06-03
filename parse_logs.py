@@ -11,6 +11,7 @@ import sys
 import auxiliary.config
 from pathlib import Path
 from collections import Counter
+import numpy as np
 
 
 def main():
@@ -19,6 +20,8 @@ def main():
     config = auxiliary.config.get_config()
     directory_path = Path(config['paths']['evaluation_log']).parent
     log_filepaths = sorted(directory_path.rglob('*'))
+
+    running_succes_ratio = []
 
     for filepath in log_filepaths:
 
@@ -38,12 +41,17 @@ def main():
         else:
             success_ratio = 0
 
+        running_succes_ratio.append(success_ratio)
+        running_succes_ratio = running_succes_ratio[-5:]
+
         print(f'{filepath.stem}: {word_counter["Current chronic:"]} scenario(s), '
               f'{word_counter[" completed "]} day(s) completed, '
               f'{word_counter["Failure of day"]} day(s) failed, '
               f'{success_ratio:0.3f} success ratio, '
               f'{word_counter["powerflow"]} diverging powerflow exception(s), '
-              f'{word_counter[" Action selected. "]} action(s) taken')
+              f'{word_counter[" Action selected. "]} action(s) taken,'
+              f'running mean success ratio: {np.mean(running_succes_ratio):0.4f}, ',
+              f'running std succcess ratio: {np.std(running_succes_ratio):0.4f}')
 
 
 if __name__ == "__main__":
