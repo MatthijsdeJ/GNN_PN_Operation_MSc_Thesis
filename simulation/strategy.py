@@ -9,6 +9,7 @@ import warnings
 
 from auxiliary.config import get_config, NetworkType
 import training.models
+from auxiliary.generate_action_space import get_env_actions
 from training import postprocessing
 from training.models import Model, FCNN, GCN
 from data_preprocessing_analysis.data_preprocessing import reduced_env_variables, extract_gen_features, \
@@ -172,6 +173,90 @@ class IdleStrategy(AgentStrategy):
         return self.do_nothing_action, None
 
 
+class VariableOutageGreedyStrategy(AgentStrategy):
+
+    def __init__(self,
+                 env,
+                 do_nothing_threshold: float,
+                 do_nothing_action: grid2op.Action.BaseAction,
+                 suppress_warning: bool = False):
+        """
+        Parameters
+        ----------
+        do_nothing_threshold : float
+            The threshold below which do-nothing actions are always selected and no datapoints are returned.
+        do_nothing_action : grid2op.Action.BaseAction
+            The do-nothing action.
+        reduced_action_list : Sequence[grid2op.Action.TopologyAction]
+            The reduced action list, containing the actions simulated and selected from by the greedy agent.
+        suppress_warning : bool
+            Whether to suppress warnings during initialization.
+        """
+        super()
+        self.do_nothing_threshold = do_nothing_threshold
+        self.do_nothing_action = do_nothing_action
+
+        config = get_config()
+        lout_considered = config['simulation']['opponent']['attack_lines'].copy()
+        lout_considered.append(-1)
+        self.lout_considered = lout_considered
+        self.action_list_per_lo = {line: get_env_actions(env, disable_line=line) for line in lout_considered}
+
+        if not suppress_warning:
+            warnings.warn("\nSaving inference durations in datapoints is not implemented; " +
+                          "\nthe value in datapoint_dict is always 0.", stacklevel=2)
+
+    def select_action(self,
+                      observation: grid2op.Observation.CompleteObservation) \
+            -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
+        """
+        Selects an action based on the greedy strategy: the action that minimizes the max. rho in the simulated
+        next timestep is selected.
+
+        Parameters
+        ----------
+        observation :  grid2op.Observation.CompleteObservation
+            The observation, on which to base the action.
+
+        Returns
+        -------
+        action_chosen : grid2op.Action.BaseAction
+            The selected action.
+        datapoint_dict : Optional[dict]
+            A dictionary which contains information about the action, or None. None is returned if the datapoint should
+            not be saved as action.
+        """
+        disabled_lines = [line for line in np.where(~observation.line_status)[0] if line in self.lout_considered]
+        action_list = self.action_list_per_lo[-1 if len(disabled_lines) == 0 else disabled_lines[0]]
+
+        if observation.rho.max() > self.do_nothing_threshold:
+            best_action = self.do_nothing_action
+            best_action_index = -1
+            do_nothing_rho = best_rho = self.get_max_rho_simulated(observation, best_action)
+
+            # Simulate each action
+            for index, action in enumerate(action_list):
+
+                # Skip any action that tries to change a line status
+                if (not action._lines_impacted is None) and sum(action._lines_impacted) > 0:
+                    continue
+
+                # Obtain the max. rho of the observation resulting from the simulated action
+                action_rho = self.get_max_rho_simulated(observation, action)
+
+                # If an action results in the lowest max. rho so far, store it as the best action so far
+                if action_rho < best_rho:
+                    best_rho = action_rho
+                    best_action = action
+                    best_action_index = index
+
+            action = best_action
+
+            return action, self.create_datapoint_dict(best_action_index, observation, do_nothing_rho, best_rho)
+        else:
+            return self.do_nothing_action, None
+
+
 class GreedyStrategy(AgentStrategy):
 
     def __init__(self,
@@ -246,7 +331,6 @@ class GreedyStrategy(AgentStrategy):
             return action, self.create_datapoint_dict(best_action_index, observation, do_nothing_rho, best_rho)
         else:
             return self.do_nothing_action, None
-
 
 class NMinusOneStrategy(AgentStrategy):
 
@@ -571,6 +655,7 @@ class VerifyGreedyHybridStrategy(AgentStrategy):
     """
 
     def __init__(self,
+                 env,
                  model: Model,
                  feature_statistics: dict,
                  action_space: grid2op.Action.ActionSpace,
@@ -606,10 +691,7 @@ class VerifyGreedyHybridStrategy(AgentStrategy):
                                               dn_threshold,
                                               reject_action_threshold,
                                               True)
-        self.greedy_strategy = GreedyStrategy(dn_threshold,
-                                              action_space({}),
-                                              reduced_action_list,
-                                              True)
+        self.greedy_strategy = VariableOutageGreedyStrategy(env, dn_threshold, action_space({}),True)
         self.switch_control_threshold = switch_control_threshold
 
         if not suppress_warning:

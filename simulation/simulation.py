@@ -124,6 +124,7 @@ def simulate():
                 action, datapoint = strategy.select_action(obs)
                 action_duration = time.thread_time_ns() / 1e3 - before_action_time
 
+
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
                     ("Actions should at most impact a single substation.")
@@ -142,8 +143,13 @@ def simulate():
 
                     # Ensure that the action doesn't interfere with disabling the line
                     # If so, take a do-nothing action
-                    if 1 in [action.change_bus[env.line_or_pos_topo_vect[attack_line]],
-                             action.change_bus[env.line_ex_pos_topo_vect[attack_line]]]:
+                    attack_line_or_pos_topo_vect = env.line_or_pos_topo_vect[attack_line]
+                    attack_line_ex_pos_topo_vect = env.line_ex_pos_topo_vect[attack_line]
+                    if 1 in [action.change_bus[attack_line_or_pos_topo_vect],
+                             action.change_bus[attack_line_ex_pos_topo_vect],
+                             action.set_bus[attack_line_or_pos_topo_vect] != obs.topo_vect[attack_line_or_pos_topo_vect],
+                             action.set_bus[attack_line_ex_pos_topo_vect] != obs.topo_vect[attack_line_ex_pos_topo_vect],
+                             ]:
                         action = env.action_space({'set_line_status': line_status_copy})
 
                 # Assert check disabled lines
@@ -375,12 +381,13 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
     elif strategy_type == StrategyType.VERIFY_GREEDY_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
-        feature_statistics_path = config['paths']['feature_statistics']
+        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
         # Initialize strategy
-        strategy = strat.VerifyGreedyHybridStrategy(model,
+        strategy = strat.VerifyGreedyHybridStrategy(env,
+                                                    model,
                                                     feature_statistics,
                                                     env.action_space,
                                                     config['simulation']['activity_threshold'],
