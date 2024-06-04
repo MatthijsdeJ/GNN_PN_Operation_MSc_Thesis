@@ -12,6 +12,7 @@ import auxiliary.config
 from pathlib import Path
 from collections import Counter
 import numpy as np
+import re
 
 
 def main():
@@ -27,7 +28,12 @@ def main():
 
         words = ['Current chronic:', ' completed ', 'Failure of day', 'powerflow', ' Action selected. ']
         word_counter = Counter()
+
+        microsecond_pattern = r'microsecond: (\d+)'
+
         with open(filepath) as file:
+
+            durations = []
             for line in file:
 
                 if 'Config' in line:
@@ -35,6 +41,10 @@ def main():
 
                 for word in words:
                     word_counter[word] += word in line
+
+                matches = re.findall(microsecond_pattern, line)
+                if len(matches) == 1:
+                    durations += [int(matches[0])]
 
         if (word_counter[" completed "] + word_counter["Failure of day"]) != 0:
             success_ratio = word_counter[" completed "]/(word_counter[" completed "] + word_counter["Failure of day"])
@@ -49,7 +59,8 @@ def main():
               f'{word_counter["Failure of day"]} day(s) failed, '
               f'{success_ratio:0.3f} success ratio, '
               f'{word_counter["powerflow"]} diverging powerflow exception(s), '
-              f'{word_counter[" Action selected. "]} action(s) taken,'
+              f'{word_counter[" Action selected. "]} action(s) taken, '
+              f'{np.mean(durations):0.3f} mean microseconds, '
               f'running mean success ratio: {np.mean(running_succes_ratio):0.4f}, ',
               f'running std succcess ratio: {np.std(running_succes_ratio):0.4f}')
 
