@@ -34,6 +34,9 @@ import time
 
 
 def simulate():
+    global config
+    global ts_in_day
+
     """
     Generate imitation learning data from the tutor model.
     """
@@ -150,13 +153,18 @@ def simulate():
 
                     # Ensure that the action doesn't interfere with disabling the line
                     # If so, take a do-nothing action
-                    attack_line_or_pos_topo_vect = env.line_or_pos_topo_vect[attack_line]
-                    attack_line_ex_pos_topo_vect = env.line_ex_pos_topo_vect[attack_line]
-                    if 1 in [action.change_bus[attack_line_or_pos_topo_vect],
-                             action.change_bus[attack_line_ex_pos_topo_vect],
-                             action.set_bus[attack_line_or_pos_topo_vect] != obs.topo_vect[attack_line_or_pos_topo_vect],
-                             action.set_bus[attack_line_ex_pos_topo_vect] != obs.topo_vect[attack_line_ex_pos_topo_vect],
-                             ]:
+#                    attack_line_or_pos_topo_vect = env.line_or_pos_topo_vect[attack_line]
+#                    attack_line_ex_pos_topo_vect = env.line_ex_pos_topo_vect[attack_line]
+#                    if 1 in [action.change_bus[attack_line_or_pos_topo_vect],
+#                             action.change_bus[attack_line_ex_pos_topo_vect],
+#                             action.set_bus[attack_line_or_pos_topo_vect] != obs.topo_vect[attack_line_or_pos_topo_vect],
+#                             action.set_bus[attack_line_ex_pos_topo_vect] != obs.topo_vect[attack_line_ex_pos_topo_vect],
+#                             ]:
+                    # Actions can be ambiguous if a line endpoint is simultaneously acted on and disabled
+                    # If so, we do do not perform the action
+                    try:
+                        action._check_for_ambiguity()
+                    except grid2op.Exceptions.ambiguousActionExceptions.InvalidLineStatus:
                         action = env.action_space({'set_line_status': line_status_copy})
 
                 # Assert check disabled lines
@@ -173,10 +181,11 @@ def simulate():
                     action.set_line_status = line_status_copy
                     log_and_print(f"{env.nb_time_step}: Line {attack_line} no longer disabled by attack.")
 
-                    # Ensure that the action doesn't interfere with disabling the line
-                    # If so, take a do-nothing action
-                    if 1 in [action.change_bus[env.line_or_pos_topo_vect[attack_line]],
-                             action.change_bus[env.line_ex_pos_topo_vect[attack_line]]]:
+                    # Actions can be ambiguous if a line endpoint is simultaneously acted on and disabled
+                    # If so, we do do not perform the action
+                    try:
+                        action._check_for_ambiguity()
+                    except grid2op.Exceptions.ambiguousActionExceptions.InvalidLineStatus:
                         action = env.action_space({'set_line_status': line_status_copy})
 
                 # Take the selected action in the environment
@@ -424,6 +433,36 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
                                                        config['simulation']['NMinusOne_strategy']['N0_rho_threshold'],
                                                        config['simulation']['hybrid_strategies'][
                                                            'take_the_wheel_threshold'])
+    elif strategy_type == StrategyType.THREEBRID:
+        model = init_model()
+        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
+        with open(feature_statistics_path, 'r') as file:
+            feature_statistics = json.loads(file.read())
+
+        nminusone_strategy = strat.VerifyNMinusOneHybridStrategy(model,
+                                                       feature_statistics,
+                                                       env.action_space,
+                                                       config['simulation']['activity_threshold'],
+                                                       config['simulation']['verify_strategy'][
+                                                           'reject_action_threshold'],
+                                                       get_env_actions(env, disable_line=config['simulation'][
+                                                           'disable_line']),
+                                                       config['simulation']['NMinusOne_strategy'][
+                                                           'line_idxs_to_consider_N-1'],
+                                                       config['simulation']['NMinusOne_strategy']['N0_rho_threshold'],
+                                                       config['simulation']['hybrid_strategies'][
+                                                           'take_the_wheel_threshold'])
+        greedy_strategy = strat.VerifyGreedyHybridStrategy(env,
+                                                           model,
+                                                    feature_statistics,
+                                                    env.action_space,
+                                                    config['simulation']['activity_threshold'],
+                                                    config['simulation']['verify_strategy']['reject_action_threshold'],
+                                                    get_env_actions(env,
+                                                                    disable_line=config['simulation']['disable_line']),
+                                                    config['simulation']['hybrid_strategies'][
+                                                        'take_the_wheel_threshold'])
+        strategy = strat.LineOutageHybridStrategy(nminusone_strategy, greedy_strategy)
     else:
         raise ValueError("Invalid value for strategy_name.")
 
