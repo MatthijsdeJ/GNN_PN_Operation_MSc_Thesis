@@ -164,6 +164,9 @@ def simulate():
                     # If so, we do do not perform the action
                     try:
                         action._check_for_ambiguity()
+                        amb = action.is_ambiguous()
+                        if amb[0]:
+                            raise amb[1]
                     except grid2op.Exceptions.ambiguousActionExceptions.InvalidLineStatus:
                         action = env.action_space({'set_line_status': line_status_copy})
 
@@ -185,6 +188,9 @@ def simulate():
                     # If so, we do do not perform the action
                     try:
                         action._check_for_ambiguity()
+                        amb = action.is_ambiguous()
+                        if amb[0]:
+                            raise amb[1]
                     except grid2op.Exceptions.ambiguousActionExceptions.InvalidLineStatus:
                         action = env.action_space({'set_line_status': line_status_copy})
 

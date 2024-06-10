@@ -310,6 +310,7 @@ class VariableOutageGreedyStrategy(AgentStrategy):
             warnings.warn("\nSaving inference durations in datapoints is not implemented; " +
                           "\nthe value in datapoint_dict is always 0.", stacklevel=2)
 
+    @AgentStrategy.check_impacts_line_decorator
     def select_action(self,
                       observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
