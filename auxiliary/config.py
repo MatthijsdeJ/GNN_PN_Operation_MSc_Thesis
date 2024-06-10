@@ -46,7 +46,9 @@ class StrategyType(Enum):
     VERIFY_ML = 'verify_ml'
     VERIFY_GREEDY_HYBRID = 'verify_greedy_hybrid'
     VERIFY_N_MINUS_ONE_HYBRID = 'verify_nminusone_hybrid'
+    GREEDY_N_MINUS_ONE_HYBRID = 'greedy_nminusone_hybrid'
     THREEBRID = 'threebrid'
+
 
 @unique
 class LabelWeightsType(Enum):
