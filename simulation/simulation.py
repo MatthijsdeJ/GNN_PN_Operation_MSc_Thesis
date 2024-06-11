@@ -167,7 +167,8 @@ def simulate():
                         amb = action.is_ambiguous()
                         if amb[0]:
                             raise amb[1]
-                    except grid2op.Exceptions.ambiguousActionExceptions.InvalidLineStatus:
+                        assert (obs + action).line_status[attack_line] == False
+                    except Exception:
                         action = env.action_space({'set_line_status': line_status_copy})
 
                 # Assert check disabled lines
@@ -439,6 +440,17 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
                                                        config['simulation']['NMinusOne_strategy']['N0_rho_threshold'],
                                                        config['simulation']['hybrid_strategies'][
                                                            'take_the_wheel_threshold'])
+    elif strategy_type == StrategyType.GREEDY_N_MINUS_ONE_HYBRID:
+        greedy_strategy = strat.VariableOutageGreedyStrategy(env, config['simulation']['activity_threshold'],
+                                                             env.action_space({}))
+        nminusone_strategy = strat.NMinusOneStrategy(config['simulation']['activity_threshold'],
+                                                     env.action_space,
+                                                     get_env_actions(env,
+                                                                     disable_line=config['simulation']['disable_line']),
+                                                     config['simulation']['NMinusOne_strategy'][
+                                                         'line_idxs_to_consider_N-1'],
+                                                     config['simulation']['NMinusOne_strategy']['N0_rho_threshold'])
+        strategy = strat.LineOutageHybridStrategy(nminusone_strategy, greedy_strategy)
     elif strategy_type == StrategyType.THREEBRID:
         model = init_model()
         feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
