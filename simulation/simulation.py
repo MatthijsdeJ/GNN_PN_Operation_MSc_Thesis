@@ -21,16 +21,9 @@ import numpy as np
 # Project imports
 from auxiliary.grid2op_util import ts_to_day, select_single_substation_from_topovect, env_step_raise_exception
 from auxiliary.config import get_config, StrategyType, ModelType
-import torch
 import simulation.strategy as strat
 from training.models import GCN, FCNN, Model
-import json
-import logging
 from auxiliary.generate_action_space import get_env_actions
-import numpy as np
-import os
-from typing import List, Dict
-import time
 
 
 def simulate():
@@ -98,7 +91,7 @@ def simulate():
             # Capture time for analysing durations
             start_day_time = time.thread_time_ns() / 1e9
 
-            # Create opponent action
+            # Create opponent variables
             attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
                 = _create_opponent_variables()
 
@@ -108,12 +101,12 @@ def simulate():
                 # Reset at midnight,  add day data to chronic data
                 if env.nb_time_step % ts_in_day == ts_in_day - 1:
 
-                    end_day_time = time.thread_time_ns() / 1e9
 
+                    end_day_time = time.thread_time_ns() / 1e9
                     log_and_print(f'{env.nb_time_step}: Day {ts_to_day(env.nb_time_step, ts_in_day)} completed in '
                                   f'{end_day_time - start_day_time:.2f} seconds.')
-                    days_completed += 1
                     start_day_time = time.thread_time_ns() / 1e9
+                    days_completed += 1
 
                     # Reset topology
                     env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
@@ -146,20 +139,11 @@ def simulate():
                 # Disable lines
                 if env.nb_time_step in [attack1_begin, attack2_begin]:
                     attack_line = attack1_line if env.nb_time_step == attack1_begin else attack2_line
-                    line_status_copy = action.set_line_status.copy()
-                    line_status_copy[attack_line] = -1
-                    action.set_line_status = line_status_copy
-                    log_and_print(f"{env.nb_time_step}: Line {attack_line} disabled by attack.")
+                    action = env.action_space({
+                        'set_bus': action.set_bus.copy(),
+                        'change_bus': action.change_bus.copy(),
+                        'set_line_status': (attack_line, -1)})
 
-                    # Ensure that the action doesn't interfere with disabling the line
-                    # If so, take a do-nothing action
-#                    attack_line_or_pos_topo_vect = env.line_or_pos_topo_vect[attack_line]
-#                    attack_line_ex_pos_topo_vect = env.line_ex_pos_topo_vect[attack_line]
-#                    if 1 in [action.change_bus[attack_line_or_pos_topo_vect],
-#                             action.change_bus[attack_line_ex_pos_topo_vect],
-#                             action.set_bus[attack_line_or_pos_topo_vect] != obs.topo_vect[attack_line_or_pos_topo_vect],
-#                             action.set_bus[attack_line_ex_pos_topo_vect] != obs.topo_vect[attack_line_ex_pos_topo_vect],
-#                             ]:
                     # Actions can be ambiguous if a line endpoint is simultaneously acted on and disabled
                     # If so, we do do not perform the action
                     try:
@@ -167,9 +151,8 @@ def simulate():
                         amb = action.is_ambiguous()
                         if amb[0]:
                             raise amb[1]
-                        assert (obs + action).line_status[attack_line] == False
                     except Exception:
-                        action = env.action_space({'set_line_status': line_status_copy})
+                        action = env.action_space({'set_line_status': (attack_line, -1)})
 
                 # Assert check disabled lines
                 if attack1_begin < timestep < attack1_end:
@@ -180,9 +163,10 @@ def simulate():
                 # Re-enable lines
                 if env.nb_time_step in [attack1_end, attack2_end]:
                     attack_line = attack1_line if env.nb_time_step == attack1_end else attack2_line
-                    line_status_copy = action.set_line_status.copy()
-                    line_status_copy[attack_line] = 1
-                    action.set_line_status = line_status_copy
+                    action = env.action_space({
+                        'set_bus': action.set_bus.copy(),
+                        'change_bus': action.change_bus.copy(),
+                        'set_line_status': (attack_line, 1)})
                     log_and_print(f"{env.nb_time_step}: Line {attack_line} no longer disabled by attack.")
 
                     # Actions can be ambiguous if a line endpoint is simultaneously acted on and disabled
@@ -193,7 +177,7 @@ def simulate():
                         if amb[0]:
                             raise amb[1]
                     except grid2op.Exceptions.ambiguousActionExceptions.InvalidLineStatus:
-                        action = env.action_space({'set_line_status': line_status_copy})
+                        action = env.action_space({'set_line_status': (attack_line, 1)})
 
                 # Take the selected action in the environment
                 previous_max_rho = obs.rho.max()
@@ -410,7 +394,8 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
             feature_statistics = json.loads(file.read())
 
         # Initialize strategy
-        strategy = strat.VerifyGreedyHybridStrategy(model,
+        strategy = strat.VerifyGreedyHybridStrategy(env,
+                                                    model,
                                                     feature_statistics,
                                                     env.action_space,
                                                     config['simulation']['activity_threshold'],
