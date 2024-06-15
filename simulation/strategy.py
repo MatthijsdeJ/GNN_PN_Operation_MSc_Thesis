@@ -1,6 +1,12 @@
+#!/usr/bin/env python
+"""
+Module for agent strategies for Grid2Op.
+--Matthijs
+"""
+
 # Standard library imports
 from abc import ABC, abstractmethod
-from typing import Tuple, Optional, Sequence, Callable
+from typing import Tuple, Optional, Sequence
 import warnings
 
 # Third-party imports
@@ -21,8 +27,16 @@ from data_preprocessing_analysis.data_preprocessing import reduced_env_variables
 
 class AgentStrategy(ABC):
     """
-    Base class for the strategy used for simulation.
+    Abstract base class (ABC) for a strategy.
     """
+
+    # @property
+    # @abstractmethod
+    # def model(self):
+    #     """
+    #     Require declaration of the model attribute.
+    #     """
+    #     pass
 
     @abstractmethod
     def select_action(self,
@@ -52,7 +66,7 @@ class AgentStrategy(ABC):
     def get_max_rho_simulated(observation: grid2op.Observation.CompleteObservation,
                               action: grid2op.Action.BaseAction) -> float:
         """
-        Simulates an action, and gets the max. rho. Returns infinity in case of a game-over.
+        Returns the max. rho of a simulated action. Returns infinity in case of a game-over.
 
         Parameters
         ----------
@@ -67,25 +81,25 @@ class AgentStrategy(ABC):
             The max. rho of the observation resulting from the simulation of the action. Infinity in case of a
             game-over.
         """
-        obs, _, done, _ = observation.simulate(action)
-        return obs.rho.max() if not done else float('Inf')
+        resulting_observation, _, done, _ = observation.simulate(action)
+        return resulting_observation.rho.max() if not done else float('Inf')
 
     @staticmethod
     def create_datapoint_dict(action_index: int,
-                              obs: grid2op.Observation.CompleteObservation,
-                              do_nothing_rho: float,
+                              observation: grid2op.Observation.CompleteObservation,
+                              idle_rho: float,
                               action_rho: float,
                               duration: int = 0):
         """
-        Create the dictionary for the datapoint.
+        Create the dictionary for the datapoint, used for saving data for imitation learning.
 
         Parameters
         ----------
         action_index : int
             The index of the selected action in the auxiliary.generate_action_space.get_env_actions list.
-        obs : grid2op.Observation.CompleteObservation
+        observation : grid2op.Observation.CompleteObservation
             The observation in which the action was selected.
-        do_nothing_rho : float
+        idle_rho : float
             The max. rho obtained by simulating a do-nothing action.
         action_rho : float
             The max. rho obtained by simulating the selected action.
@@ -99,46 +113,13 @@ class AgentStrategy(ABC):
         """
         datapoint = {
             'action_index': action_index,
-            'do_nothing_rho': do_nothing_rho,
+            'do_nothing_rho': idle_rho,
             'action_rho': action_rho,
             'duration': duration,
-            'timestep': obs.current_step,
-            'observation_vector': obs.to_vect()
+            'timestep': observation.current_step,
+            'observation_vector': observation.to_vect()
         }
         return datapoint
-
-    @staticmethod
-    def check_impacts_line_decorator(select_action_method: Callable):
-        """
-        Decorator that ensures an action does not try to change a line endpoint that has been disabled. This can
-        happen with incidental outages. If an action does try to change such an endpoint, it is replaced by a
-        do-nothing action.
-
-        Parameters
-        -------
-        select_action_method :  Callable
-            The select_action method.
-
-        Returns
-        -------
-        action_chosen : grid2op.Action.BaseAction
-            The selected action.
-        datapoint_dict : Optional[dict]
-            A dictionary which contains information about the action. Used to save imitation learning tutor datapoints.
-            The format of the dictionary is described in create_datapoint_dict(). It is the responsibility of the
-            strategy to determine which actions are saved as datapoints; actions that should not be saved should return
-            None.
-        """
-
-        def wrapper(self, obs: grid2op.Observation.CompleteObservation):
-            action, datapoint_dict = select_action_method(self, obs)
-
-            if (action._lines_impacted is not None) and (sum(action._lines_impacted) > 0):
-                action.reset()
-
-            return action, datapoint_dict
-
-        return wrapper
 
     @staticmethod
     def is_do_nothing_set_bus(topo_vect: np.array, set_bus: np.array) -> bool:
@@ -158,6 +139,52 @@ class AgentStrategy(ABC):
             Whether the set_bus actions results in the same topo vect.
         """
         return all(np.logical_or(set_bus == 0, set_bus == topo_vect))
+
+
+class Agent:
+    """
+    Agent that uses a strategy to take actions.
+    """
+
+    def __init__(self, strategy: AgentStrategy, do_nothing_action: grid2op.Action.BaseAction):
+        """
+        Parameters
+        ----------
+        strategy : AgentStrategy
+            The strategy used by the agent.
+        do_nothing_action
+            The do-nothing action.
+        """
+        self.strategy = strategy
+        self.do_nothing_action = do_nothing_action
+
+    def select_action(self, observation: grid2op.Observation.CompleteObservation) \
+            -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
+        """
+        Select an action and return it. If the selected action attempts to change a line, return a do-nothing action.
+
+        Parameters
+        ----------
+        observation :  grid2op.Observation.CompleteObservation
+            The observation, on which to base the action.
+
+        Returns
+        -------
+        action_chosen : grid2op.Action.BaseAction
+            The selected action.
+        datapoint_dict : Optional[dict]
+            A dictionary which contains information about the action. Used to save imitation learning tutor datapoints.
+            The format of the dictionary is described in create_datapoint_dict(). It is the responsibility of the
+            strategy to determine which actions are saved as datapoints; actions that should not be saved should return
+            None.
+        """
+        action, datapoint_dict = self.strategy.select_action(observation)
+
+        # Replace actions by do-nothing actions if they attempt to change a line
+        if (action._lines_impacted is not None) and (sum(action._lines_impacted) > 0):
+            action = self.do_nothing_action
+
+        return action, datapoint_dict
 
 
 class IdleStrategy(AgentStrategy):
@@ -181,7 +208,6 @@ class IdleStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class IdleStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
-    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -205,6 +231,7 @@ class IdleStrategy(AgentStrategy):
 class GreedyStrategy(AgentStrategy):
 
     def __init__(self,
+                 do_nothing_threshold: float,
                  do_nothing_action: grid2op.Action.BaseAction,
                  reduced_action_list: Sequence[grid2op.Action.TopologyAction],
                  suppress_warning: bool = False):
@@ -297,7 +324,10 @@ class VariableOutageGreedyStrategy(AgentStrategy):
             Whether to suppress warnings during initialization.
         """
         super()
-        self.do_nothing_threshold = do_nothing_threshold
+
+        # Set fields
+        config = get_config()
+        self.activity_threshold = config['simulation']['activity_threshold']
         self.do_nothing_action = do_nothing_action
 
         config = get_config()
@@ -306,11 +336,11 @@ class VariableOutageGreedyStrategy(AgentStrategy):
         self.lout_considered = lout_considered
         self.action_list_per_lo = {line: get_env_actions(env, disable_line=line) for line in lout_considered}
 
+        # Raise warning
         if not suppress_warning:
             warnings.warn("\nSaving inference durations in datapoints is not implemented; " +
                           "\nthe value in datapoint_dict is always 0.", stacklevel=2)
 
-    @AgentStrategy.check_impacts_line_decorator
     def select_action(self,
                       observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
@@ -365,52 +395,43 @@ class VariableOutageGreedyStrategy(AgentStrategy):
 class NMinusOneStrategy(AgentStrategy):
 
     def __init__(self,
-                 do_nothing_threshold: float,
                  action_space: grid2op.Action.ActionSpace,
                  reduced_action_list: Sequence[grid2op.Action.TopologyAction],
-                 line_outages_to_consider: Sequence[int],
-                 N0_rho_threshold: float,
                  suppress_warning: bool = False):
         """
-
         Parameters
         ----------
-        do_nothing_threshold : float
-            The threshold below which do-nothing actions are always selected and no datapoints are returned.
         action_space : grid2op.Action.ActionSpace
             The action space of the environment in which the agent operates.
         reduced_action_list : Sequence[grid2op.Action.TopologyAction]
             The reduced action list, containing the actions simulated and selected from by the agent.
-        line_outages_to_consider : Sequence[int]
-            The lines outages considered by the agent in it's N-1 max. max. rho simulation.
-        N0_rho_threshold : float
-            Actions that lead to a good N0 scenario (i.e. a scenario where no line outages are considered) are
-            first evaluated on their N-1 performance. This value determines what counts as 'good' N0 performance:
-            if an action has a N0 max. rho that exceeds it, that actions' N-1 max. max. rho is not evaluated.
         suppress_warning : bool
             Whether to suppress warnings during initialization.
         """
         super()
-        self.do_nothing_threshold = do_nothing_threshold
+
+        # Set fields
+        config = get_config()
+        self.activity_threshold = config['simulation']['activity_threshold']
+        self.N0_rho_threshold = config['simulation']['NMinusOne_strategy']['N0_rho_threshold']
+        self.line_outages_to_consider = config['simulation']['NMinusOne_strategy']['line_idxs_to_consider_N-1']
         self.action_space = action_space
         self.reduced_action_list = reduced_action_list
-        self.line_outages_to_consider = line_outages_to_consider
-        self.N0_rho_threshold = N0_rho_threshold
 
         if not suppress_warning:
             warnings.warn("\nSaving inference durations in datapoints is not implemented; " +
                           "\nthe value in datapoint_dict is always 0.", stacklevel=2)
 
-    def max_max_rho_NMinOne(self,
-                            a: grid2op.Action.BaseAction,
-                            observation: grid2op.Observation.CompleteObservation) -> float:
+    def nminusone_rho(self,
+                      action: grid2op.Action.BaseAction,
+                      observation: grid2op.Observation.CompleteObservation) -> float:
         """
-        Given an action, calculate the max. (over multiple N-1 scenarios) of the max. rho (over the power lines)
-        of the observations produced by simulating that action.
+        Given an action, calculate the N-1 rho, given by the max. (over multiple N-1 scenarios) of the max. rho
+        (over the power lines) of the observations produced by simulating that action.
 
         Parameters
         ----------
-        a : grid2op.Action.BaseAction
+        action : grid2op.Action.BaseAction
             The action to calculate the mean for.
         observation
             The current observation, on which to simulate the action.
@@ -420,7 +441,7 @@ class NMinusOneStrategy(AgentStrategy):
         float
             The max over the max. rhos, as described above.
         """
-        set_bus = a.set_bus
+        set_bus = action.set_bus
 
         max_rhos = []
         # Iterate over N-1 scenarios
@@ -434,16 +455,16 @@ class NMinusOneStrategy(AgentStrategy):
 
         return max(max_rhos)
 
-    @AgentStrategy.check_impacts_line_decorator
     def select_action(self,
                       observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, Optional[dict]]:
         """
         Selects an action based on the performance of the action under N-1 scenarios. The action is selected based on:
-            1) if there are any actions that result in a N0 max. rho under the N0 rho threshold, select the among the
+            1) perform a do-nothing action if the max. rho is under the activity threshold.
+            2) if there are any actions that result in a N0 max. rho under the N0 rho threshold, select the among the
             actions satisfying that condition, the one with the lowest N-1 max. max. rho threshold, provided that
             this is not infinity.
-            2) if no action has a N0 max. rho under the N0 threshold, OR all actions satisfying that condition
+            3) if no action has a N0 max. rho under the N0 threshold, OR all actions satisfying that condition
             have a N-1 max. max. rho threshold of infinity, then select the action that minimizes the N0 max. rho
             threshold.
 
@@ -460,9 +481,14 @@ class NMinusOneStrategy(AgentStrategy):
             A dictionary which contains information about the action, or None. None is returned if the datapoint should
             not be saved as action.
         """
-        if observation.rho.max() > self.do_nothing_threshold:
+        if observation.rho.max() > self.activity_threshold:
             action_chosen = sel_rho = action_idx = None
             dn_rho = self.get_max_rho_simulated(observation, self.action_space({}))
+
+            # Predicting N-1 networks with the N-1 agent is not implemented, so select a do-nothing action when
+            # a line is disabled
+            if not all(observation.line_status):
+                return self.action_space({}), None
 
             # Select the do-something actions
             actions = [(idx, a) for idx, a in enumerate(self.reduced_action_list)
@@ -483,7 +509,7 @@ class NMinusOneStrategy(AgentStrategy):
 
                 for idx, a, max_rho in action_max_rho_tuples_below_threshold:
                     # Calculate the N-1 max. max. rho
-                    max_max_rho_NMinOne = self.max_max_rho_NMinOne(a, observation)
+                    max_max_rho_NMinOne = self.nminusone_rho(a, observation)
 
                     # Set action as best action if it has the lowest N-1 max. max. rho so far
                     if lowest_max_max_rho_NMinOne > max_max_rho_NMinOne:
@@ -521,7 +547,7 @@ class NMinusOneStrategy(AgentStrategy):
             assert not (action_chosen is None or sel_rho is None or action_idx is None), \
                 "One of the output variables is None."
             assert sel_rho >= 0, "Sel_rho cannot be negative"
-            assert len(self.reduced_action_list) > action_idx >= -1, "Action idx is outside of it's possible range."
+            assert len(self.reduced_action_list) > action_idx >= -1, "Action idx is outside its possible range."
             assert action_idx == -1 if sel_rho == np.inf else True, \
                 "If sel_rho is infinite, the action should be do_nothing."
 
@@ -539,7 +565,6 @@ class NaiveStrategy(AgentStrategy):
                  model: Model,
                  feature_statistics: dict,
                  action_space: grid2op.Action.ActionSpace,
-                 dn_threshold: float,
                  suppress_warning: bool = False):
         """
         Parameters
@@ -550,20 +575,19 @@ class NaiveStrategy(AgentStrategy):
             Dictionary with information (mean, std) per object type used to normalize features.
         action_space : grid2op.Action.ActionSpace
             The action space of the environment in which the agent operates.
-        dn_threshold : float
-            The threshold below which do-nothing actions are always selected and no datapoints are returned.
         suppress_warning : bool
             Whether to suppress warnings during initialization.
         """
-
         super()
+
+        # Set fields
+        config = get_config()
+        self.activity_threshold = config['simulation']['activity_threshold']
         self.model = model
         self.feature_statistics = feature_statistics
         self.action_space = action_space
-        self.dn_threshold = dn_threshold
 
-        # Initialize action space cache used for
-        config = get_config()
+        # Initialize the action space cache used for matching predictions to actions
         lout_considered = config['training']['settings']['line_outages_considered']
         self.as_cache = postprocessing.ActSpaceCache(line_outages_considered=lout_considered)
 
@@ -571,7 +595,6 @@ class NaiveStrategy(AgentStrategy):
             warnings.warn("\nSaving actions as datapoints is not supported by class NaiveStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
-    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -589,8 +612,8 @@ class NaiveStrategy(AgentStrategy):
         None
             An optional dictionary which contains information about the action. Not provided by this subclass.
         """
-        if observation.rho.max() > self.dn_threshold:
-            P = ML_predict_obs(self.model, observation, self.feature_statistics, self.as_cache)
+        if observation.rho.max() > self.activity_threshold:
+            P = _ML_predict_observation(self.model, observation, self.feature_statistics, self.as_cache)
             P = P.numpy().astype(int)
 
             action = self.action_space({'change_bus': np.where(P)[0]})
@@ -623,14 +646,15 @@ class VerifyStrategy(AgentStrategy):
             Dictionary with information (mean, std) per object type used to normalize features.
         action_space : grid2op.Action.ActionSpace
             The action space of the environment in which the agent operates.
-        dn_threshold : float
-            The threshold below which do-nothing actions are always selected and no datapoints are returned.
-        reject_action_threshold : float
-            The threshold, if succeeded by simulating an action, that action is rejected.
         suppress_warning : bool
             Whether to suppress warnings during initialization.
         """
         super()
+
+        # Set fields
+        config = get_config()
+        self.activity_threshold = config['simulation']['activity_threshold']
+        self.reject_action_threshold = config['simulation']['verify_strategy']['reject_action_threshold']
         self.model = model
         self.feature_statistics = feature_statistics
         self.action_space = action_space
@@ -642,11 +666,11 @@ class VerifyStrategy(AgentStrategy):
         lout_considered = config['training']['settings']['line_outages_considered']
         self.as_cache = postprocessing.ActSpaceCache(line_outages_considered=lout_considered)
 
+        # Potentially raise warning
         if not suppress_warning:
             warnings.warn("\nSaving actions as datapoints is not supported by class VerifyStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
-    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -680,143 +704,33 @@ class VerifyStrategy(AgentStrategy):
         return action, None
 
 
-class VerifyGreedyHybridStrategy(AgentStrategy):
+class MaxRhoThresholdHybridStrategy(AgentStrategy):
     """
-    Strategy that selects the action selected by the ML model, with two exceptions:
-    1) Actions are rejected if they increase the max. rho over a threshold.
-    2) Above a certain threshold, the agent takes actions using greedy simulation.
+    Hybrid strategy that selects which strategy to use based whether the max. rho exceeds some threshold.
     """
 
     def __init__(self,
-                 env,
-                 model: Model,
-                 feature_statistics: dict,
-                 action_space: grid2op.Action.ActionSpace,
-                 dn_threshold: float,
-                 reject_action_threshold: float,
-                 reduced_action_list: Sequence[grid2op.Action.TopologyAction],
-                 switch_control_threshold: float,
-                 suppress_warning: bool = False):
+                 lower_strategy: AgentStrategy,
+                 higher_strategy: AgentStrategy):
         """
         Parameters
         ----------
-        model : model.Model
-            The machine learning model that predicts actions.
-        feature_statistics : dict
-            Dictionary with information (mean, std) per object type used to normalize features.
-        action_space : grid2op.Action.ActionSpace
-            The action space of the environment in which the agent operates.
-        dn_threshold : float
-            The threshold below which do-nothing actions are always selected and no datapoints are returned.
-        reject_action_threshold : float
-            The threshold, if succeeded by simulating an action, that action is rejected.
-        reduced_action_list : Sequence[grid2op.Action.TopologyAction]
-            The reduced action list, containing the actions simulated and selected from by the greedy agent.
-        switch_control_threshold : float
-            Constant above which to switch to the greedy agent.
-        suppress_warning : bool
-            Whether to suppress warnings during initialization.
+        lower_strategy : AgentStrategy
+            The strategy to use if the max.rho does not exceed the threshold.
+        higher_strategy : AgentStrategy
+            The strategy to use if the max.rho does exceed the threshold.
         """
         super()
-        self.verify_strategy = VerifyStrategy(model,
-                                              feature_statistics,
-                                              action_space,
-                                              dn_threshold,
-                                              reject_action_threshold,
-                                              True)
-        self.greedy_strategy = VariableOutageGreedyStrategy(env, dn_threshold, action_space({}), True)
-        self.switch_control_threshold = switch_control_threshold
-
-        if not suppress_warning:
-            warnings.warn("\nSaving actions as datapoints is not supported by class VerifyGreedyHybridStrategy; " +
-                          "\nthe second output of the select_action method is always None.", stacklevel=2)
-
-    @AgentStrategy.check_impacts_line_decorator
-    def select_action(self, observation: grid2op.Observation.CompleteObservation) \
-            -> Tuple[grid2op.Action.BaseAction, None]:
-        """
-        Selects an action.
-
-        Parameters
-        ----------
-        observation :  grid2op.Observation.CompleteObservation
-            The observation, on which to base the action.
-
-        Returns
-        -------
-        action_chosen : grid2op.Action.BaseAction
-            The selected action.
-        None
-            An optional dictionary which contains information about the action. Not provided by this subclass.
-        """
-        if observation.rho.max() > self.switch_control_threshold:
-            action, _ = self.greedy_strategy.select_action(observation)
-            return action, None
-        else:
-            action, _ = self.verify_strategy.select_action(observation)
-            return action, None
-
-
-class VerifyNMinusOneHybridStrategy(AgentStrategy):
-    """
-    Strategy that selects the action selected by the ML model, with two exceptions:
-    1) Actions are rejected if they increase the max. rho over a threshold.
-    2) Above a certain threshold, the agent takes actions using greedy simulation.
-    """
-
-    def __init__(self,
-                 model: Model,
-                 feature_statistics: dict,
-                 env_action_space: grid2op.Action.ActionSpace,
-                 dn_threshold: float,
-                 reject_action_threshold: float,
-                 reduced_action_list: Sequence[grid2op.Action.TopologyAction],
-                 line_outages_to_consider: list,
-                 switch_control_threshold: float,
-                 N0_rho_threshold: float,
-                 suppress_warning: bool = False):
-        """
-        Parameters
-        ----------
-        model : model.Model
-            The machine learning model that predicts actions.
-        feature_statistics : dict
-            Dictionary with information (mean, std) per object type used to normalize features.
-        dn_threshold : float
-            The threshold below which do-nothing actions are always selected and no datapoints are returned.
-        reject_action_threshold : float
-            The threshold, if succeeded by simulating an action, that action is rejected.
-        reduced_action_list : Sequence[grid2op.Action.TopologyAction]
-            The reduced action list, containing the actions simulated and selected from by the agent.
-        line_outages_to_consider : Sequence[int]
-            The lines outages considered by the agent in it's N-1 max. max. rho simulation.
-        N0_rho_threshold : float
-            N-0 rho filter for actions of the N-1 agent.
-        switch_control_threshold : float
-            Constant above which to switch to the greedy agent.
-        suppress_warning : bool
-            Whether to suppress warnings during initialization.
-        """
-        super()
-        self.verify_strategy = VerifyStrategy(model,
-                                              feature_statistics,
-                                              env_action_space,
-                                              dn_threshold,
-                                              reject_action_threshold,
-                                              True)
-        self.nminusone_strategy = NMinusOneStrategy(dn_threshold,
-                                                    env_action_space,
-                                                    reduced_action_list,
-                                                    line_outages_to_consider,
-                                                    N0_rho_threshold,
-                                                    suppress_warning=True)
-        self.switch_control_threshold = switch_control_threshold
+        # Set fields
+        config = get_config()
+        self.switch_control_threshold = config['simulation']['hybrid_strategies']['take_the_wheel_threshold']
+        self.lower_strategy = lower_strategy
+        self.higher_strategy = higher_strategy
 
         if not suppress_warning:
             warnings.warn("\nSaving actions as datapoints is not supported by class VerifyNMinusOneHybridStrategy; " +
                           "\nthe second output of the select_action method is always None.", stacklevel=2)
 
-    @AgentStrategy.check_impacts_line_decorator
     def select_action(self, observation: grid2op.Observation.CompleteObservation) \
             -> Tuple[grid2op.Action.BaseAction, None]:
         """
@@ -835,10 +749,10 @@ class VerifyNMinusOneHybridStrategy(AgentStrategy):
             An optional dictionary which contains information about the action. Not provided by this subclass.
         """
         if observation.rho.max() > self.switch_control_threshold:
-            action, _ = self.nminusone_strategy.select_action(observation)
+            action, _ = self.higher_strategy.select_action(observation)
             return action, None
         else:
-            action, _ = self.verify_strategy.select_action(observation)
+            action, _ = self.lower_strategy.select_action(observation)
             return action, None
 
 
@@ -895,10 +809,10 @@ class LineOutageHybridStrategy(AgentStrategy):
             return action, None
 
 
-def ML_predict_obs(model: training.models.Model,
-                   obs: grid2op.Observation.CompleteObservation,
-                   fstats: dict,
-                   as_cache: postprocessing.ActSpaceCache) -> \
+def _ML_predict_observation(model: training.models.Model,
+                            observation: grid2op.Observation.CompleteObservation,
+                            fstats: dict,
+                            as_cache: postprocessing.ActSpaceCache) -> \
         torch.Tensor:
     """
     Make a model prediction from an observation.
@@ -907,58 +821,62 @@ def ML_predict_obs(model: training.models.Model,
     ----------
     model : training.models.Model
         The model to predict with.
-    obs : grid2op.Observation.CompleteObservation
+    observation : grid2op.Observation.CompleteObservation
         The observation to predict from.
     fstats : dict
         The feature statistics used to normalize the environment features.
     as_cache : postprocessing.ActSpaceCache
-        The action space cache, which postprocesses the prediction so that it is a valid action.
+        The action space cache, which post-processed the prediction so that it is a valid action.
 
     Returns
     -------
     torch.Tensor
         The postprocessed prediction.
     """
-    obs_dict = obs.to_dict()
+    observation_dict = observation.to_dict()
     device = 'cpu'
 
     # Extract and normalize gen, load, or, ex features and topo_vect
-    gen_features = extract_gen_features(obs_dict)
+    gen_features = extract_gen_features(observation_dict)
     norm_gen_features = (gen_features - fstats['gen']['mean']) / fstats['gen']['std']
-    load_features = extract_load_features(obs_dict)
+    load_features = extract_load_features(observation_dict)
     norm_load_features = (load_features - fstats['load']['mean']) / fstats['load']['std']
-    or_features = extract_or_features(obs_dict)
+    or_features = extract_or_features(observation_dict)
     norm_or_features = (or_features - fstats['line']['mean']) / fstats['line']['std']
-    ex_features = extract_ex_features(obs_dict)
+    ex_features = extract_ex_features(observation_dict)
     norm_ex_features = (ex_features - fstats['line']['mean']) / fstats['line']['std']
-    topo_vect = obs.topo_vect
+    topo_vect = observation.topo_vect
 
     # Make a prediction with the model
-    if type(model) is FCNN:
-        P = _predict_FCNN(model, norm_gen_features, norm_load_features, norm_or_features, norm_ex_features,
-                          topo_vect)
-    elif type(model) is GCN:
-        P = _predict_GCN(model, obs, norm_gen_features, norm_load_features, norm_or_features, norm_ex_features,
+    if isinstance(model, FCNN):
+        P = _predict_FCNN(model, norm_gen_features, norm_load_features, norm_or_features, norm_ex_features, topo_vect)
+    elif isinstance(model, GCN):
+        P = _predict_GCN(model, observation, norm_gen_features, norm_load_features, norm_or_features, norm_ex_features,
                          topo_vect)
     else:
         raise TypeError("Model had invalid type.")
 
-    # Match prediction to nearest valid action or the single affected subtation
-    disabled_lines = np.where(~obs.line_status)[0]
+    # Find the disabled lines
+    disabled_lines = np.where(~observation.line_status)[0]
+
+    # In the rare case that there are multiple lines disabled, or the disabled line is not in the action cache,
+    # we can't match the prediction to the nearest action. In that case, we simply execute the possibly invalid action
+    # at one substation.
     if len(disabled_lines) > 1 or (len(disabled_lines) == 1
                                    and disabled_lines[0] not in as_cache.set_act_space_per_lo.keys()):
         # Select a single substation
         P_sub_mask, P_sub_idx = g2o_util.select_single_substation_from_topovect(P,
-                                                                                obs.sub_info,
+                                                                                observation.sub_info,
                                                                                 f=lambda x:
                                                                                 torch.sum(torch.clamp(x - 0.5, min=0)))
         postprocessed_P = torch.zeros_like(P)
         postprocessed_P[torch.logical_and(P_sub_mask, P > 0.5)] = 1
+    # If not, match to the nearest valid action
     else:
-        # Match to the closest action
-        get_cabnp = as_cache.get_change_actspace_by_nearness_pred
-        postprocessed_P = get_cabnp(-1 if len(disabled_lines) == 0 else disabled_lines[0],
-                                    torch.tensor(obs.topo_vect, device=device), P, device)[0]
+        # Match to the nearest action
+        get_nearest_action = as_cache.get_change_actspace_by_nearness_pred
+        postprocessed_P = get_nearest_action(-1 if len(disabled_lines) == 0 else disabled_lines[0],
+                                             torch.tensor(observation.topo_vect, device=device), P, device)[0]
 
     return postprocessed_P
 
@@ -1008,7 +926,7 @@ def _predict_FCNN(model: FCNN,
 
 
 def _predict_GCN(model: GCN,
-                 obs: grid2op.Observation.CompleteObservation,
+                 observation: grid2op.Observation.CompleteObservation,
                  norm_gen_features: np.ndarray,
                  norm_load_features: np.ndarray,
                  norm_or_features: np.ndarray,
@@ -1021,7 +939,7 @@ def _predict_GCN(model: GCN,
     ----------
     model : GCN
         The GCN model.
-    obs : grid2op.Observation.CompleteObservation
+    observation : grid2op.Observation.CompleteObservation
         The observation to predict from.
     norm_gen_features : np.ndarray
         The normalized generator features.
@@ -1040,44 +958,47 @@ def _predict_GCN(model: GCN,
         The prediction.
     """
     config = get_config()
-    disabled_lines = np.where(~obs.line_status)[0]
+    disabled_lines = np.where(~observation.line_status)[0]
     device = 'cpu'
 
-    # Obtain the reduced env variables for this line disabled
-    # TODO: this might be too slow, and should perhaps be cached
+    # Obtain the environment variables, potentially reduced if the network has lines disabled
+    # TODO: there could be a speedup here by cacheing
     reduced_env_vars = reduced_env_variables(disabled_lines)
 
     # Concatenating the pos_topo_vect variables
     reduced_pos_topo_vect = reduced_env_vars['pos_topo_vect']
 
+    # Reducing variables
     if len(disabled_lines) > 0:
-        dis_lines_or_tv = [config['rte_case14_realistic']['line_or_pos_topo_vect'][line] for line in disabled_lines]
-        dis_lines_ex_tv = [config['rte_case14_realistic']['line_ex_pos_topo_vect'][line] for line in disabled_lines]
-        dis_endpoint_tv = dis_lines_or_tv + dis_lines_ex_tv
+        disabled_origins_topovect_positions = [config['rte_case14_realistic']['line_or_pos_topo_vect'][line]
+                                               for line in disabled_lines]
+        disabled_extremities_topovect_positions = [config['rte_case14_realistic']['line_ex_pos_topo_vect'][line]
+                                                   for line in disabled_lines]
+        disabled_endpoints_topovect_positions = (disabled_origins_topovect_positions +
+                                                 disabled_extremities_topovect_positions)
 
-        # noinspection PyTypeChecker
         reduced_or_features = np.delete(norm_or_features, disabled_lines, axis=0)
-        # noinspection PyTypeChecker
         reduced_ex_features = np.delete(norm_ex_features, disabled_lines, axis=0)
         assert norm_or_features.shape == norm_ex_features.shape, ("Origin and extremities features should have the "
                                                                   "same shape.")
 
         # Check and reduce the topo_vect variable
-        assert all(topo_vect[dis_lines_or_tv] == -1), 'Disabled origins and extremities should be -1.'
+        assert all(
+            topo_vect[disabled_origins_topovect_positions] == -1), 'Disabled origins and extremities should be -1.'
         # noinspection PyTypeChecker
-        reduced_topo_vect = np.delete(topo_vect, dis_endpoint_tv)
+        reduced_topo_vect = np.delete(topo_vect, disabled_endpoints_topovect_positions)
     else:
         reduced_or_features = norm_or_features
         reduced_ex_features = norm_ex_features
-        reduced_topo_vect = obs.topo_vect
+        reduced_topo_vect = observation.topo_vect
 
     same_busbar_e, other_busbar_e, line_e = g2o_util.connectivity_matrices(reduced_env_vars['sub_info'],
                                                                            reduced_topo_vect,
                                                                            reduced_env_vars['line_or_pos_topo_vect'],
                                                                            reduced_env_vars['line_ex_pos_topo_vect'])
 
+    # Creating edges
     if model.network_type == NetworkType.HOMO:
-        # noinspection PyTypeChecker
         edges = torch.tensor(np.append(same_busbar_e, line_e, axis=1), device=device, dtype=torch.long)
     elif model.network_type == NetworkType.HETERO:
         edges = {('object', 'line', 'object'): torch.tensor(line_e, device=device, dtype=torch.long),
@@ -1088,12 +1009,11 @@ def _predict_GCN(model: GCN,
     else:
         raise ValueError('Invalid network_type value.')
 
+    # Make a prediction
     norm_gen_features = torch.tensor(norm_gen_features, dtype=torch.float)
     norm_load_features = torch.tensor(norm_load_features, dtype=torch.float)
     reduced_or_features = torch.tensor(reduced_or_features, dtype=torch.float)
     reduced_ex_features = torch.tensor(reduced_ex_features, dtype=torch.float)
-
-    # Make a prediction
     P = model(norm_gen_features,
               norm_load_features,
               reduced_or_features,
@@ -1101,18 +1021,19 @@ def _predict_GCN(model: GCN,
               edges,
               reduced_pos_topo_vect).reshape((-1))
 
-    # Unreduce prediction
+    # Un-reduce prediction
     if len(disabled_lines) > 0:
         # Adjust the indices to account for index shifting when inserting multiple elements
-        add_idxs = dis_endpoint_tv.copy()
+        add_idxs = disabled_endpoints_topovect_positions.copy()
         add_idxs.sort()
         add_idxs = [idx - i for i, idx in enumerate(add_idxs)]
 
-        # Unreduce set_action
+        # Un-reduce set_action
         P = P.detach().numpy()
         P = np.insert(P, add_idxs, 0)
         P = torch.tensor(P, device=device)
-        assert torch.count_nonzero(P[dis_endpoint_tv,]) == 0, \
-            "Disabled line endpoints must be zero in the topo_vect after unreducing."
+
+        assert torch.count_nonzero(P[disabled_endpoints_topovect_positions,]) == 0, \
+            "Disabled line endpoints must be zero in the topo_vect after un-reducing."
 
     return P

@@ -9,7 +9,7 @@ paths:
   model: models/FCNN_3
 
 simulation:
-  disable_line: 2 # Index of line to be disabled; -1 indicates no line
+  disable_line: -1 # Index of line to be disabled; -1 indicates no line
   n_chronics: 1000
   partition: val #train, val, test, all
   seed: 1 # Environment seed
@@ -48,15 +48,15 @@ data_processing:
 training:
   settings:
     train_log_freq: 2000 #How often to log the training set statistics
-    val_log_freq: 5000 #How often to evaluate the validation set
-    dp_per_val_log: 25000 # How many datapoints to use per val logging
+    val_log_freq: 50000 #How often to evaluate the validation set
+    dp_per_val_log: 20000 # How many datapoints to use per val logging
     advanced_val_analysis: true
     line_outages_considered: [-1, 0, 1, 2, 3, 4, 5, 6, 12]
   hyperparams:
-    model_type: FCNN #Should be GCN or FCNN
+    model_type: GCN  #Should be GCN or FCNN
     n_epoch: 100
     lr: 5.0E-4
-    N_node_hidden: 230 #Size of hidden layers in model
+    N_node_hidden: 128 #Size of hidden layers in model
     LReLu_neg_slope: 0.1
     batch_size: 64
     label_smoothing_alpha: 0 #Controls the extent of label smoothing

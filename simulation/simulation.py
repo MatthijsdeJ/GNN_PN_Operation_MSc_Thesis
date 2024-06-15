@@ -9,7 +9,6 @@ import logging
 import os
 from typing import List, Dict
 import time
-import random
 
 # Third-part library imports
 import grid2op
@@ -27,29 +26,22 @@ from auxiliary.generate_action_space import get_env_actions
 
 
 def simulate():
-    global config
-    global ts_in_day
-
     """
     Generate imitation learning data from the tutor model.
     """
     # Load constants, settings, hyperparameters, arguments
     config = get_config()
-    n_chronics = config['simulation']['n_chronics']
+    n_scenarios = config['simulation']['n_chronics']
     partition = config['simulation']['partition']
     ts_in_day = int(config['rte_case14_realistic']['ts_in_day'])
     disable_line = config['simulation']['disable_line']
     logging_path = config['paths']['evaluation_log']
     save_data = config['simulation']['save_data']
 
-    # Initialize logging
+    # Initialize logging, environment, and the agent
     logging.basicConfig(filename=logging_path, filemode='w', format='%(message)s', level=logging.INFO)
-
-    # Initialize environment
     env = g2o_util.init_env()
-
-    # Initialize strategy
-    strategy = init_strategy(env)
+    agent = init_agent(env)
 
     # Specify scenarios
     if partition == 'train':
@@ -59,14 +51,14 @@ def simulate():
     elif partition == 'test':
         scenarios = np.load(config['paths']['data_split'] + 'test_scenarios.npy')
     elif partition == 'all':
-        scenarios = range(0, n_chronics)
+        scenarios = range(n_scenarios)
     else:
         raise ValueError()
 
     # Log config
     log_and_print(f'Config: {config}')
 
-    # Loop over chronics
+    # Loop over scenarios
     for num in scenarios:
         env.set_id(num)
         env.reset()
@@ -77,7 +69,7 @@ def simulate():
             # (Re)set variables
             days_completed = 0
             if save_data:
-                chronic_datapoints = day_datapoints = []
+                scenario_datapoints = day_datapoints = []
 
             # Disable lines, if any
             if disable_line != -1:
@@ -91,6 +83,7 @@ def simulate():
             # Capture time for analysing durations
             start_day_time = time.thread_time_ns() / 1e9
 
+            # While scenario is not completed
             # Create opponent variables
             attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
                 = _create_opponent_variables()
@@ -98,15 +91,15 @@ def simulate():
             # While chronic is not completed
             while env.nb_time_step < env.chronics_handler.max_timestep():
 
-                # Reset at midnight,  add day data to chronic data
+                # Reset at midnight, add day data to scenario data
                 if env.nb_time_step % ts_in_day == ts_in_day - 1:
 
-
+                    # Capture and reset times, log information, increment days_completed
                     end_day_time = time.thread_time_ns() / 1e9
                     log_and_print(f'{env.nb_time_step}: Day {ts_to_day(env.nb_time_step, ts_in_day)} completed in '
                                   f'{end_day_time - start_day_time:.2f} seconds.')
-                    start_day_time = time.thread_time_ns() / 1e9
                     days_completed += 1
+                    start_day_time = time.thread_time_ns() / 1e9
 
                     # Reset topology
                     env_step_raise_exception(env, env.action_space({'set_bus': reference_topo_vect}))
@@ -117,22 +110,24 @@ def simulate():
 
                     # Save and reset data
                     if save_data:
-                        chronic_datapoints += day_datapoints
+                        scenario_datapoints += day_datapoints
                         day_datapoints = []
 
                     continue
 
-                # Strategy selects an action
+                timestep = env.nb_time_step
+
+                # Agent selects an action
                 obs = env.get_obs()
                 before_action_time = time.thread_time_ns() / 1e3
-                action, datapoint = strategy.select_action(obs)
+                action, datapoint = agent.select_action(obs)
                 action_duration = time.thread_time_ns() / 1e3 - before_action_time
 
                 # Assert not more than one substation is changed and no lines are changed
                 assert (action._subs_impacted is None) or (sum(action._subs_impacted) < 2), \
-                    ("Actions should at most impact a single substation.")
+                    "Actions should at most impact a single substation."
                 assert (action._lines_impacted is None) or (sum(action._lines_impacted) < 1), \
-                    ("Action should not impact the line status.")
+                    "Action should not impact the line status."
 
                 timestep = env.nb_time_step
 
@@ -180,19 +175,20 @@ def simulate():
                         action = env.action_space({'set_line_status': (attack_line, 1)})
 
                 # Take the selected action in the environment
+                # Apply the selected action in the environment
                 previous_max_rho = obs.rho.max()
                 previous_topo_vect = obs.topo_vect
                 obs, _, _, _ = env.step(action)
 
                 # Potentially log action information
-                if previous_max_rho > config['simulation']['activity_threshold']: #and not env.done:
+                if previous_max_rho > config['simulation']['activity_threshold']:
                     topo_vect_diff = 1 - np.equal(previous_topo_vect, obs.topo_vect)
                     mask, sub_id = select_single_substation_from_topovect(torch.tensor(topo_vect_diff),
                                                                           torch.tensor(obs.sub_info),
                                                                           select_nothing_condition=lambda x:
                                                                           not any(x)
                                                                           )
-                    log_and_print(f"{env.nb_time_step}: Action selected. "
+                    log_and_print(f"{timestep}: Action selected. "
                                   f"Old max rho: {previous_max_rho:.4f}, "
                                   f"new max rho: {obs.rho.max():.4f}, "
                                   f"substation: {sub_id}, "
@@ -206,7 +202,7 @@ def simulate():
                 # If the game is done at this point, this indicated a (failed) game over.
                 # If so, reset the environment to the start of next day and discard the records
                 if env.done:
-                    log_and_print(f'{env.nb_time_step}: Failure of day {ts_to_day(env.nb_time_step, ts_in_day)}.')
+                    log_and_print(f'{timestep}: Failure of day {ts_to_day(timestep, ts_in_day)}.')
 
                     g2o_util.skip_to_next_day(env, ts_in_day, int(env.chronics_handler.get_name()), disable_line)
                     day_datapoints = []
@@ -215,13 +211,12 @@ def simulate():
                     attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line \
                         = _create_opponent_variables(env.nb_time_step)
 
-            # At the end of a chronic, print a message, and store and reset the corresponding records
-            log_and_print(f'{env.nb_time_step}: Chronic exhausted! \n\n\n')
+            # At the end of a scenario, print a message, and store and reset the corresponding records
+            log_and_print(f'{env.nb_time_step}: Scenario exhausted! \n\n\n')
 
             # Saving and resetting the data
             if save_data:
                 save_records(chronic_datapoints, int(env.chronics_handler.get_name()), days_completed)
-
         except (grid2op.Exceptions.DivergingPowerFlow, grid2op.Exceptions.BackendError) as e:
             log_and_print(f'{env.nb_time_step}: Uncaught exception encountered on ' +
                           f'day {ts_to_day(env.nb_time_step, ts_in_day)}: {e}.' +
@@ -332,9 +327,9 @@ def init_model() -> Model:
     return model
 
 
-def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
+def init_agent(env: grid2op.Environment) -> strat.Agent:
     """
-    Initialize the strategy.
+    Initialize the agent and its strategy.
 
     Parameters
     ----------
@@ -343,8 +338,8 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
 
     Returns
     -------
-    strategy : StrategyType
-        The initialized strategy.
+    strategy : Agent
+        The agent with the initialized strategy.
     """
     config = get_config()
     strategy_type = config['simulation']['strategy']
@@ -352,15 +347,11 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
     if strategy_type == StrategyType.IDLE:
         strategy = strat.IdleStrategy(env.action_space({}))
     elif strategy_type == StrategyType.GREEDY:
-        strategy = strat.GreedyStrategy(config['simulation']['activity_threshold'],
-                                        env.action_space({}),
+        strategy = strat.GreedyStrategy(env.action_space({}),
                                         get_env_actions(env, disable_line=config['simulation']['disable_line']))
     elif strategy_type == StrategyType.N_MINUS_ONE:
-        strategy = strat.NMinusOneStrategy(config['simulation']['activity_threshold'],
-                                           env.action_space,
-                                           get_env_actions(env, disable_line=config['simulation']['disable_line']),
-                                           config['simulation']['NMinusOne_strategy']['line_idxs_to_consider_N-1'],
-                                           config['simulation']['NMinusOne_strategy']['N0_rho_threshold'])
+        strategy = strat.NMinusOneStrategy(env.action_space,
+                                           get_env_actions(env, disable_line=config['simulation']['disable_line']))
     elif strategy_type == StrategyType.NAIVE_ML:
         # Initialize model and normalization statistics
         model = init_model()
@@ -369,10 +360,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
             feature_statistics = json.loads(file.read())
 
         # Initialize strategy
-        strategy = strat.NaiveStrategy(model,
-                                       feature_statistics,
-                                       env.action_space,
-                                       config['simulation']['activity_threshold'])
+        strategy = strat.NaiveStrategy(model, feature_statistics, env.action_space)
     elif strategy_type == StrategyType.VERIFY_ML:
         # Initialize model and normalization statistics
         model = init_model()
@@ -381,11 +369,7 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
             feature_statistics = json.loads(file.read())
 
         # Initialize strategy
-        strategy = strat.VerifyStrategy(model,
-                                        feature_statistics,
-                                        env.action_space,
-                                        config['simulation']['activity_threshold'],
-                                        config['simulation']['verify_strategy']['reject_action_threshold'])
+        strategy = strat.VerifyStrategy(model, feature_statistics, env.action_space)
     elif strategy_type == StrategyType.VERIFY_GREEDY_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
@@ -393,17 +377,12 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
-        # Initialize strategy
-        strategy = strat.VerifyGreedyHybridStrategy(env,
-                                                    model,
-                                                    feature_statistics,
-                                                    env.action_space,
-                                                    config['simulation']['activity_threshold'],
-                                                    config['simulation']['verify_strategy']['reject_action_threshold'],
-                                                    get_env_actions(env,
-                                                                    disable_line=config['simulation']['disable_line']),
-                                                    config['simulation']['hybrid_strategies'][
-                                                        'take_the_wheel_threshold'])
+        # Initialize strategies
+        verify_strategy = strat.VerifyStrategy(model, feature_statistics, env.action_space, False)
+        greedy_strategy = strat.GreedyStrategy(env.action_space({}),
+                                               get_env_actions(env, disable_line=config['simulation']['disable_line']),
+                                               False)
+        strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, greedy_strategy)
     elif strategy_type == StrategyType.VERIFY_N_MINUS_ONE_HYBRID:
         # Initialize model and normalization statistics
         model = init_model()
@@ -411,79 +390,34 @@ def init_strategy(env: grid2op.Environment) -> strat.AgentStrategy:
         with open(feature_statistics_path, 'r') as file:
             feature_statistics = json.loads(file.read())
 
-        # Initialize strategy
-        strategy = strat.VerifyNMinusOneHybridStrategy(model,
-                                                       feature_statistics,
-                                                       env.action_space,
-                                                       config['simulation']['activity_threshold'],
-                                                       config['simulation']['verify_strategy'][
-                                                           'reject_action_threshold'],
-                                                       get_env_actions(env, disable_line=config['simulation'][
-                                                           'disable_line']),
-                                                       config['simulation']['NMinusOne_strategy'][
-                                                           'line_idxs_to_consider_N-1'],
-                                                       config['simulation']['NMinusOne_strategy']['N0_rho_threshold'],
-                                                       config['simulation']['hybrid_strategies'][
-                                                           'take_the_wheel_threshold'])
-    elif strategy_type == StrategyType.GREEDY_N_MINUS_ONE_HYBRID:
-        greedy_strategy = strat.VariableOutageGreedyStrategy(env, config['simulation']['activity_threshold'],
-                                                             env.action_space({}))
-        nminusone_strategy = strat.NMinusOneStrategy(config['simulation']['activity_threshold'],
-                                                     env.action_space,
-                                                     get_env_actions(env,
-                                                                     disable_line=config['simulation']['disable_line']),
-                                                     config['simulation']['NMinusOne_strategy'][
-                                                         'line_idxs_to_consider_N-1'],
-                                                     config['simulation']['NMinusOne_strategy']['N0_rho_threshold'])
-        strategy = strat.LineOutageHybridStrategy(nminusone_strategy, greedy_strategy)
-    elif strategy_type == StrategyType.THREEBRID:
-        model = init_model()
-        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
-        with open(feature_statistics_path, 'r') as file:
-            feature_statistics = json.loads(file.read())
+        # Initialize nminusone
+        nminusone_actions = get_env_actions(env, disable_line=config['simulation']['disable_line'])
 
-        nminusone_strategy = strat.VerifyNMinusOneHybridStrategy(model,
-                                                       feature_statistics,
-                                                       env.action_space,
-                                                       config['simulation']['activity_threshold'],
-                                                       config['simulation']['verify_strategy'][
-                                                           'reject_action_threshold'],
-                                                       get_env_actions(env, disable_line=config['simulation'][
-                                                           'disable_line']),
-                                                       config['simulation']['NMinusOne_strategy'][
-                                                           'line_idxs_to_consider_N-1'],
-                                                       config['simulation']['NMinusOne_strategy']['N0_rho_threshold'],
-                                                       config['simulation']['hybrid_strategies'][
-                                                           'take_the_wheel_threshold'])
-        greedy_strategy = strat.VerifyGreedyHybridStrategy(env,
-                                                           model,
-                                                    feature_statistics,
-                                                    env.action_space,
-                                                    config['simulation']['activity_threshold'],
-                                                    config['simulation']['verify_strategy']['reject_action_threshold'],
-                                                    get_env_actions(env,
-                                                                    disable_line=config['simulation']['disable_line']),
-                                                    config['simulation']['hybrid_strategies'][
-                                                        'take_the_wheel_threshold'])
-        strategy = strat.LineOutageHybridStrategy(nminusone_strategy, greedy_strategy)
+        # Initialize strategies
+        verify_strategy = strat.VerifyStrategy(model, feature_statistics, env.action_space, False)
+        nminusone_strategy = strat.NMinusOneStrategy(env.action_space, nminusone_actions, False)
+        strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, nminusone_strategy)
     else:
         raise ValueError("Invalid value for strategy_name.")
 
-    return strategy
+    # Create agent
+    agent = strat.Agent(strategy, env.action_space({}))
+
+    return agent
 
 
 def save_records(datapoints: List[Dict],
-                 chronic: int,
+                 scenario: int,
                  days_completed: int):
     """
-    Saves records of a chronic to disk and prints a message that they are saved.
+    Saves records of a scenario to disk and prints a message that they are saved.
 
     Parameters
     ----------
     datapoints : list[Dict]
         The recorded datapoints.
-    chronic : int
-        Integer representing the chronic which is saved.
+    scenario : int
+        Integer representing the to-be-saved scenario.
     days_completed : int
         The number of days completed.
     """
@@ -503,23 +437,9 @@ def save_records(datapoints: List[Dict],
     else:
         dp_matrix = np.array()
 
-    folder_name = f'records_chronics_lout_{lout}_dnthreshold_{do_nothing_capacity_threshold}'
-    file_name = f'records_chronic_{chronic}_dayscomp_{days_completed}.npy'
+    folder_name = f'records_scenarios_lout_{lout}_dnthreshold_{do_nothing_capacity_threshold}'
+    file_name = f'records_scenarios_{scenario}_dayscomp_{days_completed}.npy'
     if not os.path.isdir(os.path.join(save_path, folder_name)):
         os.mkdir(os.path.join(save_path, folder_name))
     np.save(os.path.join(save_path, folder_name, file_name), dp_matrix)
     print('# records are saved! #')
-
-
-def env_step_evaluate_exceptions(env: grid2op.Environment.Environment, action: grid2op.Action.BaseAction) \
-        -> grid2op.Observation.CompleteObservation:
-    obs, _, done, info = env.step(action)
-
-    if len(info['exception']) > 1:
-        raise ExceptionGroup('Exceptions', info['exception'])
-    elif len(info['exception']) == 1:
-        exception = info['exception'][0]
-        exception.add_note("\nInfo: " + str(info).strip())
-        raise exception
-
-    return obs
