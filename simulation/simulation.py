@@ -9,6 +9,7 @@ import logging
 import os
 from typing import List, Dict
 import time
+import random
 
 # Third-part library imports
 import grid2op
@@ -224,7 +225,7 @@ def simulate():
                           ". Skipping this scenario. \n\n\n")
 
 
-def _create_opponent_variables(day_offset: int = 0):
+def _create_opponent_variables(day_offset: int = 0, ts_in_day: int = 24*12):
     """
     Create the opponent variables:
     attack1_begin, attack1_end, attack1_line, attack2_begin, attack2_end, attack2_line
@@ -347,8 +348,7 @@ def init_agent(env: grid2op.Environment) -> strat.Agent:
     if strategy_type == StrategyType.IDLE:
         strategy = strat.IdleStrategy(env.action_space({}))
     elif strategy_type == StrategyType.GREEDY:
-        strategy = strat.GreedyStrategy(env.action_space({}),
-                                        get_env_actions(env, disable_line=config['simulation']['disable_line']))
+        strategy = strat.GreedyStrategy(env)
     elif strategy_type == StrategyType.N_MINUS_ONE:
         strategy = strat.NMinusOneStrategy(env.action_space,
                                            get_env_actions(env, disable_line=config['simulation']['disable_line']))
@@ -379,11 +379,31 @@ def init_agent(env: grid2op.Environment) -> strat.Agent:
 
         # Initialize strategies
         verify_strategy = strat.VerifyStrategy(model, feature_statistics, env.action_space, False)
-        greedy_strategy = strat.GreedyStrategy(env.action_space({}),
-                                               get_env_actions(env, disable_line=config['simulation']['disable_line']),
-                                               False)
+        greedy_strategy = strat.GreedyStrategy(env, False)
         strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, greedy_strategy)
     elif strategy_type == StrategyType.VERIFY_N_MINUS_ONE_HYBRID:
+        # Initialize model and normalization statistics
+        model = init_model()
+        feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
+        with open(feature_statistics_path, 'r') as file:
+            feature_statistics = json.loads(file.read())
+
+        # Initialize nminusone actions
+        nminusone_actions = get_env_actions(env, disable_line=config['simulation']['disable_line'])
+
+        # Initialize strategies
+        verify_strategy = strat.VerifyStrategy(model, feature_statistics, env.action_space, False)
+        nminusone_strategy = strat.NMinusOneStrategy(env.action_space, nminusone_actions, False)
+        strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, nminusone_strategy)
+    elif strategy_type == StrategyType.GREEDY_N_MINUS_ONE_HYBRID:
+        # Initialize nminusone
+        nminusone_actions = get_env_actions(env, disable_line=config['simulation']['disable_line'])
+
+        # Initialize strategies
+        greedy_strategy = strat.GreedyStrategy(env, False)
+        nminusone_strategy = strat.NMinusOneStrategy(env.action_space, nminusone_actions, False)
+        strategy = strat.LineOutageHybridStrategy(nminusone_strategy, greedy_strategy)
+    elif strategy_type == StrategyType.THREEBRID:
         # Initialize model and normalization statistics
         model = init_model()
         feature_statistics_path = config['paths']['data']['processed'] + 'auxiliary_data_objects/feature_stats.json'
@@ -393,10 +413,15 @@ def init_agent(env: grid2op.Environment) -> strat.Agent:
         # Initialize nminusone
         nminusone_actions = get_env_actions(env, disable_line=config['simulation']['disable_line'])
 
-        # Initialize strategies
+        # Creating strategies
         verify_strategy = strat.VerifyStrategy(model, feature_statistics, env.action_space, False)
+        greedy_strategy = strat.GreedyStrategy(env, False)
         nminusone_strategy = strat.NMinusOneStrategy(env.action_space, nminusone_actions, False)
-        strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, nminusone_strategy)
+
+        # Creating hybrid strategies
+        greedy_hybrid_strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, greedy_strategy)
+        nminusone_hybrid_strategy = strat.MaxRhoThresholdHybridStrategy(verify_strategy, nminusone_strategy)
+        strategy = strat.LineOutageHybridStrategy(nminusone_hybrid_strategy, greedy_hybrid_strategy)
     else:
         raise ValueError("Invalid value for strategy_name.")
 
